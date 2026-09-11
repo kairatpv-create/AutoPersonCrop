@@ -1,0 +1,9 @@
+*.iml
+.gradle/
+.idea/
+local.properties
+**/build/
+app/src/main/assets/person_detector.tflite
+model-source/yolo11n.pt
+core-test/*.jar
+core-test/*-output.txt
