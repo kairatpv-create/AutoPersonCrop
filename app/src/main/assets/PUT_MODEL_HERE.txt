@@ -1,0 +1,5 @@
+The Android detector expects: app/src/main/assets/person_detector.tflite
+
+Preferred build: export the supplied yolo11n.pt as a 640x640 Ultralytics LiteRT/TFLite detect model with NMS disabled.
+Both legacy NHWC and modern NCHW LiteRT exports are supported by the app.
+The supplied .pt file itself is not loaded on Android.
