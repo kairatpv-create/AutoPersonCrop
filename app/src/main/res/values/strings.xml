@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Auto Person Crop</string>
+    <string name="notification_channel_name">Обработка фотографий</string>
+</resources>
