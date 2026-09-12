@@ -13,6 +13,24 @@ android {
         targetSdk = 36
         versionCode = 2
         versionName = "0.2.0"
+
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
+
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-std=c++17"
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            // Keep the first Play build transparent and easy to diagnose while device testing is ongoing.
+            isMinifyEnabled = false
+            isShrinkResources = false
+        }
     }
 
     buildFeatures {
@@ -26,25 +44,17 @@ android {
     androidResources {
         noCompress += "tflite"
     }
-}
 
-dependencies {
-    implementation("androidx.documentfile:documentfile:1.1.0")
-    implementation("androidx.exifinterface:exifinterface:1.4.1")
-    implementation("com.google.ai.edge.litert:litert:2.1.5")
-}
-
-android {
-    defaultConfig {
-        ndk { abiFilters += listOf("arm64-v8a") }
-        externalNativeBuild {
-            cmake { cppFlags += "-std=c++17" }
-        }
-    }
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "3.22.1"
         }
     }
+}
+
+dependencies {
+    implementation("androidx.documentfile:documentfile:1.1.0")
+    implementation("androidx.exifinterface:exifinterface:1.4.1")
+    implementation("com.google.ai.edge.litert:litert:2.1.5")
 }
