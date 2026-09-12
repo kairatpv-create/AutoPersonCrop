@@ -18,7 +18,11 @@ data class PhotoFrame(
 )
 
 class ImageFrameLoader(private val context: Context) {
-    fun load(uri: Uri, previewMaxSide: Int = 1600): PhotoFrame {
+    /**
+     * YOLO input is ~640 px, so decoding 1600 px previews wastes CPU/memory on large phone photos.
+     * 960 px keeps useful detail for person detection while substantially reducing decode/scaling work.
+     */
+    fun load(uri: Uri, previewMaxSide: Int = 960): PhotoFrame {
         val orientation = context.contentResolver.openInputStream(uri).use { input ->
             requireNotNull(input) { "Не удалось открыть EXIF" }
             ExifInterface(input).getAttributeInt(
