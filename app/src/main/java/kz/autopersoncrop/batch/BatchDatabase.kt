@@ -28,13 +28,8 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
         if (oldVersion < 2) {
             runCatching { db.execSQL("ALTER TABLE queue ADD COLUMN seen INTEGER NOT NULL DEFAULT 1") }
         }
-        // Version 3 only introduces the PROCESSING state; schema stays compatible.
     }
 
-    /**
-     * Synchronize the saved queue with the current scan without discarding completed work.
-     * Entries no longer present in the selected tree are removed; existing entries keep status.
-     */
     fun sync(folder: String, photos: List<SourcePhoto>) {
         val db = writableDatabase
         db.beginTransaction()
@@ -70,6 +65,17 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
     fun status(folder: String, uri: String): Int? = readableDatabase.query(
         "queue", arrayOf("status"), "folder=? AND uri=?", arrayOf(folder, uri), null, null, null, "1"
     ).use { c -> if (c.moveToFirst()) c.getInt(0) else null }
+
+    /** One query for the whole batch instead of one SELECT before every photo. */
+    fun statuses(folder: String): HashMap<String, Int> {
+        val result = HashMap<String, Int>()
+        readableDatabase.query(
+            "queue", arrayOf("uri", "status"), "folder=?", arrayOf(folder), null, null, null
+        ).use { c ->
+            while (c.moveToNext()) result[c.getString(0)] = c.getInt(1)
+        }
+        return result
+    }
 
     fun mark(folder: String, uri: String, status: Int, message: String = "") {
         val v = ContentValues().apply {
