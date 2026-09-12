@@ -81,6 +81,18 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
         writableDatabase.update("queue", v, "folder=?", arrayOf(folder))
     }
 
+    /**
+     * True when the folder still contains work that a Resume action can actually process.
+     * Errors and a row left in PROCESSING after Android killed the service are deliberately resumable.
+     */
+    fun hasRecoverable(folder: String): Boolean {
+        if (folder.isBlank()) return false
+        readableDatabase.rawQuery(
+            "SELECT 1 FROM queue WHERE folder=? AND status IN (?,?,?) LIMIT 1",
+            arrayOf(folder, PENDING.toString(), ERROR.toString(), PROCESSING.toString()),
+        ).use { c -> return c.moveToFirst() }
+    }
+
     fun status(folder: String, uri: String): Int? = readableDatabase.query(
         "queue", arrayOf("status"), "folder=? AND uri=?", arrayOf(folder, uri), null, null, null, "1"
     ).use { c -> if (c.moveToFirst()) c.getInt(0) else null }
