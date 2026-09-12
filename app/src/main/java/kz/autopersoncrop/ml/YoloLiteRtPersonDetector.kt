@@ -23,7 +23,7 @@ import kotlin.math.sqrt
 class YoloLiteRtPersonDetector(
     private val context: Context,
     assetName: String = "person_detector.tflite",
-    private val confidence: Float = 0.30f,
+    private val confidence: Float = 0.22f,
     private val iouThreshold: Float = 0.70f,
     useGpu: Boolean = true,
 ) : PersonDetector {
