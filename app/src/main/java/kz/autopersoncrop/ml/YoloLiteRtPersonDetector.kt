@@ -83,7 +83,7 @@ class YoloLiteRtPersonDetector(
                     )
                 } else {
                     options.cpuOptions = CompiledModel.CpuOptions(
-                        numThreads = Runtime.getRuntime().availableProcessors().coerceIn(1, 4),
+                        numThreads = Runtime.getRuntime().availableProcessors().coerceIn(2, 8),
                     )
                 }
                 model = CompiledModel.create(modelFile.absolutePath, options)
