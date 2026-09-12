@@ -72,6 +72,15 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
         }
     }
 
+    /** Mark every current item in this folder pending so a new crop algorithm can be tested. */
+    fun resetFolder(folder: String) {
+        val v = ContentValues().apply {
+            put("status", PENDING)
+            put("message", "")
+        }
+        writableDatabase.update("queue", v, "folder=?", arrayOf(folder))
+    }
+
     fun status(folder: String, uri: String): Int? = readableDatabase.query(
         "queue", arrayOf("status"), "folder=? AND uri=?", arrayOf(folder, uri), null, null, null, "1"
     ).use { c -> if (c.moveToFirst()) c.getInt(0) else null }
