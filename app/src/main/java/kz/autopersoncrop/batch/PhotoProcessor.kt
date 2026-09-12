@@ -59,7 +59,6 @@ class PhotoProcessor(
             if (!frame.preview.isRecycled) frame.preview.recycle()
         }
 
-        // No-person photos remain a byte-for-byte copy by design.
         if (previewBoxes.isEmpty()) {
             copyExact(photo, outputDir)
             return ProcessResult.NoPeopleCopied
@@ -111,7 +110,9 @@ class PhotoProcessor(
 
             val decoded = context.contentResolver.openInputStream(photo.uri).use { input ->
                 requireNotNull(input)
-                val decoder = BitmapRegionDecoder.newInstance(input, false)
+                val decoder = requireNotNull(BitmapRegionDecoder.newInstance(input, false)) {
+                    "Не удалось открыть JPEG для выборочного декодирования"
+                }
                 try {
                     decoder.decodeRegion(
                         Rect(raw.left, raw.top, raw.right, raw.bottom),
