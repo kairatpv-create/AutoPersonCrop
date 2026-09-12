@@ -121,7 +121,13 @@ class BatchProcessingService : Service() {
                         db.mark(folderKey, uriKey, BatchDatabase.PROCESSING)
                         statusMap[uriKey] = BatchDatabase.PROCESSING
                         val outDir = scanner.ensureOutputDir(cropRoot, photo.relativeDir)
-                        when (processor.process(photo, outDir, overwriteExisting = overwriteStaleOutput)) {
+                        val existingOutput = scanner.existingOutputUri(outDir, photo.name)
+                        when (processor.process(
+                            photo = photo,
+                            outputDir = outDir,
+                            existingOutputUri = existingOutput,
+                            overwriteExisting = overwriteStaleOutput,
+                        )) {
                             ProcessResult.Cropped, ProcessResult.CopiedFull -> {
                                 db.mark(folderKey, uriKey, BatchDatabase.DONE)
                                 statusMap[uriKey] = BatchDatabase.DONE
