@@ -16,11 +16,8 @@ data class SourcePhoto(
 class DocumentTreeScanner(private val context: Context) {
     private val accepted = setOf("image/jpeg", "image/jpg")
     private val outputDirCache = HashMap<String, DocumentFile>()
+    private val outputFilesCache = HashMap<String, Map<String, Uri>>()
 
-    /**
-     * Fast SAF scan. DocumentFile.listFiles()/isFile/name/type can trigger many provider
-     * round-trips. Querying each directory cursor directly reads all required columns in one go.
-     */
     fun scan(treeUri: Uri): Pair<DocumentFile, List<SourcePhoto>> {
         val root = DocumentFile.fromTreeUri(context, treeUri)
             ?: error("Не удалось открыть выбранную папку")
@@ -31,6 +28,7 @@ class DocumentTreeScanner(private val context: Context) {
             ?: error("Не удалось создать папку $OUTPUT_DIR")
 
         outputDirCache.clear()
+        outputFilesCache.clear()
         outputDirCache[cacheKey(output, "")] = output
 
         val rootId = DocumentsContract.getTreeDocumentId(treeUri)
@@ -66,9 +64,8 @@ class DocumentTreeScanner(private val context: Context) {
 
                     val lower = name.lowercase()
                     if (mime !in accepted && !lower.endsWith(".jpg") && !lower.endsWith(".jpeg")) continue
-                    val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
                     photos += SourcePhoto(
-                        uri = docUri,
+                        uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId),
                         name = name,
                         mime = mime.ifBlank { "image/jpeg" },
                         relativeDir = node.relative,
@@ -97,6 +94,36 @@ class DocumentTreeScanner(private val context: Context) {
                 ).also { outputDirCache[key] = it }
         }
         return current
+    }
+
+    /**
+     * Index one output directory once. This avoids DocumentFile.findFile(name) for every image,
+     * which becomes extremely expensive when CROP already contains hundreds or thousands of files.
+     */
+    fun existingOutputUri(outputDir: DocumentFile, name: String): Uri? {
+        val key = outputDir.uri.toString()
+        val index = outputFilesCache.getOrPut(key) { readOutputIndex(outputDir.uri) }
+        return index[name]
+    }
+
+    private fun readOutputIndex(dirUri: Uri): Map<String, Uri> {
+        val parentId = DocumentsContract.getDocumentId(dirUri)
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(dirUri, parentId)
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+        )
+        val map = HashMap<String, Uri>()
+        context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+            val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+            val nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            while (cursor.moveToNext()) {
+                val id = cursor.getString(idCol) ?: continue
+                val name = cursor.getString(nameCol) ?: continue
+                map[name] = DocumentsContract.buildDocumentUriUsingTree(dirUri, id)
+            }
+        }
+        return map
     }
 
     private fun cacheKey(rootOutput: DocumentFile, relative: String) =
