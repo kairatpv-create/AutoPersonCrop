@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.widget.*
 import kz.autopersoncrop.R
 import kz.autopersoncrop.batch.BatchProcessingService
@@ -25,6 +26,7 @@ class MainActivity : Activity() {
     private lateinit var settingsText: TextView
     private lateinit var progress: ProgressBar
     private lateinit var startButton: Button
+    private lateinit var resumeButton: Button
     private lateinit var pauseButton: Button
     private var treeUri: Uri? = null
     private var mainScreenVisible = false
@@ -53,6 +55,7 @@ class MainActivity : Activity() {
         val filter = IntentFilter(BatchProcessingService.ACTION_PROGRESS)
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, filter, RECEIVER_NOT_EXPORTED)
         else @Suppress("DEPRECATION") registerReceiver(receiver, filter)
+        if (mainScreenVisible) refreshState()
     }
 
     override fun onStop() {
@@ -77,8 +80,6 @@ class MainActivity : Activity() {
             refreshSettings()
             refreshState()
         } else {
-            // Android system picker itself cannot be modified. Return to our own folder screen,
-            // where an explicit Back button is always available.
             showFolderSelectionScreen()
         }
     }
@@ -92,7 +93,7 @@ class MainActivity : Activity() {
                     running = false,
                     paused = false,
                     currentName = "",
-                    message = "Предыдущая обработка была прервана. Нажмите «Обработать всё» — готовые фото будут пропущены.",
+                    message = "Предыдущая обработка прервана. Можно продолжить с оставшихся фото.",
                 )
             )
         }
@@ -155,6 +156,19 @@ class MainActivity : Activity() {
 
     private fun startBatch() {
         val uri = treeUri ?: return toast("Сначала выберите папку")
+        startBatchFor(uri)
+    }
+
+    private fun resumeBatch() {
+        val saved = BatchStateStore(this).read()
+        val uri = treeUri ?: saved.folderUri.takeIf { it.isNotBlank() }?.let(Uri::parse)
+            ?: return toast("Не удалось восстановить выбранную папку")
+        treeUri = uri
+        prefs.edit().putString("tree_uri", uri.toString()).apply()
+        startBatchFor(uri)
+    }
+
+    private fun startBatchFor(uri: Uri) {
         val bounds = if (Build.VERSION.SDK_INT >= 30) windowManager.maximumWindowMetrics.bounds else {
             @Suppress("DEPRECATION") android.graphics.Rect(0, 0, resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
         }
@@ -303,6 +317,11 @@ class MainActivity : Activity() {
             text = "Обработать всё"
             setOnClickListener { startBatch() }
         }
+        resumeButton = Button(this).apply {
+            text = "▶ Возобновить"
+            visibility = View.GONE
+            setOnClickListener { resumeBatch() }
+        }
         pauseButton = Button(this).apply {
             text = "Пауза"
             setOnClickListener { togglePause() }
@@ -321,7 +340,7 @@ class MainActivity : Activity() {
             text = "Конфиденциальность"
             setOnClickListener { showPrivacyPolicy() }
         }
-        listOf(title, subtitle, developer, folderText, choose, settingsText, settings, progress, stateText, startButton, pauseButton, stop, note, privacy).forEach {
+        listOf(title, subtitle, developer, folderText, choose, settingsText, settings, progress, stateText, startButton, resumeButton, pauseButton, stop, note, privacy).forEach {
             root.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(8)
             })
@@ -354,6 +373,12 @@ class MainActivity : Activity() {
             if (s.currentName.isNotBlank()) append("Сейчас: ${s.currentName}\n")
             append(if (s.running) if (s.paused) "Пауза" else s.message.ifBlank { "Обработка…" } else s.message.ifBlank { "Готов к запуску" })
         }
+
+        val recoverable = !s.running && s.folderUri.isNotBlank() && s.total > 0 && done < s.total
+        resumeButton.visibility = if (recoverable) View.VISIBLE else View.GONE
+        resumeButton.isEnabled = recoverable
+        startButton.isEnabled = !s.running && treeUri != null
+
         pauseButton.text = if (s.paused) "Продолжить" else "Пауза"
         pauseButton.isEnabled = s.running
     }
