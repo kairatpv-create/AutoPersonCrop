@@ -2,6 +2,7 @@ package kz.autopersoncrop.app
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.*
 import android.content.pm.PackageManager
 import android.graphics.Typeface
@@ -110,6 +111,22 @@ class MainActivity : Activity() {
         BatchProcessingService.command(this, cmd)
     }
 
+    private fun showPrivacyPolicy() {
+        AlertDialog.Builder(this)
+            .setTitle("Конфиденциальность")
+            .setMessage(
+                "Auto Person Crop обрабатывает фотографии только на вашем устройстве.\n\n" +
+                    "• Приложение не запрашивает доступ к Интернету и не отправляет фотографии, имена файлов или результаты обработки на серверы.\n" +
+                    "• Доступ предоставляется только к папке, которую вы сами выбираете через системное окно Android.\n" +
+                    "• Состояние очереди, выбранная папка и прогресс обработки сохраняются локально на устройстве для продолжения после прерывания.\n" +
+                    "• Оригиналы фотографий не изменяются. Результаты сохраняются в папке CROP.\n" +
+                    "• В приложении нет рекламы, аналитики, регистрации и стороннего облачного хранилища.\n" +
+                    "• Резервное копирование данных приложения средствами Android отключено."
+            )
+            .setPositiveButton("Понятно", null)
+            .show()
+    }
+
     private fun buildUi() {
         val density = resources.displayMetrics.density
         fun dp(v: Int) = (v * density).toInt()
@@ -158,7 +175,11 @@ class MainActivity : Activity() {
             gravity = Gravity.START
             setPadding(0, dp(18), 0, 0)
         }
-        listOf(title, subtitle, folderText, choose, progress, stateText, startButton, pauseButton, stop, note).forEach {
+        val privacy = Button(this).apply {
+            text = "Конфиденциальность"
+            setOnClickListener { showPrivacyPolicy() }
+        }
+        listOf(title, subtitle, folderText, choose, progress, stateText, startButton, pauseButton, stop, note, privacy).forEach {
             root.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(8)
             })
