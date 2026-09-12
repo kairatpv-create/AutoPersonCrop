@@ -67,6 +67,7 @@ class BatchProcessingService : Service() {
                 paused.set(false)
             }
         }
+        // Ask Android to recreate the foreground service with the same START intent after process death.
         return START_REDELIVER_INTENT
     }
 
@@ -77,7 +78,7 @@ class BatchProcessingService : Service() {
             running = true,
             message = if (forceReprocess) "Подготовка повторной обработки…" else "Сканирование папки…",
         )
-        store.write(state); publish(state)
+        store.write(state, sync = true); publish(state)
         try {
             val scanner = DocumentTreeScanner(this)
             val (cropRoot, photos) = scanner.scan(treeUri)
@@ -91,7 +92,7 @@ class BatchProcessingService : Service() {
                 completed = initial.done,
                 noPeople = initial.noPeople,
                 skipped = initial.existing,
-                errors = 0,
+                errors = initial.errors,
                 message = if (forceReprocess) "Повторная обработка ${photos.size} JPEG" else "Найдено ${photos.size} JPEG",
             )
             store.write(state); publish(state)
@@ -121,13 +122,13 @@ class BatchProcessingService : Service() {
                     val prior = statusMap[uriKey]
                     if (prior == BatchDatabase.DONE || prior == BatchDatabase.NO_PEOPLE || prior == BatchDatabase.EXISTING) continue
                     if (stopRequested.get()) {
-                        finishState(state.copy(running = false, paused = false, currentName = "", message = "Остановлено. Можно запустить снова — готовые файлы будут пропущены."))
+                        finishState(state.copy(running = false, paused = false, currentName = "", message = "Остановлено. Нажмите «Возобновить» — готовые файлы будут пропущены."))
                         return
                     }
                     while (paused.get() && !stopRequested.get()) Thread.sleep(150)
                     if (stopRequested.get()) continue
 
-                    state = state.copy(currentName = photo.name, paused = false, message = "Обработка • ${detector.accelerator}")
+                    state = state.copy(currentName = photo.name, paused = false, message = "Обработка в фоне • ${detector.accelerator}")
                     store.write(state); publish(state)
                     try {
                         val overwriteOutput = forceReprocess || prior == BatchDatabase.ERROR || prior == BatchDatabase.PROCESSING
@@ -167,7 +168,7 @@ class BatchProcessingService : Service() {
             }
             finishState(state.copy(running = false, paused = false, currentName = "", message = "Готово"))
         } catch (t: Throwable) {
-            finishState(state.copy(running = false, paused = false, currentName = "", message = "Остановлено: ${t.message ?: t.javaClass.simpleName}"))
+            finishState(state.copy(running = false, paused = false, currentName = "", message = "Остановлено: ${t.message ?: t.javaClass.simpleName}. Можно возобновить."))
         } finally {
             running.set(false)
         }
@@ -191,15 +192,19 @@ class BatchProcessingService : Service() {
     private fun notification(text: String, done: Int, total: Int): Notification {
         val launch = packageManager.getLaunchIntentForPackage(packageName)
         val pi = PendingIntent.getActivity(this, 0, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        return Notification.Builder(this, CHANNEL_ID)
+        val builder = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_crop)
             .setContentTitle("Auto Person Crop")
             .setContentText(if (total > 0) "$text — $done / $total" else text)
             .setProgress(total.coerceAtLeast(0), done.coerceAtLeast(0), total <= 0)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setCategory(Notification.CATEGORY_PROGRESS)
             .setContentIntent(pi)
-            .build()
+        if (Build.VERSION.SDK_INT >= 31) {
+            builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
+        }
+        return builder.build()
     }
 
     private fun startForegroundCompat(n: Notification) {
@@ -209,14 +214,33 @@ class BatchProcessingService : Service() {
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= 26) {
-            val c = NotificationChannel(CHANNEL_ID, getString(R.string.notification_channel_name), NotificationManager.IMPORTANCE_LOW)
+            val c = NotificationChannel(CHANNEL_ID, getString(R.string.notification_channel_name), NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Фоновая обработка фотографий"
+                setShowBadge(false)
+            }
             getSystemService(NotificationManager::class.java).createNotificationChannel(c)
         }
     }
 
+    /**
+     * Removing/minimizing the Activity must not stop the user-started batch.
+     * The manifest also explicitly uses stopWithTask=false.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if (running.get()) {
+            val s = store.read()
+            store.write(s.copy(message = "Обработка продолжается в фоне"), sync = true)
+            getSystemService(NotificationManager::class.java).notify(
+                NOTIFICATION_ID,
+                notification("Обработка продолжается в фоне", s.completed + s.noPeople + s.skipped + s.errors, s.total),
+            )
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onTimeout(startId: Int, fgsType: Int) {
         stopRequested.set(true)
-        val s = store.read().copy(running = false, paused = false, message = "Системный лимит фоновой обработки. Запустите снова — прогресс сохранён.")
+        val s = store.read().copy(running = false, paused = false, currentName = "", message = "Системный лимит фоновой обработки. Нажмите «Возобновить» — прогресс сохранён.")
         store.write(s, sync = true)
         publish(s)
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -238,10 +262,26 @@ class BatchProcessingService : Service() {
     }
 
     override fun onDestroy() {
+        // Normal completion writes running=false before stopSelf(). If Android/OEM destroys the
+        // service unexpectedly, persist an interrupted state so the Activity can offer Resume.
+        if (::store.isInitialized) {
+            val s = store.read()
+            if (s.running && !stopRequested.get()) {
+                store.write(
+                    s.copy(
+                        running = false,
+                        paused = false,
+                        currentName = "",
+                        message = "Фоновая обработка была прервана системой. Нажмите «Возобновить».",
+                    ),
+                    sync = true,
+                )
+            }
+        }
         serviceActive = false
         executor.shutdownNow()
         releaseWakeLock()
-        db.close()
+        if (::db.isInitialized) db.close()
         super.onDestroy()
     }
 
