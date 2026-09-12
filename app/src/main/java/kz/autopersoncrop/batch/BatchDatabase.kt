@@ -35,26 +35,36 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
         db.beginTransaction()
         try {
             db.execSQL("UPDATE queue SET seen=0 WHERE folder=?", arrayOf(folder))
-            for (p in photos) {
-                val inserted = ContentValues().apply {
-                    put("folder", folder)
-                    put("uri", p.uri.toString())
-                    put("name", p.name)
-                    put("rel", p.relativeDir)
-                    put("status", PENDING)
-                    put("message", "")
-                    put("seen", 1)
-                }
-                val row = db.insertWithOnConflict("queue", null, inserted, SQLiteDatabase.CONFLICT_IGNORE)
-                if (row == -1L) {
-                    val update = ContentValues().apply {
-                        put("name", p.name)
-                        put("rel", p.relativeDir)
-                        put("seen", 1)
+
+            val insert = db.compileStatement(
+                "INSERT OR IGNORE INTO queue(folder,uri,name,rel,status,message,seen) VALUES(?,?,?,?,0,'',1)"
+            )
+            val update = db.compileStatement(
+                "UPDATE queue SET name=?, rel=?, seen=1 WHERE folder=? AND uri=?"
+            )
+            try {
+                for (p in photos) {
+                    val uri = p.uri.toString()
+                    insert.clearBindings()
+                    insert.bindString(1, folder)
+                    insert.bindString(2, uri)
+                    insert.bindString(3, p.name)
+                    insert.bindString(4, p.relativeDir)
+                    val row = insert.executeInsert()
+                    if (row == -1L) {
+                        update.clearBindings()
+                        update.bindString(1, p.name)
+                        update.bindString(2, p.relativeDir)
+                        update.bindString(3, folder)
+                        update.bindString(4, uri)
+                        update.executeUpdateDelete()
                     }
-                    db.update("queue", update, "folder=? AND uri=?", arrayOf(folder, p.uri.toString()))
                 }
+            } finally {
+                insert.close()
+                update.close()
             }
+
             db.delete("queue", "folder=? AND seen=0", arrayOf(folder))
             db.setTransactionSuccessful()
         } finally {
@@ -66,7 +76,6 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
         "queue", arrayOf("status"), "folder=? AND uri=?", arrayOf(folder, uri), null, null, null, "1"
     ).use { c -> if (c.moveToFirst()) c.getInt(0) else null }
 
-    /** One query for the whole batch instead of one SELECT before every photo. */
     fun statuses(folder: String): HashMap<String, Int> {
         val result = HashMap<String, Int>()
         readableDatabase.query(
