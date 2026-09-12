@@ -1,4 +1,6 @@
 <resources>
     <string name="app_name">Auto Person Crop</string>
+    <string name="developer_name">Kairat Kaliyev</string>
+    <string name="developer_label">Разработчик: Kairat Kaliyev</string>
     <string name="notification_channel_name">Обработка фотографий</string>
 </resources>
