@@ -30,7 +30,9 @@ Java_kz_autopersoncrop_jpeg_LosslessJpegTransformer_00024NativeBridge_losslessCr
         return nullptr;
     }
 
-    int srcW = 0, srcH = 0, subsamp = TJSAMP_UNKNOWN, colorspace = TJCS_UNKNOWN;
+    // tjDecompressHeader3() writes colorspace on success, so no legacy
+    // TJCS_UNKNOWN sentinel is required (it is not present in TurboJPEG 3.x).
+    int srcW = 0, srcH = 0, subsamp = TJSAMP_UNKNOWN, colorspace = 0;
     if (tjDecompressHeader3(handle, src, srcSize, &srcW, &srcH, &subsamp, &colorspace) < 0) {
         std::string err = tjGetErrorStr2(handle);
         tjDestroy(handle);
