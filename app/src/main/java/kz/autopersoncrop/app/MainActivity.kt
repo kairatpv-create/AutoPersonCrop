@@ -27,6 +27,7 @@ class MainActivity : Activity() {
     private lateinit var progress: ProgressBar
     private lateinit var startButton: Button
     private lateinit var resumeButton: Button
+    private lateinit var reprocessButton: Button
     private lateinit var pauseButton: Button
     private var treeUri: Uri? = null
     private var mainScreenVisible = false
@@ -168,12 +169,31 @@ class MainActivity : Activity() {
         startBatchFor(uri)
     }
 
-    private fun startBatchFor(uri: Uri) {
+    private fun confirmReprocess() {
+        val uri = treeUri ?: return toast("Сначала выберите папку")
+        if (BatchStateStore(this).read().running) return toast("Сначала остановите текущую обработку")
+        AlertDialog.Builder(this)
+            .setTitle("Переработать заново?")
+            .setMessage(
+                "Все фотографии выбранной папки будут снова пропущены через текущую логику кадрирования. " +
+                    "Готовые файлы в CROP будут заменены. Оригинальные фотографии не изменяются."
+            )
+            .setNegativeButton("Отмена", null)
+            .setPositiveButton("Переработать") { _, _ -> startBatchFor(uri, forceReprocess = true) }
+            .show()
+    }
+
+    private fun startBatchFor(uri: Uri, forceReprocess: Boolean = false) {
         val bounds = if (Build.VERSION.SDK_INT >= 30) windowManager.maximumWindowMetrics.bounds else {
             @Suppress("DEPRECATION") android.graphics.Rect(0, 0, resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
         }
         BatchProcessingService.command(
-            this, BatchProcessingService.CMD_START, uri.toString(), bounds.width(), bounds.height()
+            this,
+            BatchProcessingService.CMD_START,
+            uri.toString(),
+            bounds.width(),
+            bounds.height(),
+            forceReprocess = forceReprocess,
         )
     }
 
@@ -322,6 +342,10 @@ class MainActivity : Activity() {
             visibility = View.GONE
             setOnClickListener { resumeBatch() }
         }
+        reprocessButton = Button(this).apply {
+            text = "↻ Переработать заново"
+            setOnClickListener { confirmReprocess() }
+        }
         pauseButton = Button(this).apply {
             text = "Пауза"
             setOnClickListener { togglePause() }
@@ -331,7 +355,7 @@ class MainActivity : Activity() {
             setOnClickListener { BatchProcessingService.command(this@MainActivity, BatchProcessingService.CMD_STOP) }
         }
         val note = TextView(this).apply {
-            text = "Оригиналы не изменяются. Результат сохраняется в CROP. Высокое + Оригинальное сохраняет lossless JPEG-кроп; другие режимы используют выбранное качество и разрешение."
+            text = "Оригиналы не изменяются. Результат сохраняется в CROP. «Переработать заново» заменяет только готовые результаты в CROP."
             textSize = 13f
             gravity = Gravity.START
             setPadding(0, dp(18), 0, 0)
@@ -340,7 +364,10 @@ class MainActivity : Activity() {
             text = "Конфиденциальность"
             setOnClickListener { showPrivacyPolicy() }
         }
-        listOf(title, subtitle, developer, folderText, choose, settingsText, settings, progress, stateText, startButton, resumeButton, pauseButton, stop, note, privacy).forEach {
+        listOf(
+            title, subtitle, developer, folderText, choose, settingsText, settings,
+            progress, stateText, startButton, resumeButton, reprocessButton, pauseButton, stop, note, privacy
+        ).forEach {
             root.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(8)
             })
@@ -352,6 +379,7 @@ class MainActivity : Activity() {
         if (!mainScreenVisible) return
         folderText.text = treeUri?.let { "Папка: $it" } ?: "Папка не выбрана"
         startButton.isEnabled = treeUri != null
+        reprocessButton.isEnabled = treeUri != null
     }
 
     private fun refreshSettings() {
@@ -378,6 +406,7 @@ class MainActivity : Activity() {
         resumeButton.visibility = if (recoverable) View.VISIBLE else View.GONE
         resumeButton.isEnabled = recoverable
         startButton.isEnabled = !s.running && treeUri != null
+        reprocessButton.isEnabled = !s.running && treeUri != null
 
         pauseButton.text = if (s.paused) "Продолжить" else "Пауза"
         pauseButton.isEnabled = s.running
