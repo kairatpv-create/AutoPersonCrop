@@ -31,8 +31,9 @@ class BatchStateStore(context: Context) {
         message = p.getString("message", "") ?: "",
     )
 
-    @Synchronized fun write(s: BatchState) {
-        p.edit()
+    /** Frequent progress updates must not block image processing on fsync. */
+    @Synchronized fun write(s: BatchState, sync: Boolean = false) {
+        val editor = p.edit()
             .putString("folder", s.folderUri)
             .putBoolean("running", s.running)
             .putBoolean("paused", s.paused)
@@ -43,8 +44,9 @@ class BatchStateStore(context: Context) {
             .putInt("errors", s.errors)
             .putString("current", s.currentName)
             .putString("message", s.message)
-            .commit()
+        if (sync) editor.commit() else editor.apply()
     }
 
-    fun resetForNewFolder(folder: String) = write(BatchState(folderUri = folder, message = "Новая папка выбрана"))
+    fun resetForNewFolder(folder: String) =
+        write(BatchState(folderUri = folder, message = "Новая папка выбрана"), sync = true)
 }
