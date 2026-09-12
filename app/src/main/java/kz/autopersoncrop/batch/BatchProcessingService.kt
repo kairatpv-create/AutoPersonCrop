@@ -12,6 +12,7 @@ import kz.autopersoncrop.R
 import kz.autopersoncrop.io.DocumentTreeScanner
 import kz.autopersoncrop.jpeg.LosslessJpegTransformer
 import kz.autopersoncrop.ml.YoloLiteRtPersonDetector
+import kz.autopersoncrop.settings.OutputSettingsStore
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -63,7 +64,9 @@ class BatchProcessingService : Service() {
                 paused.set(false)
             }
         }
-        return START_NOT_STICKY
+        // If Android has to kill the process, redeliver the user-started batch intent.
+        // The persistent queue safely skips already completed files.
+        return START_REDELIVER_INTENT
     }
 
     private fun runBatch(treeUri: Uri, screenW: Int, screenH: Int) {
@@ -85,10 +88,20 @@ class BatchProcessingService : Service() {
                 return
             }
 
-            // Fail before touching photos if either the model or strict lossless module is unavailable.
+            val outputSettings = OutputSettingsStore(this).read()
             YoloLiteRtPersonDetector(this).use { detector ->
+                state = state.copy(message = "Обработка • ${detector.accelerator} • ${outputSettings.quality.label}")
+                store.write(state); publish(state)
+
                 val transformer = LosslessJpegTransformer(this)
-                val processor = PhotoProcessor(this, detector, transformer, screenW, screenH)
+                val processor = PhotoProcessor(
+                    this,
+                    detector,
+                    transformer,
+                    screenW,
+                    screenH,
+                    outputSettings,
+                )
 
                 for (photo in photos) {
                     val prior = db.status(treeUri.toString(), photo.uri.toString())
@@ -100,7 +113,7 @@ class BatchProcessingService : Service() {
                     while (paused.get() && !stopRequested.get()) Thread.sleep(250)
                     if (stopRequested.get()) continue
 
-                    state = state.copy(currentName = photo.name, paused = false, message = "Обработка…")
+                    state = state.copy(currentName = photo.name, paused = false, message = "Обработка • ${detector.accelerator}")
                     store.write(state); publish(state)
                     try {
                         val overwriteStaleOutput = prior == BatchDatabase.ERROR || prior == BatchDatabase.PROCESSING
@@ -159,6 +172,7 @@ class BatchProcessingService : Service() {
             .setContentText(if (total > 0) "$text — $done / $total" else text)
             .setProgress(total.coerceAtLeast(0), done.coerceAtLeast(0), total <= 0)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setContentIntent(pi)
             .build()
     }
