@@ -29,7 +29,7 @@ jobs:
           mkdir -p "$HOME/.android"
           base64 --decode ci/debug.keystore.b64 > "$HOME/.android/debug.keystore"
           chmod 600 "$HOME/.android/debug.keystore"
-          keytool -list -storetype PKCS12 -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey
+          keytool -list -storetype JKS -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
