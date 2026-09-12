@@ -41,12 +41,15 @@ class BatchProcessingService : Service() {
                 val tree = intent.getStringExtra(EXTRA_TREE_URI) ?: return START_NOT_STICKY
                 val sw = intent.getIntExtra(EXTRA_SCREEN_W, 1080)
                 val sh = intent.getIntExtra(EXTRA_SCREEN_H, 2400)
+                val forceRequested = intent.getBooleanExtra(EXTRA_FORCE_REPROCESS, false)
+                // A redelivered intent after process death must continue, not reset the whole batch again.
+                val forceReprocess = forceRequested && (flags and START_FLAG_REDELIVERY == 0)
                 startForegroundCompat(notification("Подготовка…", 0, 0))
                 if (running.compareAndSet(false, true)) {
                     stopRequested.set(false)
                     paused.set(false)
                     acquireWakeLock()
-                    executor.execute { runBatch(Uri.parse(tree), sw, sh) }
+                    executor.execute { runBatch(Uri.parse(tree), sw, sh, forceReprocess) }
                 }
             }
             CMD_PAUSE -> {
@@ -67,19 +70,29 @@ class BatchProcessingService : Service() {
         return START_REDELIVER_INTENT
     }
 
-    private fun runBatch(treeUri: Uri, screenW: Int, screenH: Int) {
+    private fun runBatch(treeUri: Uri, screenW: Int, screenH: Int, forceReprocess: Boolean) {
         val folderKey = treeUri.toString()
-        var state = BatchState(folderUri = folderKey, running = true, message = "Сканирование папки…")
+        var state = BatchState(
+            folderUri = folderKey,
+            running = true,
+            message = if (forceReprocess) "Подготовка повторной обработки…" else "Сканирование папки…",
+        )
         store.write(state); publish(state)
         try {
             val scanner = DocumentTreeScanner(this)
             val (cropRoot, photos) = scanner.scan(treeUri)
             db.sync(folderKey, photos)
+            if (forceReprocess) db.resetFolder(folderKey)
+
             val initial = db.counts(folderKey)
             val statusMap = db.statuses(folderKey)
             state = state.copy(
-                total = photos.size, completed = initial.done, noPeople = initial.noPeople,
-                skipped = initial.existing, errors = 0, message = "Найдено ${photos.size} JPEG"
+                total = photos.size,
+                completed = initial.done,
+                noPeople = initial.noPeople,
+                skipped = initial.existing,
+                errors = 0,
+                message = if (forceReprocess) "Повторная обработка ${photos.size} JPEG" else "Найдено ${photos.size} JPEG",
             )
             store.write(state); publish(state)
 
@@ -117,7 +130,7 @@ class BatchProcessingService : Service() {
                     state = state.copy(currentName = photo.name, paused = false, message = "Обработка • ${detector.accelerator}")
                     store.write(state); publish(state)
                     try {
-                        val overwriteStaleOutput = prior == BatchDatabase.ERROR || prior == BatchDatabase.PROCESSING
+                        val overwriteOutput = forceReprocess || prior == BatchDatabase.ERROR || prior == BatchDatabase.PROCESSING
                         db.mark(folderKey, uriKey, BatchDatabase.PROCESSING)
                         statusMap[uriKey] = BatchDatabase.PROCESSING
                         val outDir = scanner.ensureOutputDir(cropRoot, photo.relativeDir)
@@ -126,7 +139,7 @@ class BatchProcessingService : Service() {
                             photo = photo,
                             outputDir = outDir,
                             existingOutputUri = existingOutput,
-                            overwriteExisting = overwriteStaleOutput,
+                            overwriteExisting = overwriteOutput,
                         )) {
                             ProcessResult.Cropped, ProcessResult.CopiedFull -> {
                                 db.mark(folderKey, uriKey, BatchDatabase.DONE)
@@ -244,14 +257,23 @@ class BatchProcessingService : Service() {
         private const val EXTRA_TREE_URI = "tree_uri"
         private const val EXTRA_SCREEN_W = "screen_w"
         private const val EXTRA_SCREEN_H = "screen_h"
+        private const val EXTRA_FORCE_REPROCESS = "force_reprocess"
         private const val CHANNEL_ID = "processing"
         private const val NOTIFICATION_ID = 77
 
-        fun command(context: Context, action: String, treeUri: String? = null, screenW: Int = 0, screenH: Int = 0) {
+        fun command(
+            context: Context,
+            action: String,
+            treeUri: String? = null,
+            screenW: Int = 0,
+            screenH: Int = 0,
+            forceReprocess: Boolean = false,
+        ) {
             val i = Intent(context, BatchProcessingService::class.java).setAction(action)
             if (treeUri != null) i.putExtra(EXTRA_TREE_URI, treeUri)
             if (screenW > 0) i.putExtra(EXTRA_SCREEN_W, screenW)
             if (screenH > 0) i.putExtra(EXTRA_SCREEN_H, screenH)
+            if (forceReprocess) i.putExtra(EXTRA_FORCE_REPROCESS, true)
             if (action == CMD_START) context.startForegroundService(i) else context.startService(i)
         }
     }
