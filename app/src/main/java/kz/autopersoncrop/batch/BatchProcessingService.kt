@@ -64,19 +64,19 @@ class BatchProcessingService : Service() {
                 paused.set(false)
             }
         }
-        // If Android has to kill the process, redeliver the user-started batch intent.
-        // The persistent queue safely skips already completed files.
         return START_REDELIVER_INTENT
     }
 
     private fun runBatch(treeUri: Uri, screenW: Int, screenH: Int) {
-        var state = BatchState(folderUri = treeUri.toString(), running = true, message = "Сканирование папки…")
+        val folderKey = treeUri.toString()
+        var state = BatchState(folderUri = folderKey, running = true, message = "Сканирование папки…")
         store.write(state); publish(state)
         try {
             val scanner = DocumentTreeScanner(this)
             val (cropRoot, photos) = scanner.scan(treeUri)
-            db.sync(treeUri.toString(), photos)
-            val initial = db.counts(treeUri.toString())
+            db.sync(folderKey, photos)
+            val initial = db.counts(folderKey)
+            val statusMap = db.statuses(folderKey)
             state = state.copy(
                 total = photos.size, completed = initial.done, noPeople = initial.noPeople,
                 skipped = initial.existing, errors = 0, message = "Найдено ${photos.size} JPEG"
@@ -104,37 +104,43 @@ class BatchProcessingService : Service() {
                 )
 
                 for (photo in photos) {
-                    val prior = db.status(treeUri.toString(), photo.uri.toString())
+                    val uriKey = photo.uri.toString()
+                    val prior = statusMap[uriKey]
                     if (prior == BatchDatabase.DONE || prior == BatchDatabase.NO_PEOPLE || prior == BatchDatabase.EXISTING) continue
                     if (stopRequested.get()) {
                         finishState(state.copy(running = false, paused = false, currentName = "", message = "Остановлено. Можно запустить снова — готовые файлы будут пропущены."))
                         return
                     }
-                    while (paused.get() && !stopRequested.get()) Thread.sleep(250)
+                    while (paused.get() && !stopRequested.get()) Thread.sleep(150)
                     if (stopRequested.get()) continue
 
                     state = state.copy(currentName = photo.name, paused = false, message = "Обработка • ${detector.accelerator}")
                     store.write(state); publish(state)
                     try {
                         val overwriteStaleOutput = prior == BatchDatabase.ERROR || prior == BatchDatabase.PROCESSING
-                        db.mark(treeUri.toString(), photo.uri.toString(), BatchDatabase.PROCESSING)
+                        db.mark(folderKey, uriKey, BatchDatabase.PROCESSING)
+                        statusMap[uriKey] = BatchDatabase.PROCESSING
                         val outDir = scanner.ensureOutputDir(cropRoot, photo.relativeDir)
                         when (processor.process(photo, outDir, overwriteExisting = overwriteStaleOutput)) {
                             ProcessResult.Cropped, ProcessResult.CopiedFull -> {
-                                db.mark(treeUri.toString(), photo.uri.toString(), BatchDatabase.DONE)
+                                db.mark(folderKey, uriKey, BatchDatabase.DONE)
+                                statusMap[uriKey] = BatchDatabase.DONE
                                 state = state.copy(completed = state.completed + 1)
                             }
                             ProcessResult.NoPeopleCopied -> {
-                                db.mark(treeUri.toString(), photo.uri.toString(), BatchDatabase.NO_PEOPLE)
+                                db.mark(folderKey, uriKey, BatchDatabase.NO_PEOPLE)
+                                statusMap[uriKey] = BatchDatabase.NO_PEOPLE
                                 state = state.copy(noPeople = state.noPeople + 1)
                             }
                             ProcessResult.AlreadyExists -> {
-                                db.mark(treeUri.toString(), photo.uri.toString(), BatchDatabase.EXISTING)
+                                db.mark(folderKey, uriKey, BatchDatabase.EXISTING)
+                                statusMap[uriKey] = BatchDatabase.EXISTING
                                 state = state.copy(skipped = state.skipped + 1)
                             }
                         }
                     } catch (t: Throwable) {
-                        db.mark(treeUri.toString(), photo.uri.toString(), BatchDatabase.ERROR, t.message ?: t.javaClass.simpleName)
+                        db.mark(folderKey, uriKey, BatchDatabase.ERROR, t.message ?: t.javaClass.simpleName)
+                        statusMap[uriKey] = BatchDatabase.ERROR
                         state = state.copy(errors = state.errors + 1, message = "Ошибка: ${t.message ?: t.javaClass.simpleName}")
                     }
                     store.write(state); publish(state)
@@ -149,7 +155,7 @@ class BatchProcessingService : Service() {
     }
 
     private fun finishState(s: BatchState) {
-        store.write(s); publish(s)
+        store.write(s, sync = true); publish(s)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -192,7 +198,7 @@ class BatchProcessingService : Service() {
     override fun onTimeout(startId: Int, fgsType: Int) {
         stopRequested.set(true)
         val s = store.read().copy(running = false, paused = false, message = "Системный лимит фоновой обработки. Запустите снова — прогресс сохранён.")
-        store.write(s)
+        store.write(s, sync = true)
         publish(s)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
