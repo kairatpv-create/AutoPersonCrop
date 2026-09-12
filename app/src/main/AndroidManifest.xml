@@ -24,6 +24,7 @@
         <service
             android:name=".batch.BatchProcessingService"
             android:exported="false"
+            android:stopWithTask="false"
             android:foregroundServiceType="mediaProcessing" />
     </application>
 </manifest>
