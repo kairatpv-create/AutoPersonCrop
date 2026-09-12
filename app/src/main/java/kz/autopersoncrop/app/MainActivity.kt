@@ -362,7 +362,7 @@ class MainActivity : Activity() {
             setOnClickListener { BatchProcessingService.command(this@MainActivity, BatchProcessingService.CMD_STOP) }
         }
         val note = TextView(this).apply {
-            text = "Оригиналы не изменяются. Результат сохраняется в CROP. «Переработать заново» заменяет только готовые результаты в CROP."
+            text = "Оригиналы не изменяются. Результат сохраняется в CROP. После остановки используйте «Возобновить» — уже готовые фото будут пропущены. «Переработать заново» заменяет только готовые результаты в CROP."
             textSize = 13f
             gravity = Gravity.START
             setPadding(0, dp(18), 0, 0)
@@ -379,7 +379,11 @@ class MainActivity : Activity() {
                 bottomMargin = dp(8)
             })
         }
-        setContentView(root)
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            addView(root, ScrollView.LayoutParams(ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT))
+        }
+        setContentView(scroll)
     }
 
     private fun refreshFolder() {
@@ -409,13 +413,23 @@ class MainActivity : Activity() {
             append(if (s.running) if (s.paused) "Пауза" else s.message.ifBlank { "Обработка…" } else s.message.ifBlank { "Готов к запуску" })
         }
 
-        val recoverable = if (!s.running && s.folderUri.isNotBlank()) {
+        val recoverableFromQueue = if (!s.running && s.folderUri.isNotBlank()) {
             runCatching {
                 BatchDatabase(this).use { it.hasRecoverable(s.folderUri) }
-            }.getOrElse {
-                s.total > 0 && (done < s.total || s.errors > 0)
-            }
+            }.getOrDefault(false)
         } else false
+
+        // Do not rely only on SQLite here. A stop can happen while the folder is still being scanned,
+        // before the persistent queue has been synchronized, or an OEM can interrupt the service
+        // between queue/state writes. In those cases the saved batch state itself must expose Resume.
+        val interruptedByState = !s.running && s.folderUri.isNotBlank() && (
+            s.message.contains("останов", ignoreCase = true) ||
+                s.message.contains("прерван", ignoreCase = true) ||
+                s.message.contains("возобнов", ignoreCase = true) ||
+                s.errors > 0 ||
+                (s.total > 0 && done < s.total)
+            )
+        val recoverable = recoverableFromQueue || interruptedByState
 
         resumeButton.visibility = if (recoverable) View.VISIBLE else View.GONE
         resumeButton.isEnabled = recoverable
