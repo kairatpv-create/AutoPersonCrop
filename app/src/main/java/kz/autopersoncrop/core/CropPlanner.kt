@@ -152,16 +152,25 @@ object CropPlanner {
 
     private fun chooseLayout(image: ImageSize, subject: RectD, subjectCount: Int): SubjectLayout {
         val ratio = subject.width / subject.height.coerceAtLeast(1.0)
-        return when {
-            // One clearly standing person should remain a portrait even in a landscape source.
-            subjectCount == 1 && ratio <= 0.86 -> SubjectLayout.PORTRAIT
-            // One clearly lying/wide person should remain landscape even in a portrait source.
-            subjectCount == 1 && ratio >= 1.18 -> SubjectLayout.LANDSCAPE
-            // Groups are classified by their combined geometry with a dead-band near square.
-            ratio <= 0.90 -> SubjectLayout.PORTRAIT
-            ratio >= 1.10 -> SubjectLayout.LANDSCAPE
-            // Near-square groups inherit the source orientation instead of flipping unpredictably.
-            image.height >= image.width -> SubjectLayout.PORTRAIT else SubjectLayout.LANDSCAPE
+        val sourceLayout = if (image.height >= image.width) SubjectLayout.PORTRAIT else SubjectLayout.LANDSCAPE
+
+        return if (subjectCount == 1) {
+            when {
+                // A clearly standing person should remain portrait even in a landscape source.
+                ratio <= 0.86 -> SubjectLayout.PORTRAIT
+                // A clearly lying/wide person should remain landscape even in a portrait source.
+                ratio >= 1.18 -> SubjectLayout.LANDSCAPE
+                // Ambiguous pose keeps the original photo orientation.
+                else -> sourceLayout
+            }
+        } else {
+            when {
+                // For groups use a wider dead-band. Two people side-by-side often form a nearly
+                // square union and should not be forced into a new orientation without a good reason.
+                ratio <= 0.82 -> SubjectLayout.PORTRAIT
+                ratio >= 1.22 -> SubjectLayout.LANDSCAPE
+                else -> sourceLayout
+            }
         }
     }
 
