@@ -13,6 +13,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.*
 import kz.autopersoncrop.R
+import kz.autopersoncrop.batch.BatchDatabase
 import kz.autopersoncrop.batch.BatchProcessingService
 import kz.autopersoncrop.batch.BatchStateStore
 import kz.autopersoncrop.settings.OutputQuality
@@ -56,6 +57,10 @@ class MainActivity : Activity() {
         val filter = IntentFilter(BatchProcessingService.ACTION_PROGRESS)
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, filter, RECEIVER_NOT_EXPORTED)
         else @Suppress("DEPRECATION") registerReceiver(receiver, filter)
+
+        // If Android/OEM killed the foreground service while the Activity was away,
+        // convert the stale RUNNING state immediately so Resume becomes available.
+        repairStaleRunState()
         if (mainScreenVisible) refreshState()
     }
 
@@ -94,8 +99,9 @@ class MainActivity : Activity() {
                     running = false,
                     paused = false,
                     currentName = "",
-                    message = "Предыдущая обработка прервана. Можно продолжить с оставшихся фото.",
-                )
+                    message = "Предыдущая обработка прервана. Нажмите «Возобновить» — готовые фото будут пропущены.",
+                ),
+                sync = true,
             )
         }
     }
@@ -128,6 +134,7 @@ class MainActivity : Activity() {
                 buildMainUi()
                 refreshFolder()
                 refreshSettings()
+                repairStaleRunState()
                 refreshState()
             }
         }
@@ -402,7 +409,14 @@ class MainActivity : Activity() {
             append(if (s.running) if (s.paused) "Пауза" else s.message.ifBlank { "Обработка…" } else s.message.ifBlank { "Готов к запуску" })
         }
 
-        val recoverable = !s.running && s.folderUri.isNotBlank() && s.total > 0 && done < s.total
+        val recoverable = if (!s.running && s.folderUri.isNotBlank()) {
+            runCatching {
+                BatchDatabase(this).use { it.hasRecoverable(s.folderUri) }
+            }.getOrElse {
+                s.total > 0 && (done < s.total || s.errors > 0)
+            }
+        } else false
+
         resumeButton.visibility = if (recoverable) View.VISIBLE else View.GONE
         resumeButton.isEnabled = recoverable
         startButton.isEnabled = !s.running && treeUri != null
