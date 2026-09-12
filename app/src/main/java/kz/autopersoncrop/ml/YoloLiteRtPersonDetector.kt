@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
 import android.util.Log
 import com.google.ai.edge.litert.Accelerator
 import com.google.ai.edge.litert.CompiledModel
@@ -17,12 +19,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
-/**
- * Offline YOLO detector using current Google LiteRT 2.x CompiledModel API.
- *
- * Supports both old NHWC TFLite exports ([1,H,W,3]) and modern Ultralytics
- * LiteRT NCHW exports ([1,3,H,W]). Only COCO class 0 (person) is decoded.
- */
+/** Offline YOLO detector using Google LiteRT 2.x CompiledModel API. */
 class YoloLiteRtPersonDetector(
     private val context: Context,
     assetName: String = "person_detector.tflite",
@@ -38,6 +35,13 @@ class YoloLiteRtPersonDetector(
     private val inputH: Int
     private val inputUsesNchw: Boolean
     private val outputShape: IntArray
+
+    private val modelBitmap: Bitmap
+    private val modelCanvas: Canvas
+    private val drawPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val pixelBuffer: IntArray
+    private val inputFloatBuffer: FloatArray
+
     val accelerator: String
 
     init {
@@ -50,6 +54,12 @@ class YoloLiteRtPersonDetector(
         inputUsesNchw = prepared.nchw
         outputShape = prepared.outputShape
         accelerator = prepared.accelerator
+
+        modelBitmap = Bitmap.createBitmap(inputW, inputH, Bitmap.Config.ARGB_8888)
+        modelCanvas = Canvas(modelBitmap)
+        pixelBuffer = IntArray(inputW * inputH)
+        inputFloatBuffer = FloatArray(inputW * inputH * 3)
+
         Log.i(TAG, "LiteRT $accelerator input=${if (inputUsesNchw) "NCHW" else "NHWC"} ${inputW}x$inputH output=${outputShape.contentToString()}")
     }
 
@@ -143,18 +153,16 @@ class YoloLiteRtPersonDetector(
     }
 
     override fun detect(bitmap: Bitmap): List<RectD> {
-        val prep = letterbox(bitmap)
-        val input = bitmapToFloatArray(prep.bitmap)
-        inputBuffers[0].writeFloat(input)
+        val prep = letterboxIntoReusableBitmap(bitmap)
+        fillInputFloatBuffer()
+        inputBuffers[0].writeFloat(inputFloatBuffer)
         compiled.run(inputBuffers, outputBuffers)
         val out = outputBuffers[0].readFloat()
-        if (prep.bitmap !== bitmap) prep.bitmap.recycle()
         return nms(decode(out, prep)).map { it.rect }
     }
 
     private data class Candidate(val rect: RectD, val score: Float)
     private data class Prep(
-        val bitmap: Bitmap,
         val scale: Double,
         val padX: Double,
         val padY: Double,
@@ -162,43 +170,41 @@ class YoloLiteRtPersonDetector(
         val srcH: Int,
     )
 
-    private fun letterbox(src: Bitmap): Prep {
+    private fun letterboxIntoReusableBitmap(src: Bitmap): Prep {
         val scale = min(inputW.toDouble() / src.width, inputH.toDouble() / src.height)
         val nw = (src.width * scale).roundToInt().coerceAtLeast(1)
         val nh = (src.height * scale).roundToInt().coerceAtLeast(1)
         val dx = (inputW - nw) / 2
         val dy = (inputH - nh) / 2
-        val dst = Bitmap.createBitmap(inputW, inputH, Bitmap.Config.ARGB_8888)
-        Canvas(dst).apply {
-            drawColor(Color.rgb(114, 114, 114))
-            val scaled = Bitmap.createScaledBitmap(src, nw, nh, true)
-            drawBitmap(scaled, dx.toFloat(), dy.toFloat(), null)
-            if (scaled !== src) scaled.recycle()
-        }
-        return Prep(dst, scale, dx.toDouble(), dy.toDouble(), src.width, src.height)
+
+        modelCanvas.drawColor(Color.rgb(114, 114, 114))
+        modelCanvas.drawBitmap(
+            src,
+            null,
+            RectF(dx.toFloat(), dy.toFloat(), (dx + nw).toFloat(), (dy + nh).toFloat()),
+            drawPaint,
+        )
+        return Prep(scale, dx.toDouble(), dy.toDouble(), src.width, src.height)
     }
 
-    private fun bitmapToFloatArray(bitmap: Bitmap): FloatArray {
-        val pixels = IntArray(inputW * inputH)
-        bitmap.getPixels(pixels, 0, inputW, 0, 0, inputW, inputH)
-        val out = FloatArray(inputW * inputH * 3)
+    private fun fillInputFloatBuffer() {
+        modelBitmap.getPixels(pixelBuffer, 0, inputW, 0, 0, inputW, inputH)
         if (inputUsesNchw) {
             val plane = inputW * inputH
-            for (i in pixels.indices) {
-                val p = pixels[i]
-                out[i] = ((p shr 16) and 0xFF) / 255f
-                out[plane + i] = ((p shr 8) and 0xFF) / 255f
-                out[2 * plane + i] = (p and 0xFF) / 255f
+            for (i in pixelBuffer.indices) {
+                val p = pixelBuffer[i]
+                inputFloatBuffer[i] = ((p shr 16) and 0xFF) / 255f
+                inputFloatBuffer[plane + i] = ((p shr 8) and 0xFF) / 255f
+                inputFloatBuffer[2 * plane + i] = (p and 0xFF) / 255f
             }
         } else {
             var j = 0
-            for (p in pixels) {
-                out[j++] = ((p shr 16) and 0xFF) / 255f
-                out[j++] = ((p shr 8) and 0xFF) / 255f
-                out[j++] = (p and 0xFF) / 255f
+            for (p in pixelBuffer) {
+                inputFloatBuffer[j++] = ((p shr 16) and 0xFF) / 255f
+                inputFloatBuffer[j++] = ((p shr 8) and 0xFF) / 255f
+                inputFloatBuffer[j++] = (p and 0xFF) / 255f
             }
         }
-        return out
     }
 
     private fun decode(out: FloatArray, p: Prep): List<Candidate> {
@@ -296,6 +302,7 @@ class YoloLiteRtPersonDetector(
         inputBuffers.forEach { runCatching { it.close() } }
         outputBuffers.forEach { runCatching { it.close() } }
         runCatching { compiled.close() }
+        runCatching { modelBitmap.recycle() }
     }
 
     companion object { private const val TAG = "AutoPersonCropML" }
