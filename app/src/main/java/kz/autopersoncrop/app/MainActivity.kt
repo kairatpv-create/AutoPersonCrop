@@ -14,26 +14,35 @@ import android.widget.*
 import kz.autopersoncrop.R
 import kz.autopersoncrop.batch.BatchProcessingService
 import kz.autopersoncrop.batch.BatchStateStore
+import kz.autopersoncrop.settings.OutputQuality
+import kz.autopersoncrop.settings.OutputResolution
+import kz.autopersoncrop.settings.OutputSettings
+import kz.autopersoncrop.settings.OutputSettingsStore
 
 class MainActivity : Activity() {
     private lateinit var folderText: TextView
     private lateinit var stateText: TextView
+    private lateinit var settingsText: TextView
     private lateinit var progress: ProgressBar
     private lateinit var startButton: Button
     private lateinit var pauseButton: Button
     private var treeUri: Uri? = null
+    private var mainScreenVisible = false
 
     private val prefs by lazy { getSharedPreferences("ui", MODE_PRIVATE) }
 
     private val receiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) = refreshState()
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (mainScreenVisible) refreshState()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        buildUi()
         prefs.getString("tree_uri", null)?.let { treeUri = Uri.parse(it) }
+        buildMainUi()
         refreshFolder()
+        refreshSettings()
         repairStaleRunState()
         refreshState()
         requestNotificationPermissionIfNeeded()
@@ -54,15 +63,23 @@ class MainActivity : Activity() {
     @Deprecated("Legacy result API intentionally used to keep the app dependency-light.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQ_TREE && resultCode == RESULT_OK) {
+        if (requestCode != REQ_TREE) return
+
+        if (resultCode == RESULT_OK) {
             val uri = data?.data ?: return
             val flags = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             contentResolver.takePersistableUriPermission(uri, flags)
             treeUri = uri
             prefs.edit().putString("tree_uri", uri.toString()).apply()
             BatchStateStore(this).resetForNewFolder(uri.toString())
+            buildMainUi()
             refreshFolder()
+            refreshSettings()
             refreshState()
+        } else {
+            // Android system picker itself cannot be modified. Return to our own folder screen,
+            // where an explicit Back button is always available.
+            showFolderSelectionScreen()
         }
     }
 
@@ -81,7 +98,52 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun chooseFolder() {
+    private fun showFolderSelectionScreen() {
+        mainScreenVisible = false
+        val density = resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(28), dp(24), dp(28))
+        }
+        val title = TextView(this).apply {
+            text = "Выбор папки"
+            textSize = 24f
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        val current = TextView(this).apply {
+            text = treeUri?.let { "Текущая папка:\n$it" } ?: "Папка пока не выбрана"
+            textSize = 14f
+            setPadding(0, dp(14), 0, dp(14))
+        }
+        val open = Button(this).apply {
+            text = "Открыть системный выбор папки"
+            setOnClickListener { launchSystemFolderPicker() }
+        }
+        val back = Button(this).apply {
+            text = "← Назад"
+            setOnClickListener {
+                buildMainUi()
+                refreshFolder()
+                refreshSettings()
+                refreshState()
+            }
+        }
+        val hint = TextView(this).apply {
+            text = "В системном окне Android также можно вернуться стрелкой ←. Приложение получает доступ только к выбранной вами папке."
+            textSize = 13f
+            alpha = 0.75f
+            setPadding(0, dp(14), 0, 0)
+        }
+        listOf(title, current, open, back, hint).forEach {
+            root.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(8)
+            })
+        }
+        setContentView(root)
+    }
+
+    private fun launchSystemFolderPicker() {
         val i = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
@@ -107,6 +169,73 @@ class MainActivity : Activity() {
         BatchProcessingService.command(this, cmd)
     }
 
+    private fun showSettings() {
+        val store = OutputSettingsStore(this)
+        val current = store.read()
+        val density = resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
+
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+
+        val resolutionLabel = TextView(this).apply {
+            text = "Разрешение обработанного фото"
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        val resolutionSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                OutputResolution.entries.map { it.label }
+            )
+            setSelection(OutputResolution.entries.indexOf(current.resolution))
+        }
+
+        val qualityLabel = TextView(this).apply {
+            text = "Качество JPEG"
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, dp(14), 0, 0)
+        }
+        val qualitySpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                OutputQuality.entries.map { it.label }
+            )
+            setSelection(OutputQuality.entries.indexOf(current.quality))
+        }
+
+        val info = TextView(this).apply {
+            text = "Высокое + Оригинальное = lossless JPEG без пересжатия. Среднее/Низкое или уменьшенное разрешение создают новый JPEG. Фото без найденных людей копируются без изменений."
+            textSize = 13f
+            alpha = 0.78f
+            setPadding(0, dp(16), 0, 0)
+        }
+
+        box.addView(resolutionLabel)
+        box.addView(resolutionSpinner)
+        box.addView(qualityLabel)
+        box.addView(qualitySpinner)
+        box.addView(info)
+
+        AlertDialog.Builder(this)
+            .setTitle("Настройки")
+            .setView(box)
+            .setNegativeButton("Назад", null)
+            .setPositiveButton("Сохранить") { _, _ ->
+                val settings = OutputSettings(
+                    quality = OutputQuality.entries[qualitySpinner.selectedItemPosition],
+                    resolution = OutputResolution.entries[resolutionSpinner.selectedItemPosition],
+                )
+                store.write(settings)
+                refreshSettings()
+                toast("Настройки сохранены. Они применятся к новым результатам.")
+            }
+            .show()
+    }
+
     private fun showPrivacyPolicy() {
         AlertDialog.Builder(this)
             .setTitle("Конфиденциальность")
@@ -124,7 +253,8 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun buildUi() {
+    private fun buildMainUi() {
+        mainScreenVisible = true
         val density = resources.displayMetrics.density
         fun dp(v: Int) = (v * density).toInt()
         val root = LinearLayout(this).apply {
@@ -137,7 +267,7 @@ class MainActivity : Activity() {
             setTypeface(typeface, Typeface.BOLD)
         }
         val subtitle = TextView(this).apply {
-            text = "Офлайн • массовая обработка • без ухудшения JPEG"
+            text = "Офлайн • массовая обработка • работа в фоне"
             textSize = 15f
             setPadding(0, dp(6), 0, dp(18))
         }
@@ -150,7 +280,16 @@ class MainActivity : Activity() {
         folderText = TextView(this).apply { textSize = 15f }
         val choose = Button(this).apply {
             text = "Выбрать папку"
-            setOnClickListener { chooseFolder() }
+            setOnClickListener { showFolderSelectionScreen() }
+        }
+        settingsText = TextView(this).apply {
+            textSize = 13f
+            alpha = 0.8f
+            setPadding(0, dp(4), 0, dp(4))
+        }
+        val settings = Button(this).apply {
+            text = "Настройки"
+            setOnClickListener { showSettings() }
         }
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 1000
@@ -173,7 +312,7 @@ class MainActivity : Activity() {
             setOnClickListener { BatchProcessingService.command(this@MainActivity, BatchProcessingService.CMD_STOP) }
         }
         val note = TextView(this).apply {
-            text = "Оригиналы не изменяются. Результат сохраняется в CROP. Если строгая lossless-обрезка невозможна, файл не пересжимается и отмечается ошибкой."
+            text = "Оригиналы не изменяются. Результат сохраняется в CROP. Высокое + Оригинальное сохраняет lossless JPEG-кроп; другие режимы используют выбранное качество и разрешение."
             textSize = 13f
             gravity = Gravity.START
             setPadding(0, dp(18), 0, 0)
@@ -182,7 +321,7 @@ class MainActivity : Activity() {
             text = "Конфиденциальность"
             setOnClickListener { showPrivacyPolicy() }
         }
-        listOf(title, subtitle, developer, folderText, choose, progress, stateText, startButton, pauseButton, stop, note, privacy).forEach {
+        listOf(title, subtitle, developer, folderText, choose, settingsText, settings, progress, stateText, startButton, pauseButton, stop, note, privacy).forEach {
             root.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(8)
             })
@@ -191,11 +330,19 @@ class MainActivity : Activity() {
     }
 
     private fun refreshFolder() {
+        if (!mainScreenVisible) return
         folderText.text = treeUri?.let { "Папка: $it" } ?: "Папка не выбрана"
         startButton.isEnabled = treeUri != null
     }
 
+    private fun refreshSettings() {
+        if (!mainScreenVisible) return
+        val s = OutputSettingsStore(this).read()
+        settingsText.text = "Разрешение: ${s.resolution.label}   •   Качество: ${s.quality.label}"
+    }
+
     private fun refreshState() {
+        if (!mainScreenVisible) return
         val s = BatchStateStore(this).read()
         val done = s.completed + s.skipped + s.errors + s.noPeople
         val pct = if (s.total > 0) done.toDouble() / s.total else 0.0
@@ -205,7 +352,7 @@ class MainActivity : Activity() {
             append("Готово: ${s.completed}   Без людей: ${s.noPeople}\n")
             append("Пропущено: ${s.skipped}   Ошибки: ${s.errors}\n")
             if (s.currentName.isNotBlank()) append("Сейчас: ${s.currentName}\n")
-            append(if (s.running) if (s.paused) "Пауза" else "Обработка…" else s.message.ifBlank { "Готов к запуску" })
+            append(if (s.running) if (s.paused) "Пауза" else s.message.ifBlank { "Обработка…" } else s.message.ifBlank { "Готов к запуску" })
         }
         pauseButton.text = if (s.paused) "Продолжить" else "Пауза"
         pauseButton.isEnabled = s.running
