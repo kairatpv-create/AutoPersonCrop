@@ -6,6 +6,8 @@ import android.graphics.BitmapFactory
 import android.graphics.BitmapRegionDecoder
 import android.graphics.Matrix
 import android.graphics.Rect
+import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import androidx.exifinterface.media.ExifInterface
 import kz.autopersoncrop.core.CropPlanner
@@ -42,12 +44,14 @@ class PhotoProcessor(
     fun process(
         photo: SourcePhoto,
         outputDir: DocumentFile,
+        existingOutputUri: Uri? = null,
         overwriteExisting: Boolean = false,
     ): ProcessResult {
-        val existing = outputDir.findFile(photo.name)
-        if (existing != null) {
+        if (existingOutputUri != null) {
             if (!overwriteExisting) return ProcessResult.AlreadyExists
-            check(existing.delete()) { "Не удалось заменить старый результат ${photo.name}" }
+            check(DocumentsContract.deleteDocument(context.contentResolver, existingOutputUri)) {
+                "Не удалось заменить старый результат ${photo.name}"
+            }
         }
 
         val frame = loader.load(photo.uri)
