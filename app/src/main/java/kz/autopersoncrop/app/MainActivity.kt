@@ -381,7 +381,7 @@ class MainActivity : Activity() {
         }
         val scroll = ScrollView(this).apply {
             isFillViewport = true
-            addView(root, ScrollView.LayoutParams(ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT))
+            addView(root)
         }
         setContentView(scroll)
     }
