@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.*
+import kz.autopersoncrop.R
 import kz.autopersoncrop.batch.BatchProcessingService
 import kz.autopersoncrop.batch.BatchStateStore
 
@@ -65,11 +66,6 @@ class MainActivity : Activity() {
         }
     }
 
-    /**
-     * START_NOT_STICKY means Android will not silently restart an interrupted batch.
-     * If SharedPreferences still say "running" but no service exists in this process,
-     * expose an honest resumable state instead of a permanently stuck UI.
-     */
     private fun repairStaleRunState() {
         val store = BatchStateStore(this)
         val s = store.read()
@@ -121,7 +117,8 @@ class MainActivity : Activity() {
                     "• Состояние очереди, выбранная папка и прогресс обработки сохраняются локально на устройстве для продолжения после прерывания.\n" +
                     "• Оригиналы фотографий не изменяются. Результаты сохраняются в папке CROP.\n" +
                     "• В приложении нет рекламы, аналитики, регистрации и стороннего облачного хранилища.\n" +
-                    "• Резервное копирование данных приложения средствами Android отключено."
+                    "• Резервное копирование данных приложения средствами Android отключено.\n\n" +
+                    getString(R.string.developer_label)
             )
             .setPositiveButton("Понятно", null)
             .show()
@@ -135,14 +132,20 @@ class MainActivity : Activity() {
             setPadding(dp(24), dp(28), dp(24), dp(28))
         }
         val title = TextView(this).apply {
-            text = "Auto Person Crop"
+            text = getString(R.string.app_name)
             textSize = 26f
             setTypeface(typeface, Typeface.BOLD)
         }
         val subtitle = TextView(this).apply {
             text = "Офлайн • массовая обработка • без ухудшения JPEG"
             textSize = 15f
-            setPadding(0, dp(6), 0, dp(24))
+            setPadding(0, dp(6), 0, dp(18))
+        }
+        val developer = TextView(this).apply {
+            text = getString(R.string.developer_label)
+            textSize = 13f
+            alpha = 0.72f
+            setPadding(0, 0, 0, dp(14))
         }
         folderText = TextView(this).apply { textSize = 15f }
         val choose = Button(this).apply {
@@ -179,7 +182,7 @@ class MainActivity : Activity() {
             text = "Конфиденциальность"
             setOnClickListener { showPrivacyPolicy() }
         }
-        listOf(title, subtitle, folderText, choose, progress, stateText, startButton, pauseButton, stop, note, privacy).forEach {
+        listOf(title, subtitle, developer, folderText, choose, progress, stateText, startButton, pauseButton, stop, note, privacy).forEach {
             root.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(8)
             })
