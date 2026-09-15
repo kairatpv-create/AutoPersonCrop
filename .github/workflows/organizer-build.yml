@@ -35,7 +35,7 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Rebuild v0.8.1 source and apply v0.8.2 patch
+      - name: Rebuild v0.8.1 source and apply v0.8.2 patches
         shell: bash
         run: |
           mkdir -p organizer/buildsrc082
@@ -45,6 +45,7 @@ jobs:
           cat organizer/patch082/part* > organizer/v0.8.2.patch
           cd organizer/buildsrc082
           patch -p0 < ../v0.8.2.patch
+          patch -p0 < ../fix082.patch
 
       - name: Build APK
         working-directory: organizer/buildsrc082/MyOrganizer-v0.8.1-source

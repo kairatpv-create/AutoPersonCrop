@@ -1,0 +1,41 @@
+--- MyOrganizer-v0.8.1-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
++++ MyOrganizer-v0.8.1-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+@@ -65,7 +65,37 @@
+             actions={if(section!="settings")IconButton({showReminders=true}){Icon(Icons.Default.Notifications,AppStrings.t(lang,"reminders"))};if(settings.hasPin())IconButton(onLock){Icon(Icons.Default.Lock,null)}},
+             colors=organizerTopBarColors()
+         )},
+-        bottomBar={NavigationBar{Row(Modifier.fillMaxWidth().height(64.dp),verticalAlignment=Alignment.CenterVertically){listOf("notes" to Icons.Default.Description,"money" to Icons.Default.AccountBalanceWallet,"settings" to Icons.Default.Settings).forEach{(key,icon)->Box(Modifier.weight(1f).fillMaxHeight(),contentAlignment=Alignment.Center){IconButton(onClick={section=key},modifier=Modifier.size(56.dp)){Icon(icon,AppStrings.t(lang,key),modifier=Modifier.size(26.dp),tint=if(section==key)MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)}}}}}
++        bottomBar={
++            NavigationBar {
++                Row(
++                    Modifier.fillMaxWidth().height(64.dp),
++                    verticalAlignment=Alignment.CenterVertically
++                ) {
++                    listOf(
++                        "notes" to Icons.Default.Description,
++                        "money" to Icons.Default.AccountBalanceWallet,
++                        "settings" to Icons.Default.Settings
++                    ).forEach { (key,icon) ->
++                        Box(
++                            Modifier.weight(1f).fillMaxHeight(),
++                            contentAlignment=Alignment.Center
++                        ) {
++                            IconButton(
++                                onClick={section=key},
++                                modifier=Modifier.size(56.dp)
++                            ) {
++                                Icon(
++                                    icon,
++                                    contentDescription=AppStrings.t(lang,key),
++                                    modifier=Modifier.size(26.dp),
++                                    tint=if(section==key) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
++                                )
++                            }
++                        }
++                    }
++                }
++            }
++        }
+     ){pad->Box(Modifier.padding(pad)){when(section){
+         "money"->MoneyScreen(db,lang)
+         "settings"->SettingsScreen(db,settings,lang,onLanguage,dark,onDark,fontScale,onFont,bold,onBold)
