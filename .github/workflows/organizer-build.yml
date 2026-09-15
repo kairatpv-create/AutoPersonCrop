@@ -68,3 +68,5 @@ jobs:
           name: android-signing-tools-35
           path: organizer/signing-tools
           if-no-files-found: error
+
+# trigger v0.8.1
