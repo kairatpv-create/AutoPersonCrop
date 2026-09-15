@@ -1,0 +1,128 @@
+diff -ruN MyOrganizer-v0.8.3-source/app/build.gradle.kts MyOrganizer-v0.8.4-source/app/build.gradle.kts
+--- MyOrganizer-v0.8.3-source/app/build.gradle.kts	2026-09-15 17:54:37.819304957 +0000
++++ MyOrganizer-v0.8.4-source/app/build.gradle.kts	2026-09-15 18:59:13.928920358 +0000
+@@ -12,8 +12,8 @@
+         applicationId = "kz.kairat.organizer"
+         minSdk = 26
+         targetSdk = 35
+-        versionCode = 26
+-        versionName = "0.8.3"
++        versionCode = 27
++        versionName = "0.8.4"
+     }
+ 
+     buildFeatures {
+diff -ruN MyOrganizer-v0.8.3-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt MyOrganizer-v0.8.4-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+--- MyOrganizer-v0.8.3-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt	2026-09-15 17:59:44.895267561 +0000
++++ MyOrganizer-v0.8.4-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt	2026-09-15 18:59:23.183782068 +0000
+@@ -55,59 +55,53 @@
+ }
+ 
+ @Composable private fun OrganizerHome(db:NoteDatabase,settings:SettingsStore,lang:String,onLanguage:(String)->Unit,dark:Boolean,onDark:(Boolean)->Unit,fontScale:Float,onFont:(Float)->Unit,bold:Boolean,onBold:(Boolean)->Unit,onLock:()->Unit){
+-    var section by rememberSaveable{mutableStateOf("notes")}; var editorNoteId by rememberSaveable{mutableStateOf<Long?>(null)}; var newEditor by rememberSaveable{mutableStateOf(false)}; var readerId by rememberSaveable{mutableStateOf<Long?>(null)}; var showReminders by rememberSaveable{mutableStateOf(false)}
++    var section by rememberSaveable{mutableStateOf("notes")}; var editorNoteId by rememberSaveable{mutableStateOf<Long?>(null)}; var newEditor by rememberSaveable{mutableStateOf(false)}; var readerId by rememberSaveable{mutableStateOf<Long?>(null)}; var showReminders by rememberSaveable{mutableStateOf(false)}; var showAddMoney by rememberSaveable{mutableStateOf(false)}; var moneyRevision by remember{mutableIntStateOf(0)}
+     if(newEditor||editorNoteId!=null){ val n=editorNoteId?.let{db.getNote(it)}; NoteEditor(db,n,lang,onClose={newEditor=false;editorNoteId=null},onSaved={id->newEditor=false;editorNoteId=null;readerId=id});return }
+     readerId?.let{id->db.getNote(id)?.let{n->NoteReader(db,n,lang,onBack={readerId=null},onEdit={editorNoteId=n.id},onDeleted={readerId=null})};return}
+     if(showReminders){RemindersScreen(db,lang){showReminders=false};return}
+     Scaffold(
+         topBar={TopAppBar(
+             title={Column{Text(AppStrings.t(lang,"app"),style=MaterialTheme.typography.titleLarge);Text(AppStrings.t(lang,when(section){"money"->"money";"settings"->"settings";else->"notes"}),style=MaterialTheme.typography.bodySmall)}},
+-            actions={if(section!="settings")IconButton({showReminders=true}){Icon(Icons.Default.Notifications,AppStrings.t(lang,"reminders"))};if(settings.hasPin())IconButton(onLock){Icon(Icons.Default.Lock,null)}},
++            actions={
++                if(section=="notes") IconButton({newEditor=true}){Icon(Icons.Default.Add,AppStrings.t(lang,"new_note"))}
++                if(section=="money") IconButton({showAddMoney=true}){Icon(Icons.Default.Add,AppStrings.t(lang,"add"))}
++                if(section!="settings") IconButton({showReminders=true}){Icon(Icons.Default.Notifications,AppStrings.t(lang,"reminders"))}
++                if(settings.hasPin())IconButton(onLock){Icon(Icons.Default.Lock,null)}
++            },
+             colors=organizerTopBarColors()
+         )},
+         bottomBar={
+             NavigationBar {
+-                Row(
+-                    Modifier.fillMaxWidth().height(64.dp),
+-                    verticalAlignment=Alignment.CenterVertically
+-                ) {
+-                    listOf(
+-                        "notes" to Icons.Default.Description,
+-                        "money" to Icons.Default.AccountBalanceWallet,
+-                        "settings" to Icons.Default.Settings
+-                    ).forEach { (key,icon) ->
+-                        Box(
+-                            Modifier.weight(1f).fillMaxHeight(),
+-                            contentAlignment=Alignment.Center
+-                        ) {
+-                            IconButton(
+-                                onClick={section=key},
+-                                modifier=Modifier.size(56.dp)
+-                            ) {
+-                                Icon(
+-                                    icon,
+-                                    contentDescription=AppStrings.t(lang,key),
+-                                    modifier=Modifier.size(26.dp),
+-                                    tint=if(section==key) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+-                                )
+-                            }
+-                        }
+-                    }
++                listOf(
++                    "notes" to Icons.Default.Description,
++                    "money" to Icons.Default.AccountBalanceWallet,
++                    "settings" to Icons.Default.Settings
++                ).forEach { (key,icon) ->
++                    NavigationBarItem(
++                        selected=section==key,
++                        onClick={section=key},
++                        icon={Icon(icon,contentDescription=AppStrings.t(lang,key),modifier=Modifier.size(25.dp))},
++                        label={Text(AppStrings.t(lang,key),maxLines=1)},
++                        alwaysShowLabel=true
++                    )
+                 }
+             }
+         }
+     ){pad->Box(Modifier.padding(pad)){when(section){
+-        "money"->MoneyScreen(db,lang)
++        "money"->MoneyScreen(db,lang,moneyRevision)
+         "settings"->SettingsScreen(db,settings,lang,onLanguage,dark,onDark,fontScale,onFont,bold,onBold)
+-        else->NotesScreen(db,lang,onOpen={readerId=it},onNew={newEditor=true})
++        else->NotesScreen(db,lang,onOpen={readerId=it})
+     }}}
++    if(showAddMoney) AddMoneyDialog(lang,{showAddMoney=false}) { type,amount,cat,note ->
++        db.addMoneyEntry(type,amount,cat,null,note)
++        moneyRevision++
++        showAddMoney=false
++    }
+ }
+ 
+-@Composable private fun NotesScreen(db:NoteDatabase,lang:String,onOpen:(Long)->Unit,onNew:()->Unit){
++@Composable private fun NotesScreen(db:NoteDatabase,lang:String,onOpen:(Long)->Unit){
+     var q by rememberSaveable{mutableStateOf("")};var refresh by remember{mutableIntStateOf(0)};val notes=remember(q,refresh){db.getNotes(q)}
+-    Box(Modifier.fillMaxSize()){Column(Modifier.fillMaxSize().padding(12.dp)){OutlinedTextField(q,{q=it},Modifier.fillMaxWidth(),leadingIcon={Icon(Icons.Default.Search,null)},placeholder={Text(AppStrings.t(lang,"search"))},singleLine=true);Spacer(Modifier.height(8.dp));if(notes.isEmpty())EmptyState(AppStrings.t(lang,"no_notes"))else LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)){items(notes,key={it.id}){n->Card(Modifier.fillMaxWidth().clickable{onOpen(n.id)}){Column(Modifier.padding(14.dp)){Text(n.title.ifBlank{AppStrings.t(lang,"note")},style=MaterialTheme.typography.titleMedium);if(n.body.isNotBlank())Text(n.body,maxLines=3,overflow=TextOverflow.Ellipsis);Text(formatTime(n.updatedAt),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}}}}}
+-        ExtendedFloatingActionButton(onClick=onNew,modifier=Modifier.align(Alignment.BottomEnd).padding(18.dp),icon={Icon(Icons.Default.Add,null)},text={Text(AppStrings.t(lang,"note"))})
+-    }
++    Box(Modifier.fillMaxSize()){Column(Modifier.fillMaxSize().padding(12.dp)){OutlinedTextField(q,{q=it},Modifier.fillMaxWidth(),leadingIcon={Icon(Icons.Default.Search,null)},placeholder={Text(AppStrings.t(lang,"search"))},singleLine=true);Spacer(Modifier.height(8.dp));if(notes.isEmpty())EmptyState(AppStrings.t(lang,"no_notes"))else LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)){items(notes,key={it.id}){n->Card(Modifier.fillMaxWidth().clickable{onOpen(n.id)}){Column(Modifier.padding(14.dp)){Text(n.title.ifBlank{AppStrings.t(lang,"note")},style=MaterialTheme.typography.titleMedium);if(n.body.isNotBlank())Text(n.body,maxLines=3,overflow=TextOverflow.Ellipsis);Text(formatTime(n.updatedAt),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}}}}}}
+ }
+ 
+ @Composable private fun NoteReader(db:NoteDatabase,note:Note,lang:String,onBack:()->Unit,onEdit:()->Unit,onDeleted:()->Unit){
+@@ -237,10 +231,9 @@
+ 
+ @Composable private fun AddTaskDialog(lang:String,onDismiss:()->Unit,onAdd:(String,String)->Unit){var t by remember{mutableStateOf("")};var d by remember{mutableStateOf("")};AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"new_task"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(t,{t=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"title"))},keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences));OutlinedTextField(d,{d=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"details"))},keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences))}},confirmButton={Button({if(t.isNotBlank())onAdd(t,d)}){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})}
+ 
+-@Composable private fun MoneyScreen(db:NoteDatabase,lang:String){
++@Composable private fun MoneyScreen(db:NoteDatabase,lang:String,refreshKey:Int){
+     var refresh by remember{mutableIntStateOf(0)}
+-    var add by remember{mutableStateOf(false)}
+-    val list=remember(refresh){db.getMoneyEntries()}
++    val list=remember(refresh,refreshKey){db.getMoneyEntries()}
+     val income=list.filter{it.type=="income"}
+     val expense=list.filter{it.type=="expense"}
+     val incTotal=income.sumOf{it.amount}
+@@ -280,9 +273,7 @@
+                 }
+             }
+         }
+-        FloatingActionButton({add=true},Modifier.align(Alignment.BottomEnd).padding(end=18.dp,bottom=66.dp)){Icon(Icons.Default.Add,null)}
+     }
+-    if(add)AddMoneyDialog(lang,{add=false}){type,amount,cat,note->db.addMoneyEntry(type,amount,cat,null,note);refresh++;add=false}
+ }
+ 
+ @Composable private fun MoneyColumn(title:String,entries:List<MoneyEntry>,total:Double,lang:String,modifier:Modifier=Modifier,amountColor:Color,onDelete:(Long)->Unit){
