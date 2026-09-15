@@ -1,0 +1,30 @@
+diff -ruN '--exclude=.github' '--exclude=BUILD_TEST_APK.bat' '--exclude=README_BUILD_RU.txt' '--exclude=VALIDATION_v0.8.0.md' MyOrganizer-v0.8.1-source/app/build.gradle.kts MyOrganizer-v0.8.2-source/app/build.gradle.kts
+--- MyOrganizer-v0.8.1-source/app/build.gradle.kts	2026-09-15 16:10:40.811742514 +0000
++++ MyOrganizer-v0.8.2-source/app/build.gradle.kts	2026-09-15 17:00:03.411479901 +0000
+@@ -12,8 +12,8 @@
+         applicationId = "kz.kairat.organizer"
+         minSdk = 26
+         targetSdk = 35
+-        versionCode = 24
+-        versionName = "0.8.1"
++        versionCode = 25
++        versionName = "0.8.2"
+     }
+ 
+     buildFeatures {
+diff -ruN '--exclude=.github' '--exclude=BUILD_TEST_APK.bat' '--exclude=README_BUILD_RU.txt' '--exclude=VALIDATION_v0.8.0.md' MyOrganizer-v0.8.1-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt MyOrganizer-v0.8.2-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt
+--- MyOrganizer-v0.8.1-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt	2026-09-15 15:10:56.911943651 +0000
++++ MyOrganizer-v0.8.2-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt	2026-09-15 17:00:03.411418358 +0000
+@@ -10,7 +10,7 @@
+         "new_task" to "Новое дело", "details" to "Описание", "add" to "Добавить", "income" to "Доход", "expense" to "Расход", "amount" to "Сумма ₸", "category" to "Категория", "comment" to "Комментарий",
+         "reminders" to "Напоминания", "remind" to "Напомнить", "no_reminders" to "Нет активных напоминаний", "dark" to "Тёмная тема", "bold" to "Жирный шрифт", "font" to "Размер шрифта",
+         "language" to "Язык", "russian" to "Русский", "kazakh" to "Қазақша", "security" to "Защита", "pin" to "PIN-код", "backup" to "Резервная копия", "save_backup" to "Сохранить в файл / Google Drive", "restore" to "Восстановить из файла", "send_backup" to "Отправить по почте / через приложение",
+-        "about" to "О приложении", "developer" to "Разработчик: Кайрат Калиев", "version" to "Версия: 0.8.0 (23)", "copyright" to "© 2026 Кайрат Калиев", "permission_mic" to "Для голосовой заметки нужен доступ к микрофону",
++        "about" to "О приложении", "version" to "Версия приложения: 0.8.2 (25)", "copyright" to "© 2026 Кайрат Калиев", "permission_mic" to "Для голосовой заметки нужен доступ к микрофону",
+         "audio" to "Голосовая заметка", "record_failed" to "Не удалось сохранить запись", "backup_ok" to "Резервная копия создана", "restore_ok" to "Данные восстановлены", "error" to "Ошибка",
+         "unlock" to "Введите PIN-код", "wrong_pin" to "Неверный PIN", "set_pin" to "Установить PIN", "change_pin" to "Изменить PIN", "disable_pin" to "Отключить PIN", "current_pin" to "Текущий PIN", "new_pin" to "Новый PIN", "pin4" to "PIN (минимум 4 цифры)", "confirm" to "Подтвердить"
+     )
+@@ -23,7 +23,7 @@
+         "new_task" to "Жаңа іс", "details" to "Сипаттама", "add" to "Қосу", "income" to "Кіріс", "expense" to "Шығыс", "amount" to "Сома ₸", "category" to "Санат", "comment" to "Түсініктеме",
+         "reminders" to "Еске салғыштар", "remind" to "Еске салу", "no_reminders" to "Белсенді еске салғыштар жоқ", "dark" to "Қараңғы тақырып", "bold" to "Қалың қаріп", "font" to "Қаріп өлшемі",
+         "language" to "Тіл", "russian" to "Русский", "kazakh" to "Қазақша", "se

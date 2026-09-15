@@ -1,0 +1,25 @@
+aying=false}else{var p=player;if(p==null){p=MediaPlayer().apply{setDataSource(AttachmentStore.file(entry).absolutePath);prepare();setOnCompletionListener{playing=false;progress=0f;seekTo(0)}};player=p};p.start();playing=true}},modifier=Modifier.size(40.dp)){Icon(if(playing)Icons.Default.Pause else Icons.Default.PlayArrow,AppStrings.t(lang,"audio"))}
++            Waveform(progress,entry.id,Modifier.weight(1f))
++            Spacer(Modifier.width(8.dp))
++            Text(humanDuration(if(entry.durationMs>0)entry.durationMs else player?.duration?.toLong()?:0L),style=MaterialTheme.typography.bodySmall)
++            if(onDelete!=null)IconButton(onDelete,modifier=Modifier.size(40.dp)){Icon(Icons.Default.Close,null)}
+         }
+     }
+ }
+-@Composable private fun Waveform(progress:Float,seed:Long){
++@Composable private fun Waveform(progress:Float,seed:Long,modifier:Modifier=Modifier){
+     val played=MaterialTheme.colorScheme.primary
+     val unplayed=MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha=.45f)
+-    Canvas(Modifier.fillMaxWidth().height(28.dp)){val bars=44;val gap=size.width/bars;for(i in 0 until bars){val v=0.25f+(((i*37+seed.toInt()*13)and 15)/20f);val h=size.height*v.coerceIn(.2f,1f);drawLine(color=if(i.toFloat()/bars<=progress)played else unplayed,start=Offset(i*gap,size.height/2-h/2),end=Offset(i*gap,size.height/2+h/2),strokeWidth=2.5.dp.toPx(),cap=StrokeCap.Round)}}
++    Canvas(modifier.fillMaxWidth().height(22.dp)){val bars=36;val gap=size.width/bars;for(i in 0 until bars){val v=0.25f+(((i*37+seed.toInt()*13)and 15)/20f);val h=size.height*v.coerceIn(.2f,1f);drawLine(color=if(i.toFloat()/bars<=progress)played else unplayed,start=Offset(i*gap,size.height/2-h/2),end=Offset(i*gap,size.height/2+h/2),strokeWidth=2.5.dp.toPx(),cap=StrokeCap.Round)}}
+ }
+ 
+ @Composable private fun AttachmentRow(e:AttachmentEntry,lang:String,onChanged:()->Unit){Card(Modifier.fillMaxWidth()){Row(Modifier.padding(10.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.AttachFile,null);Spacer(Modifier.width(8.dp));Column(Modifier.weight(1f).clickable{runCatching{AttachmentStore.open(e)}}){Text(e.displayName,maxLines=1,overflow=TextOverflow.Ellipsis);Text(AttachmentStore.humanSize(e.size),style=MaterialTheme.typography.bodySmall)};IconButton({AttachmentStore.share(e)}){Icon(Icons.Default.Share,null)};IconButton({AttachmentStore.delete(e);onChanged()}){Icon(Icons.Default.Delete,null)}}}}
+@@ -183,11 +185,19 @@
+     )
+ }
+ 
+-@Composable private fun AddTaskDialog(lang:String,onDismiss:()->Unit,onAdd:(String,String)->Unit){var t by remember{mutableStateOf("")};var d by remember{mutableStateOf("")};AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"new_task"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(t,{t=it},label={Text(AppStrings.t(lang,"title"))});OutlinedTextField(d,{d=it},label={Text(AppStrings.t(lang,"details"))})}},confirmButton={Button({if(t.isNotBlank())onAdd(t,d)}){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})}
++@Composable private fun AddTaskDialog(lang:String,onDismiss:()->Unit,onAdd:(String,String)->Unit){var t by remember{mutableStateOf("")};var d by remember{mutableStateOf("")};AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"new_task"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(t,{t=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"title"))},keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences));OutlinedTextField(d,{d=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"details"))},keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences))}},confirmButton={Button({if(t.isNotBlank())onAdd(t,d)}){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})}
+ 
+ @Composable private fun MoneyScreen(db:NoteDatabase,lang:String){var refresh by re

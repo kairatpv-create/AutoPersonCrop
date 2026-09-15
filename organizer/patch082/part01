@@ -1,0 +1,28 @@
+curity" to "Қорғау", "pin" to "PIN-код", "backup" to "Резервтік көшірме", "save_backup" to "Файлға / Google Drive-қа сақтау", "restore" to "Файлдан қалпына келтіру", "send_backup" to "Пошта/қосымша арқылы жіберу",
+-        "about" to "Қосымша туралы", "developer" to "Әзірлеуші: Кайрат Калиев", "version" to "Нұсқа: 0.8.0 (23)", "copyright" to "© 2026 Кайрат Калиев", "permission_mic" to "Дыбыстық жазба үшін микрофонға рұқсат қажет",
++        "about" to "Қосымша туралы", "version" to "Қосымша нұсқасы: 0.8.2 (25)", "copyright" to "© 2026 Кайрат Калиев", "permission_mic" to "Дыбыстық жазба үшін микрофонға рұқсат қажет",
+         "audio" to "Дыбыстық жазба", "record_failed" to "Жазбаны сақтау мүмкін болмады", "backup_ok" to "Резервтік көшірме жасалды", "restore_ok" to "Деректер қалпына келтірілді", "error" to "Қате",
+         "unlock" to "PIN-кодты енгізіңіз", "wrong_pin" to "PIN қате", "set_pin" to "PIN орнату", "change_pin" to "PIN өзгерту", "disable_pin" to "PIN өшіру", "current_pin" to "Қазіргі PIN", "new_pin" to "Жаңа PIN", "pin4" to "PIN (кемінде 4 сан)", "confirm" to "Растау"
+     )
+diff -ruN '--exclude=.github' '--exclude=BUILD_TEST_APK.bat' '--exclude=README_BUILD_RU.txt' '--exclude=VALIDATION_v0.8.0.md' MyOrganizer-v0.8.1-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt MyOrganizer-v0.8.2-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+--- MyOrganizer-v0.8.1-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt	2026-09-15 15:10:56.912309080 +0000
++++ MyOrganizer-v0.8.2-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt	2026-09-15 17:30:25.781471016 +0000
+@@ -26,6 +26,7 @@
+ import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.graphics.StrokeCap
+ import androidx.compose.ui.platform.LocalContext
++import androidx.compose.ui.text.input.KeyboardCapitalization
+ import androidx.compose.ui.text.input.KeyboardType
+ import androidx.compose.ui.text.input.PasswordVisualTransformation
+ import androidx.compose.ui.text.style.TextOverflow
+@@ -60,13 +61,12 @@
+     if(showReminders){RemindersScreen(db,lang){showReminders=false};return}
+     Scaffold(
+         topBar={TopAppBar(
+-            title={Column{Text(AppStrings.t(lang,"app"),style=MaterialTheme.typography.titleLarge);Text(AppStrings.t(lang,when(section){"tasks"->"tasks";"money"->"money";"settings"->"settings";else->"notes"}),style=MaterialTheme.typography.bodySmall)}},
++            title={Column{Text(AppStrings.t(lang,"app"),style=MaterialTheme.typography.titleLarge);Text(AppStrings.t(lang,when(section){"money"->"money";"settings"->"settings";else->"notes"}),style=MaterialTheme.typography.bodySmall)}},
+             actions={if(section!="settings")IconButton({showReminders=true}){Icon(Icons.Default.Notifications,AppStrings.t(lang,"reminders"))};if(settings.hasPin())IconButton(onLock){Icon(Icons.Default.Lock,null)}},
+             colors=organizerTopBarColors()
+         )},
+-        bottomBar={NavigationBar{listOf("notes" to Icons.Default.Description,"tasks" to Icons.Default.CheckCircle,"money" to Icons.Default.AccountBalanceWallet,"settings" to Icons.Default.Settings).forEach{(key,icon)->NavigationBarItem(selected=section==key,onClick={section=key},icon={Icon(icon,null)},label={Text(AppStrings.t(lang,key))})}}}
++        bottomBar={NavigationBar{Row(Modifier.fillMaxWidth().height(64.dp),verticalAlignment=Alignment.CenterVertically){listOf("notes" to Icons.Default.Description,"money" to Icons.Default.AccountBalanceWallet,"settings" to Icons.Default.Settings).forEach{(key,icon)->Box(Modifier.weight(1f).fillMaxHeight(),contentAlignment=

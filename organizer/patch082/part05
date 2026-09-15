@@ -1,0 +1,27 @@
+apitalization.Sentences))
++        OutlinedTextField(note,{note=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"comment"))},keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences))
++    }},confirmButton={Button({parseAmountInput(amount)?.let{onAdd(type,it,cat,note)}}){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
++}
+ 
+ @Composable private fun RemindersScreen(db:NoteDatabase,lang:String,onBack:()->Unit){val context=LocalContext.current;var refresh by remember{mutableIntStateOf(0)};val list=remember(refresh){db.getReminders()};Scaffold(topBar={TopAppBar(title={Text(AppStrings.t(lang,"reminders"))},navigationIcon={IconButton(onBack){Icon(Icons.Default.ArrowBack,null)}},colors=organizerTopBarColors())}){pad->if(list.isEmpty())Box(Modifier.padding(pad).fillMaxSize(),contentAlignment=Alignment.Center){Text(AppStrings.t(lang,"no_reminders"))}else LazyColumn(Modifier.padding(pad).padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){items(list,key={it.id}){r->Card(Modifier.fillMaxWidth()){Row(Modifier.padding(12.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(r.title.ifBlank{AppStrings.t(lang,"reminders")});Text(formatDate(r.triggerAt),style=MaterialTheme.typography.bodySmall)};IconButton({ReminderScheduler.cancel(context,r.id);db.deleteReminder(r.id);refresh++}){Icon(Icons.Default.Delete,null)}}}}}}}
+ 
+@@ -200,7 +210,7 @@
+         item{SettingsCard(AppStrings.t(lang,"settings")){SettingSwitch(AppStrings.t(lang,"dark"),dark,onDark);SettingSwitch(AppStrings.t(lang,"bold"),bold,onBold);Text(AppStrings.t(lang,"font"));Slider(fontScale,onFont,valueRange=.85f..1.45f,steps=3)}}
+         item{SettingsCard(AppStrings.t(lang,"security")){val enabled=settings.isPinProtectionEnabled();SettingSwitch(AppStrings.t(lang,"pin"),enabled){want->if(want&&!enabled)showPin=true else if(!want&&enabled)showDisablePin=true};if(enabled)OutlinedButton({showChangePin=true},Modifier.fillMaxWidth()){Text(AppStrings.t(lang,"change_pin"))}}}
+         item{SettingsCard(AppStrings.t(lang,"backup")){Button({saveBackup.launch(BackupManager.suggestedFileName())},Modifier.fillMaxWidth()){Icon(Icons.Default.Backup,null);Spacer(Modifier.width(8.dp));Text(AppStrings.t(lang,"save_backup"))};OutlinedButton({openBackup.launch(arrayOf("application/json","text/plain","*/*"))},Modifier.fillMaxWidth()){Text(AppStrings.t(lang,"restore"))};OutlinedButton({BackupManager.shareBackup(context,BackupManager.createBackup(db,settings),settings.backupEmail)},Modifier.fillMaxWidth()){Text(AppStrings.t(lang,"send_backup"))}}}
+-        item{SettingsCard(AppStrings.t(lang,"about")){Text(AppStrings.t(lang,"developer"));Text(AppStrings.t(lang,"version"));Text(AppStrings.t(lang,"copyright"))}}
++        item{SettingsCard(AppStrings.t(lang,"about")){Text(AppStrings.t(lang,"version"));Spacer(Modifier.height(4.dp));Text(AppStrings.t(lang,"copyright"),style=MaterialTheme.typography.bodySmall)}}
+         msg?.let{item{Text(it,color=MaterialTheme.colorScheme.primary)}}
+     }
+     if(showPin)PinSetupDialog(lang,{showPin=false}){pin->settings.setPin(pin);settings.setPinProtectionEnabled(true);showPin=false}
+@@ -223,4 +233,26 @@
+ private fun formatTime(ms:Long)=DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(ms))
+ private fun formatDate(ms:Long)=DateFormat.getDateTimeInstance(DateFormat.MEDIUM,DateFormat.SHORT).format(Date(ms))
+ private fun humanDuration(ms:Long):String{val s=(ms/1000).coerceAtLeast(0);return "%02d:%02d".format(s/60,s%60)}
++private fun formatAmountInput(input:String):String{
++    val cleaned=input.replace(" ","").replace('.',',').filter{it.isDigit()||it==','}
++    if(cleaned.isEmpty())return ""
++    val parts=cleaned.split(',',limit=2)
++    val intDigits=parts[0].filter(Char::isDigit).trimStart('0').ifEmpty{if(parts[0].isNotEmpty())"0" else ""}
++    val grouped=intDigits.reversed().chunked(3).joinToString(" ").reversed()
++  

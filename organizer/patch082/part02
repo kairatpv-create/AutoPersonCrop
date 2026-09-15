@@ -1,0 +1,27 @@
+Alignment.Center){IconButton(onClick={section=key},modifier=Modifier.size(56.dp)){Icon(icon,AppStrings.t(lang,key),modifier=Modifier.size(26.dp),tint=if(section==key)MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)}}}}}
+     ){pad->Box(Modifier.padding(pad)){when(section){
+-        "tasks"->TasksScreen(db,lang)
+         "money"->MoneyScreen(db,lang)
+         "settings"->SettingsScreen(db,settings,lang,onLanguage,dark,onDark,fontScale,onFont,bold,onBold)
+         else->NotesScreen(db,lang,onOpen={readerId=it},onNew={newEditor=true})
+@@ -101,8 +101,8 @@
+     Scaffold(topBar={TopAppBar(title={Text(AppStrings.t(lang,if(note==null)"new_note" else "edit_note"))},navigationIcon={IconButton({close()}){Icon(Icons.Default.ArrowBack,null)}},actions={if(note!=null)IconButton({db.delete(note.id);AttachmentStore.deleteTarget("note",note.id);onClose()}){Icon(Icons.Default.Delete,null)};IconButton({save()}){Icon(Icons.Default.Save,null)}},colors=organizerTopBarColors())}){pad->
+         LazyColumn(Modifier.padding(pad).padding(horizontal=16.dp,vertical=10.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+             if(note!=null)item{Text("${AppStrings.t(lang,"created")}: ${formatDate(note.createdAt)}\n${AppStrings.t(lang,"changed")}: ${formatDate(note.updatedAt)}",style=MaterialTheme.typography.bodySmall)}
+-            item{OutlinedTextField(title,{title=it},Modifier.fillMaxWidth(),label={Text(AppStrings.t(lang,"title"))},singleLine=true)}
+-            item{OutlinedTextField(body,{body=it},Modifier.fillMaxWidth().heightIn(min=220.dp),label={Text(AppStrings.t(lang,"note"))},placeholder={Text(AppStrings.t(lang,"note_hint"))})}
++            item{OutlinedTextField(title,{title=capitalizeSentences(it)},Modifier.fillMaxWidth(),label={Text(AppStrings.t(lang,"title"))},singleLine=true,keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences))}
++            item{OutlinedTextField(body,{body=capitalizeSentences(it)},Modifier.fillMaxWidth().heightIn(min=220.dp),label={Text(AppStrings.t(lang,"note"))},placeholder={Text(AppStrings.t(lang,"note_hint"))},keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences))}
+             val voices=atts.filter{it.isVoice};if(voices.isNotEmpty())items(voices,key={it.id}){VoiceNoteBlock(it,lang,onDelete={AttachmentStore.delete(it);refresh++})}
+             val files=atts.filterNot{it.isVoice};if(files.isNotEmpty())items(files,key={it.id}){AttachmentRow(it,lang){refresh++}}
+             item{
+@@ -121,17 +121,19 @@
+     DisposableEffect(entry.id){onDispose{player?.release()}}
+     LaunchedEffect(playing){while(playing){val p=player;if(p!=null&&p.duration>0)progress=(p.currentPosition.toFloat()/p.duration).coerceIn(0f,1f);delay(100)}}
+     Card(Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.primaryContainer)){
+-        Row(Modifier.padding(10.dp),verticalAlignment=Alignment.CenterVertically){
+-            IconButton({if(playing){player?.pause();playing=false}else{var p=player;if(p==null){p=MediaPlayer().apply{setDataSource(AttachmentStore.file(entry).absolutePath);prepare();setOnCompletionListener{playing=false;progress=0f;seekTo(0)}};player=p};p.start();playing=true}}){Icon(if(playing)Icons.Default.Pause else Icons.Default.PlayArrow,AppStrings.t(lang,"audio"))}
+-            Column(Modifier.weight(1f)){Waveform(progress,entry.id);Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(AppStrings.t(lang,"audio"),style=MaterialTheme.typography.bodySmall);Text(humanDuration(if(entry.durationMs>0)entry.durationMs else player?.duration?.toLong()?:0L),style=MaterialTheme.typography.bodySmall)}}
+-            if(onDelete!=null)IconButton(onDelete){Icon(Icons.Default.Close,null)}
++        Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(horizontal=6.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically){
++            IconButton({if(playing){player?.pause();pl

@@ -1,0 +1,17 @@
+  if(parts.size==1)return grouped
++    val decimals=parts[1].filter(Char::isDigit).take(2)
++    return grouped+","+decimals
++}
++private fun parseAmountInput(input:String):Double?=input.replace(" ","").replace(',','.').toDoubleOrNull()
++private fun capitalizeSentences(input:String):String{
++    if(input.isEmpty())return input
++    val out=StringBuilder(input.length);var capitalizeNext=true
++    input.forEach{ch->
++        val c=if(capitalizeNext&&ch.isLetter())ch.uppercaseChar() else ch
++        out.append(c)
++        if(ch.isLetterOrDigit())capitalizeNext=false
++        if(ch=='.'||ch=='!'||ch=='?'||ch=='\n')capitalizeNext=true
++    }
++    return out.toString()
++}
+ private fun toast(context:android.content.Context,text:String)=Toast.makeText(context,text,Toast.LENGTH_SHORT).show()
