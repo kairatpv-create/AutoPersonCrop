@@ -1,0 +1,167 @@
+diff -ruN MyOrganizer-v0.8.2-source/app/build.gradle.kts MyOrganizer-v0.8.3-source/app/build.gradle.kts
+--- MyOrganizer-v0.8.2-source/app/build.gradle.kts	2026-09-15 17:00:03.411479901 +0000
++++ MyOrganizer-v0.8.3-source/app/build.gradle.kts	2026-09-15 17:54:37.819304957 +0000
+@@ -12,8 +12,8 @@
+         applicationId = "kz.kairat.organizer"
+         minSdk = 26
+         targetSdk = 35
+-        versionCode = 25
+-        versionName = "0.8.2"
++        versionCode = 26
++        versionName = "0.8.3"
+     }
+ 
+     buildFeatures {
+diff -ruN MyOrganizer-v0.8.2-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt MyOrganizer-v0.8.3-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt
+--- MyOrganizer-v0.8.2-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt	2026-09-15 17:00:03.411418358 +0000
++++ MyOrganizer-v0.8.3-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt	2026-09-15 17:54:37.819465629 +0000
+@@ -10,7 +10,7 @@
+         "new_task" to "Новое дело", "details" to "Описание", "add" to "Добавить", "income" to "Доход", "expense" to "Расход", "amount" to "Сумма ₸", "category" to "Категория", "comment" to "Комментарий",
+         "reminders" to "Напоминания", "remind" to "Напомнить", "no_reminders" to "Нет активных напоминаний", "dark" to "Тёмная тема", "bold" to "Жирный шрифт", "font" to "Размер шрифта",
+         "language" to "Язык", "russian" to "Русский", "kazakh" to "Қазақша", "security" to "Защита", "pin" to "PIN-код", "backup" to "Резервная копия", "save_backup" to "Сохранить в файл / Google Drive", "restore" to "Восстановить из файла", "send_backup" to "Отправить по почте / через приложение",
+-        "about" to "О приложении", "version" to "Версия приложения: 0.8.2 (25)", "copyright" to "© 2026 Кайрат Калиев", "permission_mic" to "Для голосовой заметки нужен доступ к микрофону",
++        "about" to "О приложении", "version" to "Версия приложения: 0.8.3 (26)", "copyright" to "© 2026 Кайрат Калиев", "total" to "Итого", "balance" to "Баланс", "permission_mic" to "Для голосовой заметки нужен доступ к микрофону",
+         "audio" to "Голосовая заметка", "record_failed" to "Не удалось сохранить запись", "backup_ok" to "Резервная копия создана", "restore_ok" to "Данные восстановлены", "error" to "Ошибка",
+         "unlock" to "Введите PIN-код", "wrong_pin" to "Неверный PIN", "set_pin" to "Установить PIN", "change_pin" to "Изменить PIN", "disable_pin" to "Отключить PIN", "current_pin" to "Текущий PIN", "new_pin" to "Новый PIN", "pin4" to "PIN (минимум 4 цифры)", "confirm" to "Подтвердить"
+     )
+@@ -23,7 +23,7 @@
+         "new_task" to "Жаңа іс", "details" to "Сипаттама", "add" to "Қосу", "income" to "Кіріс", "expense" to "Шығыс", "amount" to "Сома ₸", "category" to "Санат", "comment" to "Түсініктеме",
+         "reminders" to "Еске салғыштар", "remind" to "Еске салу", "no_reminders" to "Белсенді еске салғыштар жоқ", "dark" to "Қараңғы тақырып", "bold" to "Қалың қаріп", "font" to "Қаріп өлшемі",
+         "language" to "Тіл", "russian" to "Русский", "kazakh" to "Қазақша", "security" to "Қорғау", "pin" to "PIN-код", "backup" to "Резервтік көшірме", "save_backup" to "Файлға / Google Drive-қа сақтау", "restore" to "Файлдан қалпына келтіру", "send_backup" to "Пошта/қосымша арқылы жіберу",
+-        "about" to "Қосымша туралы", "version" to "Қосымша нұсқасы: 0.8.2 (25)", "copyright" to "© 2026 Кайрат Калиев", "permission_mic" to "Дыбыстық жазба үшін микрофонға рұқсат қажет",
++        "about" to "Қосымша туралы", "version" to "Қосымша нұсқасы: 0.8.3 (26)", "copyright" to "© 2026 Кайрат Калиев", "total" to "Барлығы", "balance" to "Баланс", "permission_mic" to "Дыбыстық жазба үшін микрофонға рұқсат қажет",
+         "audio" to "Дыбыстық жазба", "record_failed" to "Жазбаны сақтау мүмкін болмады", "backup_ok" to "Резервтік көшірме жасалды", "restore_ok" to "Деректер қалпына келтірілді", "error" to "Қате",
+         "unlock" to "PIN-кодты енгізіңіз", "wrong_pin" to "PIN қате", "set_pin" to "PIN орнату", "change_pin" to "PIN өзгерту", "disable_pin" to "PIN өшіру", "current_pin" to "Қазіргі PIN", "new_pin" to "Жаңа PIN", "pin4" to "PIN (кемінде 4 сан)", "confirm" to "Растау"
+     )
+diff -ruN MyOrganizer-v0.8.2-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt MyOrganizer-v0.8.3-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+--- MyOrganizer-v0.8.2-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt	2026-09-15 17:39:11.820652951 +0000
++++ MyOrganizer-v0.8.3-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt	2026-09-15 17:54:37.819835785 +0000
+@@ -137,8 +137,28 @@
+             val files=atts.filterNot{it.isVoice};if(files.isNotEmpty())items(files,key={it.id}){AttachmentRow(it,lang){refresh++}}
+             item{
+                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+-                    Box(Modifier.weight(1f)){OutlinedButton({attachmentMenu=true},Modifier.fillMaxWidth()){Icon(Icons.Default.AttachFile,null);Spacer(Modifier.width(6.dp));Text(AppStrings.t(lang,"attachment"))};DropdownMenu(attachmentMenu,{attachmentMenu=false}){DropdownMenuItem({Text(AppStrings.t(lang,"file"))},{attachmentMenu=false;filePicker.launch(arrayOf("image/*","application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","text/plain"))},leadingIcon={Icon(Icons.Default.InsertDriveFile,null)});DropdownMenuItem({Text(AppStrings.t(lang,"camera"))},{attachmentMenu=false;val(f,u)=AttachmentStore.createCameraTarget();pendingCameraFile=f;camera.launch(u)},leadingIcon={Icon(Icons.Default.PhotoCamera,null)})}}
+-                    Button({if(recording)stopRecording() else if(androidx.core.content.ContextCompat.checkSelfPermission(context,Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)startRecording()else micPermission.launch(Manifest.permission.RECORD_AUDIO)},Modifier.weight(1f),colors=if(recording)ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.error)else ButtonDefaults.buttonColors()) {Icon(if(recording)Icons.Default.Stop else Icons.Default.Mic,null);Spacer(Modifier.width(6.dp));Text(if(recording)"${AppStrings.t(lang,"recording")} ${humanDuration(elapsed)}" else AppStrings.t(lang,"microphone"),maxLines=1)}
++                    Box(Modifier.weight(1f)){
++                        OutlinedButton(
++                            onClick={attachmentMenu=true},
++                            modifier=Modifier.fillMaxWidth().height(52.dp),
++                            contentPadding=PaddingValues(horizontal=6.dp)
++                        ){
++                            Icon(Icons.Default.AttachFile,null,Modifier.size(22.dp).offset(x=(-4).dp))
++                            Spacer(Modifier.width(1.dp))
++                            Text(AppStrings.t(lang,"attachment"),maxLines=1,softWrap=false,overflow=TextOverflow.Clip)
++                        }
++                        DropdownMenu(attachmentMenu,{attachmentMenu=false}){DropdownMenuItem({Text(AppStrings.t(lang,"file"))},{attachmentMenu=false;filePicker.launch(arrayOf("image/*","application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","text/plain"))},leadingIcon={Icon(Icons.Default.InsertDriveFile,null)});DropdownMenuItem({Text(AppStrings.t(lang,"camera"))},{attachmentMenu=false;val(f,u)=AttachmentStore.createCameraTarget();pendingCameraFile=f;camera.launch(u)},leadingIcon={Icon(Icons.Default.PhotoCamera,null)})}
++                    }
++                    Button(
++                        onClick={if(recording){{stopRecording()}} else {{if(androidx.core.content.ContextCompat.checkSelfPermission(context,Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)startRecording()else micPermission.launch(Manifest.permission.RECORD_AUDIO)}}},
++                        modifier=Modifier.weight(1f).height(52.dp),
++                        contentPadding=PaddingValues(horizontal=6.dp),
++                        colors=if(recording)ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.error)else ButtonDefaults.buttonColors()
++                    ){
++                        Icon(if(recording)Icons.Default.Stop else Icons.Default.Mic,null,Modifier.size(22.dp))
++                        Spacer(Modifier.width(4.dp))
++                        Text(if(recording)"${AppStrings.t(lang,"recording")} ${humanDuration(elapsed)}" else AppStrings.t(lang,"microphone"),maxLines=1,softWrap=false,overflow=TextOverflow.Clip)
++                    }
+                 }
+             }
+             item{Button({save()},Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.tertiary,contentColor=MaterialTheme.colorScheme.onTertiary)){Icon(Icons.Default.Save,null);Spacer(Modifier.width(8.dp));Text(AppStrings.t(lang,"save"))}}
+@@ -217,8 +237,95 @@
+ 
+ @Composable private fun AddTaskDialog(lang:String,onDismiss:()->Unit,onAdd:(String,String)->Unit){var t by remember{mutableStateOf("")};var d by remember{mutableStateOf("")};AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"new_task"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(t,{t=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"title"))},keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences));OutlinedTextField(d,{d=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"details"))},keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences))}},confirmButton={Button({if(t.isNotBlank())onAdd(t,d)}){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})}
+ 
+-@Composable private fun MoneyScreen(db:NoteDatabase,lang:String){var refresh by remember{mutableIntStateOf(0)};var add by remember{mutableStateOf(false)};val list=remember(refresh){db.getMoneyEntries()};Box(Modifier.fillMaxSize()){Column(Modifier.fillMaxSize().padding(12.dp)){val inc=list.filter{it.type=="income"}.sumOf{it.amount};val exp=list.filter{it.type=="expense"}.sumOf{it.amount};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){SummaryCard(AppStrings.t(lang,"income"),inc,Modifier.weight(1f));SummaryCard(AppStrings.t(lang,"expense"),exp,Modifier.weight(1f))};Spacer(Modifier.height(10.dp));if(list.isEmpty())EmptyState(AppStrings.t(lang,"no_money"))else LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)){items(list,key={it.id}){m->Card(Modifier.fillMaxWidth()){Row(Modifier.padding(12.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text((if(m.type=="income")"+ " else "− ")+"%,.0f ₸".format(m.amount),style=MaterialTheme.typography.titleMedium,color=if(m.type=="income")MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error);Text(m.category.ifBlank{AppStrings.t(lang,"comment")});if(m.note.isNotBlank())Text(m.note,style=MaterialTheme.typography.bodySmall);if(m.projectName.isNotBlank())Text(m.projectName,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)};IconButton({db.deleteMoneyEntry(m.id);refresh++}){Icon(Icons.Default.Delete,null)}}}}}};FloatingActionButton({add=true},Modifier.align(Alignment.BottomEnd).padding(18.dp)){Icon(Icons.Default.Add,null)}};if(add)AddMoneyDialog(lang,{add=false}){type,amount,cat,note->db.addMoneyEntry(type,amount,cat,null,note);refresh++;add=false}}
+-@Composable private fun SummaryCard(title:String,value:Double,modifier:Modifier=Modifier){Card(modifier){Column(Modifier.padding(12.dp)){Text(title);Text("%,.0f ₸".format(value),style=MaterialTheme.typography.titleMedium)}}}
++@Composable private fun MoneyScreen(db:NoteDatabase,lang:String){
++    var refresh by remember{mutableIntStateOf(0)}
++    var add by remember{mutableStateOf(false)}
++    val list=remember(refresh){db.getMoneyEntries()}
++    val income=list.filter{it.type=="income"}
++    val expense=list.filter{it.type=="expense"}
++    val incTotal=income.sumOf{it.amount}
++    val expTotal=expense.sumOf{it.amount}
++    val balance=incTotal-expTotal
++    Box(Modifier.fillMaxSize()){
++        Column(Modifier.fillMaxSize().padding(horizontal=10.dp,vertical=8.dp)){
++            Row(Modifier.weight(1f).fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
++                MoneyColumn(
++                    title=AppStrings.t(lang,"income"),
++                    entries=income,
++                    total=incTotal,
++                    lang=lang,
++                    modifier=Modifier.weight(1f),
++                    amountColor=MaterialTheme.colorScheme.primary,
++                    onDelete={id->db.deleteMoneyEntry(id);refresh++}
++                )
++                MoneyColumn(
++                    title=AppStrings.t(lang,"expense"),
++                    entries=expense,
++                    total=expTotal,
++                    lang=lang,
++                    modifier=Modifier.weight(1f),
++                    amountColor=MaterialTheme.colorScheme.error,
++                    onDelete={id->db.deleteMoneyEntry(id);refresh++}
++                )
++            }
++            Spacer(Modifier.height(8.dp))
++            Card(Modifier.fillMaxWidth().height(48.dp)){
++                Row(Modifier.fillMaxSize().padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically){
++                    Text(AppStrings.t(lang,"balance"),style=MaterialTheme.typography.titleSmall,modifier=Modifier.weight(1f))
++                    Text(
++                        (if(balance>0)"+ " else if(balance<0)"− " else "")+"%,.0f ₸".format(kotlin.math.abs(balance)),
++                        style=MaterialTheme.typography.titleMedium,
++                        color=when{balance>0->MaterialTheme.colorScheme.primary;balance<0->MaterialTheme.colorScheme.error;else->MaterialTheme.colorScheme.onSurface}
++                    )
++                }
++            }
++        }
++        FloatingActionButton({add=true},Modifier.align(Alignment.BottomEnd).padding(end=18.dp,bottom=66.dp)){Icon(Icons.Default.Add,null)}
++    }
++    if(add)AddMoneyDialog(lang,{add=false}){type,amount,cat,note->db.addMoneyEntry(type,amount,cat,null,note);refresh++;add=false}
++}
++
++@Composable private fun MoneyColumn(title:String,entries:List<MoneyEntry>,total:Double,lang:String,modifier:Modifier=Modifier,amountColor:Color,onDelete:(Long)->Unit){
++    Column(modifier.fillMaxHeight()){
++        Card(Modifier.fillMaxWidth()){
++            Box(Modifier.fillMaxWidth().height(46.dp),contentAlignment=Alignment.Center){
++                Text(title,style=MaterialTheme.typography.titleMedium)
++            }
++        }
++        Spacer(Modifier.height(6.dp))
++        if(entries.isEmpty()){
++            Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=Alignment.Center){
++                Text("—",color=MaterialTheme.colorScheme.onSurfaceVariant)
++            }
++        }else{
++            LazyColumn(Modifier.weight(1f).fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(6.dp)){
++                items(entries,key={it.id}){m->MoneyEntryCard(m,lang,amountColor,onDelete)}
++            }
++        }
++        Spacer(Modifier.height(6.dp))
++        Card(Modifier.fillMaxWidth().height(48.dp)){
++            Column(Modifier.fillMaxSize().padding(horizontal=8.dp),verticalArrangement=Arrangement.Center){
++                Text(AppStrings.t(lang,"total"),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
++                Text("%,.0f ₸".format(total),style=MaterialTheme.typography.titleSmall,color=amountColor,maxLines=1)
++            }
++        }
++    }
++}
++
++@Composable private fun MoneyEntryCard(m:MoneyEntry,lang:String,amountColor:Color,onDelete:(Long)->Unit){
++    Card(Modifier.fillMaxWidth()){
++        Column(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=7.dp)){
++            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
++                Text("%,.0f ₸".format(m.amount),style=MaterialTheme.typography.titleSmall,color=amountColor,modifier=Modifier.weight(1f),maxLines=1)
++                IconButton({onDelete(m.id)},modifier=Modifier.size(30.dp)){Icon(Icons.Default.Delete,null,Modifier.size(18.dp))}
++            }
++            val label=m.category.ifBlank{m.note.ifBlank{AppStrings.t(lang,"comment")}}
++            Text(label,style=MaterialTheme.typography.bodySmall,maxLines=2,overflow=TextOverflow.Ellipsis)
++            if(m.category.isNotBlank()&&m.note.isNotBlank())Text(m.note,style=MaterialTheme.typography.labelSmall,maxLines=2,overflow=TextOverflow.Ellipsis,color=MaterialTheme.colorScheme.onSurfaceVariant)
++        }
++    }
++}
++
+ @Composable private fun AddMoneyDialog(lang:String,onDismiss:()->Unit,onAdd:(String,Double,String,String)->Unit){
+     var type by remember{mutableStateOf("expense")};var amount by remember{mutableStateOf("")};var cat by remember{mutableStateOf("")};var note by remember{mutableStateOf("")}
+     AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"money"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
