@@ -1,0 +1,11 @@
+--- MyOrganizer-v0.8.2-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
++++ MyOrganizer-v0.8.2-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+@@ -150,7 +150,7 @@
+                         DropdownMenu(attachmentMenu,{attachmentMenu=false}){DropdownMenuItem({Text(AppStrings.t(lang,"file"))},{attachmentMenu=false;filePicker.launch(arrayOf("image/*","application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","text/plain"))},leadingIcon={Icon(Icons.Default.InsertDriveFile,null)});DropdownMenuItem({Text(AppStrings.t(lang,"camera"))},{attachmentMenu=false;val(f,u)=AttachmentStore.createCameraTarget();pendingCameraFile=f;camera.launch(u)},leadingIcon={Icon(Icons.Default.PhotoCamera,null)})}
+                     }
+                     Button(
+-                        onClick={if(recording){{stopRecording()}} else {{if(androidx.core.content.ContextCompat.checkSelfPermission(context,Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)startRecording()else micPermission.launch(Manifest.permission.RECORD_AUDIO)}}},
++                        onClick={if(recording)stopRecording() else if(androidx.core.content.ContextCompat.checkSelfPermission(context,Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)startRecording()else micPermission.launch(Manifest.permission.RECORD_AUDIO)},
+                         modifier=Modifier.weight(1f).height(52.dp),
+                         contentPadding=PaddingValues(horizontal=6.dp),
+                         colors=if(recording)ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.error)else ButtonDefaults.buttonColors()
