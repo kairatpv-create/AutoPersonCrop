@@ -1,4 +1,4 @@
-name: Build MyOrganizer v0.8.0
+name: Build MyOrganizer v0.8.1
 
 on:
   push:
@@ -38,17 +38,33 @@ jobs:
       - name: Rebuild source archive
         shell: bash
         run: |
-          cat organizer/chunks/part* > organizer/MyOrganizer-v0.8.0-source.b64
-          base64 -d organizer/MyOrganizer-v0.8.0-source.b64 > organizer/MyOrganizer-v0.8.0-source.zip
-          unzip -q organizer/MyOrganizer-v0.8.0-source.zip -d organizer/buildsrc
+          cat organizer/chunks081/part* > organizer/MyOrganizer-v0.8.1-source.b64
+          base64 -d organizer/MyOrganizer-v0.8.1-source.b64 > organizer/MyOrganizer-v0.8.1-source.zip
+          unzip -q organizer/MyOrganizer-v0.8.1-source.zip -d organizer/buildsrc081
 
       - name: Build APK
-        working-directory: organizer/buildsrc/MyOrganizer-v0.8.0-source
+        working-directory: organizer/buildsrc081/MyOrganizer-v0.8.1-source
         run: gradle --no-daemon assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MyOrganizer-v0.8.0-debug
-          path: organizer/buildsrc/MyOrganizer-v0.8.0-source/app/build/outputs/apk/debug/app-debug.apk
+          name: MyOrganizer-v0.8.1-debug
+          path: organizer/buildsrc081/MyOrganizer-v0.8.1-source/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Collect signing tools
+        shell: bash
+        run: |
+          mkdir -p organizer/signing-tools/lib
+          cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" organizer/signing-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" organizer/signing-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" organizer/signing-tools/lib/
+          chmod +x organizer/signing-tools/apksigner organizer/signing-tools/zipalign
+
+      - name: Upload signing tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-signing-tools-35
+          path: organizer/signing-tools
           if-no-files-found: error
