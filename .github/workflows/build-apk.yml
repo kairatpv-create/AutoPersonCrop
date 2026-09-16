@@ -32,13 +32,20 @@ jobs:
           keytool -list -storetype JKS -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        shell: bash
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+          echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/lib/android/sdk/platform-tools" >> "$GITHUB_PATH"
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --version
 
       - name: Install Android 36, NDK and CMake
         shell: bash
         run: |
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager \
+            "platform-tools" \
             "platforms;android-36" \
             "build-tools;36.0.0" \
             "ndk;28.2.13676358" \
