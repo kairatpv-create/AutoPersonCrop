@@ -1,0 +1,147 @@
+diff -ruN MyOrganizer-v0.8.8-source/app/build.gradle.kts MyOrganizer-v0.8.9-source/app/build.gradle.kts
+--- MyOrganizer-v0.8.8-source/app/build.gradle.kts	2026-09-16 06:39:46.559298655 +0000
++++ MyOrganizer-v0.8.9-source/app/build.gradle.kts	2026-09-16 07:32:08.413935182 +0000
+@@ -12,8 +12,8 @@
+         applicationId = "kz.kairat.organizer"
+         minSdk = 26
+         targetSdk = 35
+-        versionCode = 31
+-        versionName = "0.8.8"
++        versionCode = 32
++        versionName = "0.8.9"
+     }
+ 
+     buildFeatures {
+diff -ruN MyOrganizer-v0.8.8-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt MyOrganizer-v0.8.9-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt
+--- MyOrganizer-v0.8.8-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt	2026-09-16 06:39:46.559487870 +0000
++++ MyOrganizer-v0.8.9-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt	2026-09-16 07:32:08.413833886 +0000
+@@ -10,7 +10,7 @@
+         "new_task" to "Новое дело", "details" to "Описание", "add" to "Добавить", "income" to "Доход", "expense" to "Расход", "amount" to "Сумма ₸", "category" to "Категория", "comment" to "Комментарий",
+         "reminders" to "Напоминания", "remind" to "Напомнить", "no_reminders" to "Нет активных напоминаний", "dark" to "Тёмная тема", "bold" to "Жирный шрифт", "font" to "Размер шрифта",
+         "language" to "Язык", "russian" to "Русский", "kazakh" to "Қазақша", "security" to "Защита", "pin" to "PIN-код", "backup" to "Резервная копия", "save_backup" to "Сохранить в файл / Google Drive", "restore" to "Восстановить из файла", "send_backup" to "Отправить по почте / через приложение",
+-        "about" to "О приложении", "version" to "Версия приложения: 0.8.8 (31)", "copyright" to "© 2026 Кайрат Калиев", "total" to "Итого", "balance" to "Баланс", "permission_mic" to "Для голосовой заметки нужен доступ к микрофону", "to_text" to "В текст", "speech_to_text" to "Говорите…", "create" to "Создать", "lock_action" to "Закрыть", "developer_contact" to "Для связи с разработчиком",
++        "about" to "О приложении", "version" to "Версия приложения: 0.8.9 (32)", "copyright" to "© 2026 Кайрат Калиев", "total" to "Итого", "balance" to "Баланс", "permission_mic" to "Для голосовой заметки нужен доступ к микрофону", "to_text" to "В текст", "speech_to_text" to "Говорите…", "create" to "Создать", "lock_action" to "Закрыть", "developer_contact" to "Для связи с разработчиком",
+         "audio" to "Голосовая заметка", "record_failed" to "Не удалось сохранить запись", "backup_ok" to "Резервная копия создана", "restore_ok" to "Данные восстановлены", "error" to "Ошибка",
+         "unlock" to "Введите PIN-код", "wrong_pin" to "Неверный PIN", "set_pin" to "Установить PIN", "change_pin" to "Изменить PIN", "disable_pin" to "Отключить PIN", "current_pin" to "Текущий PIN", "new_pin" to "Новый PIN", "pin4" to "PIN (минимум 4 цифры)", "confirm" to "Подтвердить"
+     )
+@@ -23,7 +23,7 @@
+         "new_task" to "Жаңа іс", "details" to "Сипаттама", "add" to "Қосу", "income" to "Кіріс", "expense" to "Шығыс", "amount" to "Сома ₸", "category" to "Санат", "comment" to "Түсініктеме",
+         "reminders" to "Еске салғыштар", "remind" to "Еске салу", "no_reminders" to "Белсенді еске салғыштар жоқ", "dark" to "Қараңғы тақырып", "bold" to "Қалың қаріп", "font" to "Қаріп өлшемі",
+         "language" to "Тіл", "russian" to "Русский", "kazakh" to "Қазақша", "security" to "Қорғау", "pin" to "PIN-код", "backup" to "Резервтік көшірме", "save_backup" to "Файлға / Google Drive-қа сақтау", "restore" to "Файлдан қалпына келтіру", "send_backup" to "Пошта/қосымша арқылы жіберу",
+-        "about" to "Қосымша туралы", "version" to "Қосымша нұсқасы: 0.8.8 (31)", "copyright" to "© 2026 Кайрат Калиев", "total" to "Барлығы", "balance" to "Баланс", "permission_mic" to "Дыбыстық жазба үшін микрофонға рұқсат қажет", "to_text" to "Мәтінге", "speech_to_text" to "Сөйлеңіз…", "create" to "Қосу", "lock_action" to "Жабу", "developer_contact" to "Әзірлеушімен байланыс",
++        "about" to "Қосымша туралы", "version" to "Қосымша нұсқасы: 0.8.9 (32)", "copyright" to "© 2026 Кайрат Калиев", "total" to "Барлығы", "balance" to "Баланс", "permission_mic" to "Дыбыстық жазба үшін микрофонға рұқсат қажет", "to_text" to "Мәтінге", "speech_to_text" to "Сөйлеңіз…", "create" to "Қосу", "lock_action" to "Жабу", "developer_contact" to "Әзірлеушімен байланыс",
+         "audio" to "Дыбыстық жазба", "record_failed" to "Жазбаны сақтау мүмкін болмады", "backup_ok" to "Резервтік көшірме жасалды", "restore_ok" to "Деректер қалпына келтірілді", "error" to "Қате",
+         "unlock" to "PIN-кодты енгізіңіз", "wrong_pin" to "PIN қате", "set_pin" to "PIN орнату", "change_pin" to "PIN өзгерту", "disable_pin" to "PIN өшіру", "current_pin" to "Қазіргі PIN", "new_pin" to "Жаңа PIN", "pin4" to "PIN (кемінде 4 сан)", "confirm" to "Растау"
+     )
+diff -ruN MyOrganizer-v0.8.8-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt MyOrganizer-v0.8.9-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+--- MyOrganizer-v0.8.8-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt	2026-09-16 06:42:41.251771243 +0000
++++ MyOrganizer-v0.8.9-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt	2026-09-16 07:32:08.413535574 +0000
+@@ -298,7 +298,6 @@
+                 MoneyColumn(
+                     title=AppStrings.t(lang,"income"),
+                     entries=income,
+-                    total=incTotal,
+                     lang=lang,
+                     modifier=Modifier.weight(1f),
+                     amountColor=MaterialTheme.colorScheme.primary,
+@@ -307,7 +306,6 @@
+                 MoneyColumn(
+                     title=AppStrings.t(lang,"expense"),
+                     entries=expense,
+-                    total=expTotal,
+                     lang=lang,
+                     modifier=Modifier.weight(1f),
+                     amountColor=MaterialTheme.colorScheme.error,
+@@ -319,31 +317,29 @@
+                 Modifier.fillMaxWidth().clickable{balanceExpanded=!balanceExpanded}
+             ){
+                 if(balanceExpanded){
+-                    Column(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=9.dp),verticalArrangement=Arrangement.spacedBy(5.dp)){
++                    Column(Modifier.fillMaxWidth().padding(horizontal=14.dp,vertical=10.dp),verticalArrangement=Arrangement.spacedBy(7.dp)){
+                         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+-                            Text(AppStrings.t(lang,"balance"),style=MaterialTheme.typography.titleSmall,modifier=Modifier.weight(1f))
+-                            Icon(Icons.Default.KeyboardArrowUp,null,Modifier.size(20.dp))
+-                        }
+-                        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+-                            Text(AppStrings.t(lang,"income"),style=MaterialTheme.typography.bodySmall,modifier=Modifier.weight(1f),color=MaterialTheme.colorScheme.onSurfaceVariant)
+-                            Text("%,.0f ₸".format(incTotal),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.primary)
++                            Text(AppStrings.t(lang,"income"),style=MaterialTheme.typography.titleMedium,modifier=Modifier.weight(1f),color=MaterialTheme.colorScheme.onSurfaceVariant)
++                            Text("%,.0f ₸".format(incTotal),style=MaterialTheme.typography.titleMedium,color=MaterialTheme.colorScheme.primary)
+                         }
+                         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+-                            Text(AppStrings.t(lang,"expense"),style=MaterialTheme.typography.bodySmall,modifier=Modifier.weight(1f),color=MaterialTheme.colorScheme.onSurfaceVariant)
+-                            Text("%,.0f ₸".format(expTotal),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
++                            Text(AppStrings.t(lang,"expense"),style=MaterialTheme.typography.titleMedium,modifier=Modifier.weight(1f),color=MaterialTheme.colorScheme.onSurfaceVariant)
++                            Text("%,.0f ₸".format(expTotal),style=MaterialTheme.typography.titleMedium,color=MaterialTheme.colorScheme.error)
+                         }
+                         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+-                            Text(AppStrings.t(lang,"balance"),style=MaterialTheme.typography.titleSmall,modifier=Modifier.weight(1f))
++                            Text(AppStrings.t(lang,"balance"),style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f))
+                             Text(
+                                 (if(balance>0)"+ " else if(balance<0)"− " else "")+"%,.0f ₸".format(kotlin.math.abs(balance)),
+-                                style=MaterialTheme.typography.titleMedium,
++                                style=MaterialTheme.typography.titleLarge,
+                                 color=when{balance>0->MaterialTheme.colorScheme.primary;balance<0->MaterialTheme.colorScheme.error;else->MaterialTheme.colorScheme.onSurface}
+                             )
++                            Spacer(Modifier.width(6.dp))
++                            Icon(Icons.Default.KeyboardArrowUp,null,Modifier.size(20.dp))
+                         }
+                     }
+                 }else{
+-                    Row(Modifier.fillMaxWidth().height(28.dp).padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically){
+-                        Text(AppStrings.t(lang,"balance"),style=MaterialTheme.typography.labelMedium,modifier=Modifier.weight(1f))
++                    Row(Modifier.fillMaxWidth().height(30.dp).padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically){
++                        Text(AppStrings.t(lang,"balance"),style=MaterialTheme.typography.titleSmall,modifier=Modifier.weight(1f))
+                         Icon(Icons.Default.KeyboardArrowDown,null,Modifier.size(18.dp))
+                     }
+                 }
+@@ -352,7 +348,7 @@
+     }
+ }
+ 
+-@Composable private fun MoneyColumn(title:String,entries:List<MoneyEntry>,total:Double,lang:String,modifier:Modifier=Modifier,amountColor:Color,onDelete:(Long)->Unit){
++@Composable private fun MoneyColumn(title:String,entries:List<MoneyEntry>,lang:String,modifier:Modifier=Modifier,amountColor:Color,onDelete:(Long)->Unit){
+     Column(modifier.fillMaxHeight()){
+         Card(Modifier.fillMaxWidth()){
+             Box(Modifier.fillMaxWidth().height(46.dp),contentAlignment=Alignment.Center){
+@@ -361,21 +357,12 @@
+         }
+         Spacer(Modifier.height(6.dp))
+         if(entries.isEmpty()){
+-            Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=Alignment.Center){
+-                Text("—",color=MaterialTheme.colorScheme.onSurfaceVariant)
+-            }
++            Spacer(Modifier.weight(1f).fillMaxWidth())
+         }else{
+             LazyColumn(Modifier.weight(1f).fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(6.dp)){
+                 items(entries,key={it.id}){m->MoneyEntryCard(m,lang,amountColor,onDelete)}
+             }
+         }
+-        Spacer(Modifier.height(6.dp))
+-        Card(Modifier.fillMaxWidth().height(48.dp)){
+-            Column(Modifier.fillMaxSize().padding(horizontal=8.dp),verticalArrangement=Arrangement.Center){
+-                Text(AppStrings.t(lang,"total"),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+-                Text("%,.0f ₸".format(total),style=MaterialTheme.typography.titleSmall,color=amountColor,maxLines=1)
+-            }
+-        }
+     }
+ }
+ 
+@@ -422,7 +409,16 @@
+         contentPadding=PaddingValues(bottom=8.dp),
+         verticalArrangement=Arrangement.spacedBy(8.dp)
+     ){
+-        item{SettingsCard(""){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){FilterChip(lang=="ru",{onLanguage("ru")},{Text(AppStrings.t(lang,"russian"))});FilterChip(lang=="kk",{onLanguage("kk")},{Text(AppStrings.t(lang,"kazakh"))})}}}
++        item{SettingsCard(""){
++            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
++                AppLogo(Modifier.size(48.dp))
++                Spacer(Modifier.weight(1f))
++                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
++                    FilterChip(lang=="kk",{onLanguage("kk")},{Text(AppStrings.t(lang,"kazakh"))})
++                    FilterChip(lang=="ru",{onLanguage("ru")},{Text(AppStrings.t(lang,"russian"))})
++                }
++            }
++        }}
+         item{SettingsCard(""){SettingSwitch(AppStrings.t(lang,"dark"),dark,onDark);SettingSwitch(AppStrings.t(lang,"bold"),bold,onBold);Text(AppStrings.t(lang,"font"));Slider(fontScale,onFont,valueRange=.85f..1.45f,steps=3)}}
+         item{SettingsCard(""){val enabled=settings.isPinProtectionEnabled();SettingSwitch(AppStrings.t(lang,"pin"),enabled){want->if(want&&!enabled)showPin=true else if(!want&&enabled)showDisablePin=true};if(enabled)OutlinedButton({showChangePin=true},Modifier.fillMaxWidth()){Text(AppStrings.t(lang,"change_pin"))}}}
+         item{SettingsCard(""){Button({saveBackup.launch(BackupManager.suggestedFileName())},Modifier.fillMaxWidth()){Icon(Icons.Default.Backup,null);Spacer(Modifier.width(8.dp));Text(AppStrings.t(lang,"save_backup"),maxLines=2)};OutlinedButton({openBackup.launch(arrayOf("application/json","text/plain","*/*"))},Modifier.fillMaxWidth()){Text(AppStrings.t(lang,"restore"),maxLines=1)};OutlinedButton({BackupManager.shareBackup(context,BackupManager.createBackup(db,settings),settings.backupEmail)},Modifier.fillMaxWidth()){Text(AppStrings.t(lang,"send_backup"),maxLines=2)}}}
