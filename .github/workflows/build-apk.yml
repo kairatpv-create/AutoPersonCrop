@@ -85,7 +85,7 @@ jobs:
           name: AutoPersonCrop-build-log
           path: build-output.txt
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 1
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -93,4 +93,4 @@ jobs:
           name: AutoPersonCrop-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
