@@ -43,20 +43,15 @@ data class CropPlan(
 )
 
 /**
- * Composition-first crop planner.
+ * Subject-first crop planner.
  *
- * Important: the phone screen ratio is intentionally NOT used as the photo ratio. Modern phones
- * are very tall (roughly 9:20), which produced unnaturally narrow portraits and excessively wide
- * landscapes. We choose normal photographic ratios instead and relax them only when the source or
- * the subject requires it.
- *
- * Priority:
- * 1) choose the principal complete person/group;
- * 2) ignore a secondary body fragment touching an image edge when a complete principal subject exists;
- * 3) keep the principal subject/group intact and as close to the visual centre as possible;
- * 4) prefer about 5% breathing room on the main axis and some context on the cross axis;
- * 5) use photographic ratios (2:3 / 3:4 / 4:5, or 4:3 / 3:2 / 16:9), not the device screen;
- * 6) avoid extreme zoom when the detected people are small in the original scene.
+ * Rules:
+ * - a standing/sitting portrait subject keeps about 10% breathing room above and below;
+ * - a lying/wide subject keeps about 10% breathing room on the left and right;
+ * - the remaining sides are cropped to the nearest natural photographic aspect;
+ * - the source pixels are only cropped: no canvas, padding, stretching or black bars are created;
+ * - tiny/distant subjects are NOT intentionally kept tiny: the crop is driven by the subject bounds;
+ * - secondary body fragments touching an image edge do not drag the crop away from a complete main subject.
  */
 object CropPlanner {
     @Suppress("UNUSED_PARAMETER")
@@ -65,78 +60,44 @@ object CropPlanner {
         people: List<RectD>,
         screenWidth: Int,
         screenHeight: Int,
-        marginFraction: Double = 0.05,
+        marginFraction: Double = 0.10,
     ): CropPlan {
         require(people.isNotEmpty()) { "At least one person box is required" }
-        require(marginFraction >= 0.0)
 
         val selected = selectPrincipalSubjects(image, people)
         val subject = union(selected).clampTo(image)
         val layout = chooseLayout(image, subject, selected.size)
-        val preferredAspect = preferredPhotoAspect(subject, layout)
+        val preferredMargin = marginFraction.coerceIn(0.0, 0.20)
 
-        val steps = marginSteps(marginFraction)
-        for ((index, margin) in steps.withIndex()) {
-            val required = compositionBounds(subject, image, layout, margin)
-            val aspect = chooseFeasibleAspect(image, required, preferredAspect, layout) ?: continue
-            val fitted = fitAspectInside(image, required, aspect) ?: continue
-            val expanded = expandForSceneContext(
-                image = image,
-                subject = subject,
-                cropW = fitted.first,
-                cropH = fitted.second,
-            )
-            val placed = placeAroundFocus(
-                required = required,
-                focusX = subject.centerX,
-                focusY = subject.centerY,
-                image = image,
-                cropW = expanded.first,
-                cropH = expanded.second,
-            ) ?: continue
-
-            val status = when {
-                kotlin.math.abs(aspect - preferredAspect) > 0.025 -> CropStatus.ADAPTIVE_ASPECT
-                index > 0 -> CropStatus.ADAPTIVE_MARGIN
-                placed.shifted -> CropStatus.SHIFTED_TO_IMAGE_EDGE
-                else -> CropStatus.EXACT
-            }
+        // Keep the requested 10% whenever the source contains enough pixels around the subject.
+        // If a person already touches an original edge, relax only that unavailable margin.
+        val required = compositionBounds(subject, image, layout, preferredMargin)
+        chooseBestCrop(image, required, subject, layout)?.let { best ->
             return planFromPlaced(
-                placed = placed,
+                placed = best.placed,
                 layout = layout,
-                aspect = aspect,
-                status = status,
+                aspect = best.aspect,
+                status = best.status,
                 subject = subject,
                 required = required,
                 image = image,
             )
         }
 
-        // Last resort: keep the selected principal subject and use the nearest feasible ratio.
-        val required = subject
-        val fallbackAspect = chooseFeasibleAspect(image, required, preferredAspect, layout)
-        if (fallbackAspect != null) {
-            val fitted = fitAspectInside(image, required, fallbackAspect)
-            if (fitted != null) {
-                val placed = placeAroundFocus(
-                    required = required,
-                    focusX = subject.centerX,
-                    focusY = subject.centerY,
+        // Try smaller main-axis margins only when 10% physically cannot fit a valid crop.
+        for (margin in listOf(0.08, 0.06, 0.04, 0.02, 0.0)) {
+            if (margin >= preferredMargin) continue
+            val relaxed = compositionBounds(subject, image, layout, margin)
+            chooseBestCrop(image, relaxed, subject, layout)?.let { best ->
+                return planFromPlaced(
+                    placed = best.placed,
+                    layout = layout,
+                    aspect = best.aspect,
+                    status = CropStatus.ADAPTIVE_MARGIN,
+                    subject = subject,
+                    required = relaxed,
                     image = image,
-                    cropW = fitted.first,
-                    cropH = fitted.second,
                 )
-                if (placed != null) {
-                    return planFromPlaced(
-                        placed = placed,
-                        layout = layout,
-                        aspect = fallbackAspect,
-                        status = CropStatus.ADAPTIVE_ASPECT,
-                        subject = subject,
-                        required = required,
-                        image = image,
-                    )
-                }
             }
         }
 
@@ -150,51 +111,123 @@ object CropPlanner {
         )
     }
 
+    private data class CropChoice(
+        val placed: Placed,
+        val aspect: Double,
+        val status: CropStatus,
+        val score: Double,
+    )
+
+    /**
+     * Choose the natural photo ratio that needs the least extra scene around the safe subject box.
+     * This prevents the old behaviour where a distant person stayed very small in a large crop.
+     */
+    private fun chooseBestCrop(
+        image: ImageSize,
+        required: RectD,
+        subject: RectD,
+        layout: SubjectLayout,
+    ): CropChoice? {
+        val aspects = when (layout) {
+            SubjectLayout.PORTRAIT -> listOf(2.0 / 3.0, 3.0 / 4.0, 4.0 / 5.0)
+            SubjectLayout.LANDSCAPE -> listOf(4.0 / 3.0, 3.0 / 2.0, 16.0 / 9.0)
+        }
+
+        var best: CropChoice? = null
+        for (aspect in aspects) {
+            val fitted = fitAspectInside(image, required, aspect) ?: continue
+            val placed = placeAroundFocus(
+                required = required,
+                focusX = subject.centerX,
+                focusY = subject.centerY,
+                image = image,
+                cropW = fitted.first,
+                cropH = fitted.second,
+            ) ?: continue
+            val cropArea = (placed.right - placed.left) * (placed.bottom - placed.top)
+            val extraAreaRatio = cropArea / required.area.coerceAtLeast(1.0)
+            val score = extraAreaRatio + if (placed.shifted) 0.025 else 0.0
+            val choice = CropChoice(
+                placed = placed,
+                aspect = aspect,
+                status = if (placed.shifted) CropStatus.SHIFTED_TO_IMAGE_EDGE else CropStatus.EXACT,
+                score = score,
+            )
+            if (best == null || choice.score < best!!.score) best = choice
+        }
+        if (best != null) return best
+
+        // A standard ratio may be impossible near an original image edge. In that case use the
+        // tightest feasible ratio without ever cutting the required safe subject area.
+        val minFeasible = required.width / image.height.toDouble()
+        val maxFeasible = image.width.toDouble() / required.height.coerceAtLeast(1.0)
+        if (minFeasible > maxFeasible + EPS) return null
+        val natural = required.width / required.height.coerceAtLeast(1.0)
+        val aspect = natural.coerceIn(minFeasible, maxFeasible)
+        val fitted = fitAspectInside(image, required, aspect) ?: return null
+        val placed = placeAroundFocus(
+            required = required,
+            focusX = subject.centerX,
+            focusY = subject.centerY,
+            image = image,
+            cropW = fitted.first,
+            cropH = fitted.second,
+        ) ?: return null
+        return CropChoice(placed, aspect, CropStatus.ADAPTIVE_ASPECT, 0.0)
+    }
+
     private fun chooseLayout(image: ImageSize, subject: RectD, subjectCount: Int): SubjectLayout {
         val ratio = subject.width / subject.height.coerceAtLeast(1.0)
         val sourceLayout = if (image.height >= image.width) SubjectLayout.PORTRAIT else SubjectLayout.LANDSCAPE
 
         return if (subjectCount == 1) {
             when {
-                // A clearly standing person should remain portrait even in a landscape source.
-                ratio <= 0.86 -> SubjectLayout.PORTRAIT
-                // A clearly lying/wide person should remain landscape even in a portrait source.
-                ratio >= 1.18 -> SubjectLayout.LANDSCAPE
-                // Ambiguous pose keeps the original photo orientation.
+                // Typical standing or sitting person.
+                ratio <= 0.92 -> SubjectLayout.PORTRAIT
+                // Lying person or clearly horizontal pose.
+                ratio >= 1.15 -> SubjectLayout.LANDSCAPE
                 else -> sourceLayout
             }
         } else {
             when {
-                // For groups use a wider dead-band. Two people side-by-side often form a nearly
-                // square union and should not be forced into a new orientation without a good reason.
-                ratio <= 0.82 -> SubjectLayout.PORTRAIT
-                ratio >= 1.22 -> SubjectLayout.LANDSCAPE
+                // A narrow vertical group.
+                ratio <= 0.78 -> SubjectLayout.PORTRAIT
+                // Side-by-side group is normally better as landscape.
+                ratio >= 0.95 -> SubjectLayout.LANDSCAPE
                 else -> sourceLayout
-            }
-        }
-    }
-
-    private fun preferredPhotoAspect(subject: RectD, layout: SubjectLayout): Double {
-        val ratio = subject.width / subject.height.coerceAtLeast(1.0)
-        return when (layout) {
-            SubjectLayout.PORTRAIT -> when {
-                ratio <= 0.42 -> 2.0 / 3.0
-                ratio <= 0.62 -> 3.0 / 4.0
-                else -> 4.0 / 5.0
-            }
-            SubjectLayout.LANDSCAPE -> when {
-                ratio >= 2.15 -> 16.0 / 9.0
-                ratio >= 1.55 -> 3.0 / 2.0
-                else -> 4.0 / 3.0
             }
         }
     }
 
     /**
-     * Pick a complete, central principal person first, then keep only plausible co-subjects.
-     * Side/top edge contact is treated more aggressively than bottom-only contact: a person can
-     * naturally stand on the bottom edge, while a box cut by the left/right/top edge is commonly a
-     * body fragment that should not drag the crop away from the main subject.
+     * Portrait subject: 10% above + 10% below, with only a small horizontal safety allowance.
+     * Landscape/lying subject: 10% left + 10% right, with only a small vertical safety allowance.
+     */
+    private fun compositionBounds(
+        subject: RectD,
+        image: ImageSize,
+        layout: SubjectLayout,
+        mainMargin: Double,
+    ): RectD {
+        val crossMargin = 0.06
+        return when (layout) {
+            SubjectLayout.PORTRAIT -> RectD(
+                left = subject.left - subject.width * crossMargin,
+                top = subject.top - subject.height * mainMargin,
+                right = subject.right + subject.width * crossMargin,
+                bottom = subject.bottom + subject.height * mainMargin,
+            ).clampTo(image)
+            SubjectLayout.LANDSCAPE -> RectD(
+                left = subject.left - subject.width * mainMargin,
+                top = subject.top - subject.height * crossMargin,
+                right = subject.right + subject.width * mainMargin,
+                bottom = subject.bottom + subject.height * crossMargin,
+            ).clampTo(image)
+        }
+    }
+
+    /**
+     * Pick a complete, central principal person first, then keep plausible co-subjects.
      */
     private fun selectPrincipalSubjects(image: ImageSize, input: List<RectD>): List<RectD> {
         val valid = input
@@ -247,28 +280,24 @@ object CropPlanner {
             val dy = (r.centerY - anchor.centerY) / image.height.toDouble()
             val distance = sqrt(dx * dx + dy * dy)
             val gap = normalizedGap(anchor, r, image)
-            val nearby = distance <= 0.52 || gap <= 0.08
+            val nearby = distance <= 0.55 || gap <= 0.10
             if (!nearby) return@filter false
 
             when {
                 edge.none -> {
-                    // A complete companion may be smaller because of perspective, but not a tiny
-                    // background pedestrian.
-                    (heightRatio >= 0.38 && areaRatio >= 0.12) ||
-                        (imageRatio >= 0.018 && heightRatio >= 0.32)
+                    (heightRatio >= 0.34 && areaRatio >= 0.10) ||
+                        (imageRatio >= 0.014 && heightRatio >= 0.30)
                 }
                 edge.bottomOnly -> {
-                    // Feet close to the bottom edge are common and can still be a full co-subject.
-                    heightRatio >= 0.48 && areaRatio >= 0.20
+                    heightRatio >= 0.45 && areaRatio >= 0.18
                 }
                 !anchorEdge.none -> {
-                    // If the whole scene itself is edge-constrained, keep a similarly large partner.
-                    heightRatio >= 0.72 && areaRatio >= 0.55 && distance <= 0.42
+                    heightRatio >= 0.68 && areaRatio >= 0.48 && distance <= 0.44
                 }
                 else -> {
-                    // Main requested case: complete central person + partial second body at an edge.
-                    // Ignore the fragment unless it is almost the same scale as the main subject.
-                    heightRatio >= 0.88 && areaRatio >= 0.82 && edge.count == 1 && distance <= 0.38
+                    // Ignore a random body fragment on an edge unless it is obviously part of the
+                    // same foreground group and almost the same scale as the principal subject.
+                    heightRatio >= 0.82 && areaRatio >= 0.70 && edge.count == 1 && distance <= 0.42
                 }
             }
         }
@@ -312,108 +341,12 @@ object CropPlanner {
         return sqrt(horizontal * horizontal + vertical * vertical)
     }
 
-    private fun marginSteps(preferred: Double): List<Double> {
-        if (preferred <= 0.0) return listOf(0.0)
-        val result = ArrayList<Double>()
-        var value = preferred
-        val step = max(0.01, preferred / 5.0)
-        while (value > 0.0001) {
-            result += value
-            value -= step
-        }
-        result += 0.0
-        return result.distinctBy { (it * 10000).toInt() }
-    }
-
-    private fun compositionBounds(
-        subject: RectD,
-        image: ImageSize,
-        layout: SubjectLayout,
-        mainMargin: Double,
-    ): RectD {
-        val crossMargin = min(0.06, max(0.025, mainMargin * 0.8))
-        return when (layout) {
-            SubjectLayout.PORTRAIT -> RectD(
-                left = subject.left - subject.width * crossMargin,
-                top = subject.top - subject.height * mainMargin,
-                right = subject.right + subject.width * crossMargin,
-                bottom = subject.bottom + subject.height * mainMargin,
-            ).clampTo(image)
-            SubjectLayout.LANDSCAPE -> RectD(
-                left = subject.left - subject.width * mainMargin,
-                top = subject.top - subject.height * crossMargin,
-                right = subject.right + subject.width * mainMargin,
-                bottom = subject.bottom + subject.height * crossMargin,
-            ).clampTo(image)
-        }
-    }
-
-    private fun chooseFeasibleAspect(
-        image: ImageSize,
-        required: RectD,
-        preferred: Double,
-        layout: SubjectLayout,
-    ): Double? {
-        val minFeasible = required.width / image.height.toDouble()
-        val maxFeasible = image.width.toDouble() / required.height.coerceAtLeast(1.0)
-        if (minFeasible > maxFeasible + EPS) return null
-
-        val styleMin: Double
-        val styleMax: Double
-        when (layout) {
-            SubjectLayout.PORTRAIT -> {
-                styleMin = 0.60
-                styleMax = 0.86
-            }
-            SubjectLayout.LANDSCAPE -> {
-                styleMin = 1.20
-                styleMax = 1.85
-            }
-        }
-
-        val naturalMin = max(minFeasible, styleMin)
-        val naturalMax = min(maxFeasible, styleMax)
-        return if (naturalMin <= naturalMax + EPS) {
-            preferred.coerceIn(naturalMin, naturalMax)
-        } else {
-            // The subject/source physically cannot fit a normal photo ratio. Relax only as much as needed.
-            preferred.coerceIn(minFeasible, maxFeasible)
-        }
-    }
-
     private fun fitAspectInside(image: ImageSize, required: RectD, aspect: Double): Pair<Double, Double>? {
         if (aspect <= 0.0) return null
         val cropH = max(required.height, required.width / aspect)
         val cropW = cropH * aspect
         if (cropW > image.width + EPS || cropH > image.height + EPS) return null
         return cropW to cropH
-    }
-
-    /** Keep small/distant people in their scene instead of turning a tiny detection into an extreme zoom. */
-    private fun expandForSceneContext(
-        image: ImageSize,
-        subject: RectD,
-        cropW: Double,
-        cropH: Double,
-    ): Pair<Double, Double> {
-        val imageArea = image.width.toDouble() * image.height.toDouble()
-        val subjectFraction = (subject.area / imageArea).coerceIn(0.0, 1.0)
-        val minCropAreaFraction = when {
-            subjectFraction < 0.035 -> 0.55
-            subjectFraction < 0.08 -> 0.42
-            subjectFraction < 0.14 -> 0.30
-            else -> 0.0
-        }
-        if (minCropAreaFraction <= 0.0) return cropW to cropH
-
-        val currentArea = cropW * cropH
-        val targetArea = imageArea * minCropAreaFraction
-        if (currentArea >= targetArea) return cropW to cropH
-
-        val desiredScale = sqrt(targetArea / currentArea)
-        val maxScale = min(image.width / cropW, image.height / cropH)
-        val scale = min(desiredScale, maxScale).coerceAtLeast(1.0)
-        return cropW * scale to cropH * scale
     }
 
     private data class Placed(
@@ -461,7 +394,6 @@ object CropPlanner {
             shifted = true
         }
 
-        // Shift minimally again if centring did not fully contain the safe subject bounds.
         if (left > required.left) {
             val d = left - required.left
             left -= d
