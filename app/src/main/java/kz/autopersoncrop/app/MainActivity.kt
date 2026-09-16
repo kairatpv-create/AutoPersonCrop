@@ -16,10 +16,9 @@ import kz.autopersoncrop.R
 import kz.autopersoncrop.batch.BatchDatabase
 import kz.autopersoncrop.batch.BatchProcessingService
 import kz.autopersoncrop.batch.BatchStateStore
-import kz.autopersoncrop.settings.OutputQuality
-import kz.autopersoncrop.settings.OutputResolution
-import kz.autopersoncrop.settings.OutputSettings
-import kz.autopersoncrop.settings.OutputSettingsStore
+import kz.autopersoncrop.settings.ThemeMode
+import kz.autopersoncrop.settings.ThemeSettingsStore
+import kz.autopersoncrop.settings.applyStoredTheme
 
 class MainActivity : Activity() {
     private lateinit var folderText: TextView
@@ -42,6 +41,7 @@ class MainActivity : Activity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        applyStoredTheme()
         super.onCreate(savedInstanceState)
         prefs.getString("tree_uri", null)?.let { treeUri = Uri.parse(it) }
         buildMainUi()
@@ -58,8 +58,6 @@ class MainActivity : Activity() {
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, filter, RECEIVER_NOT_EXPORTED)
         else @Suppress("DEPRECATION") registerReceiver(receiver, filter)
 
-        // If Android/OEM killed the foreground service while the Activity was away,
-        // convert the stale RUNNING state immediately so Resume becomes available.
         repairStaleRunState()
         if (mainScreenVisible) refreshState()
     }
@@ -211,8 +209,8 @@ class MainActivity : Activity() {
     }
 
     private fun showSettings() {
-        val store = OutputSettingsStore(this)
-        val current = store.read()
+        val themeStore = ThemeSettingsStore(this)
+        val currentTheme = themeStore.read()
         val density = resources.displayMetrics.density
         fun dp(v: Int) = (v * density).toInt()
 
@@ -221,58 +219,48 @@ class MainActivity : Activity() {
             setPadding(dp(20), dp(8), dp(20), 0)
         }
 
-        val resolutionLabel = TextView(this).apply {
-            text = "Разрешение обработанного фото"
+        val themeLabel = TextView(this).apply {
+            text = "Оформление"
             setTypeface(typeface, Typeface.BOLD)
         }
-        val resolutionSpinner = Spinner(this).apply {
+        val themeSpinner = Spinner(this).apply {
             adapter = ArrayAdapter(
                 this@MainActivity,
                 android.R.layout.simple_spinner_dropdown_item,
-                OutputResolution.entries.map { it.label }
+                ThemeMode.entries.map { it.label }
             )
-            setSelection(OutputResolution.entries.indexOf(current.resolution))
+            setSelection(ThemeMode.entries.indexOf(currentTheme))
         }
-
         val qualityLabel = TextView(this).apply {
-            text = "Качество JPEG"
+            text = "Фото"
             setTypeface(typeface, Typeface.BOLD)
-            setPadding(0, dp(14), 0, 0)
-        }
-        val qualitySpinner = Spinner(this).apply {
-            adapter = ArrayAdapter(
-                this@MainActivity,
-                android.R.layout.simple_spinner_dropdown_item,
-                OutputQuality.entries.map { it.label }
-            )
-            setSelection(OutputQuality.entries.indexOf(current.quality))
-        }
-
-        val info = TextView(this).apply {
-            text = "Высокое + Оригинальное = lossless JPEG без пересжатия. Среднее/Низкое или уменьшенное разрешение создают новый JPEG. Фото без найденных людей копируются без изменений."
-            textSize = 13f
-            alpha = 0.78f
             setPadding(0, dp(16), 0, 0)
         }
+        val qualityInfo = TextView(this).apply {
+            text = "Оригинальное разрешение • JPEG без пересжатия. Приложение меняет только область кадра и не добавляет рамки или фон."
+            textSize = 13f
+            alpha = 0.78f
+            setPadding(0, dp(6), 0, 0)
+        }
 
-        box.addView(resolutionLabel)
-        box.addView(resolutionSpinner)
+        box.addView(themeLabel)
+        box.addView(themeSpinner)
         box.addView(qualityLabel)
-        box.addView(qualitySpinner)
-        box.addView(info)
+        box.addView(qualityInfo)
 
         AlertDialog.Builder(this)
             .setTitle("Настройки")
             .setView(box)
             .setNegativeButton("Назад", null)
             .setPositiveButton("Сохранить") { _, _ ->
-                val settings = OutputSettings(
-                    quality = OutputQuality.entries[qualitySpinner.selectedItemPosition],
-                    resolution = OutputResolution.entries[resolutionSpinner.selectedItemPosition],
-                )
-                store.write(settings)
-                refreshSettings()
-                toast("Настройки сохранены. Они применятся к новым результатам.")
+                val selectedTheme = ThemeMode.entries[themeSpinner.selectedItemPosition]
+                themeStore.write(selectedTheme)
+                if (selectedTheme != currentTheme) {
+                    recreate()
+                } else {
+                    refreshSettings()
+                    toast("Настройки сохранены")
+                }
             }
             .show()
     }
@@ -308,7 +296,7 @@ class MainActivity : Activity() {
             setTypeface(typeface, Typeface.BOLD)
         }
         val subtitle = TextView(this).apply {
-            text = "Офлайн • массовая обработка • работа в фоне"
+            text = "Офлайн • lossless-кроп • работа в фоне"
             textSize = 15f
             setPadding(0, dp(6), 0, dp(18))
         }
@@ -362,7 +350,7 @@ class MainActivity : Activity() {
             setOnClickListener { BatchProcessingService.command(this@MainActivity, BatchProcessingService.CMD_STOP) }
         }
         val note = TextView(this).apply {
-            text = "Оригиналы не изменяются. Результат сохраняется в CROP. После остановки используйте «Возобновить» — уже готовые фото будут пропущены. «Переработать заново» заменяет только готовые результаты в CROP."
+            text = "Оригиналы не изменяются. Результат сохраняется в CROP без пересжатия JPEG. После остановки используйте «Возобновить» — уже готовые фото будут пропущены. «Переработать заново» заменяет только готовые результаты в CROP."
             textSize = 13f
             gravity = Gravity.START
             setPadding(0, dp(18), 0, 0)
@@ -395,8 +383,8 @@ class MainActivity : Activity() {
 
     private fun refreshSettings() {
         if (!mainScreenVisible) return
-        val s = OutputSettingsStore(this).read()
-        settingsText.text = "Разрешение: ${s.resolution.label}   •   Качество: ${s.quality.label}"
+        val theme = ThemeSettingsStore(this).read()
+        settingsText.text = "Фото: оригинал без пересжатия   •   Тема: ${theme.label}"
     }
 
     private fun refreshState() {
@@ -419,9 +407,6 @@ class MainActivity : Activity() {
             }.getOrDefault(false)
         } else false
 
-        // Do not rely only on SQLite here. A stop can happen while the folder is still being scanned,
-        // before the persistent queue has been synchronized, or an OEM can interrupt the service
-        // between queue/state writes. In those cases the saved batch state itself must expose Resume.
         val interruptedByState = !s.running && s.folderUri.isNotBlank() && (
             s.message.contains("останов", ignoreCase = true) ||
                 s.message.contains("прерван", ignoreCase = true) ||
