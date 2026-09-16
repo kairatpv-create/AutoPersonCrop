@@ -49,18 +49,20 @@ jobs:
           mv MyOrganizer-v0.8.1-source MyOrganizer-v0.8.2-source
           patch -p0 < ../v0.8.3.patch
           patch -p0 < ../fix083b.patch
+          mv MyOrganizer-v0.8.2-source MyOrganizer-v0.8.3-source
+          patch -p0 < ../v0.8.4.patch
           gzip -dc ../v0.8.5.patch.gz > ../v0.8.5.patch
           patch -p0 < ../v0.8.5.patch
 
       - name: Build APK
-        working-directory: organizer/buildsrc085/MyOrganizer-v0.8.2-source
+        working-directory: organizer/buildsrc085/MyOrganizer-v0.8.3-source
         run: gradle --no-daemon assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: MyOrganizer-v0.8.5-debug
-          path: organizer/buildsrc085/MyOrganizer-v0.8.2-source/app/build/outputs/apk/debug/app-debug.apk
+          path: organizer/buildsrc085/MyOrganizer-v0.8.3-source/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
       - name: Collect signing tools
