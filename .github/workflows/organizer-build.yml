@@ -60,6 +60,7 @@ jobs:
           name: MyOrganizer-v0.8.9-debug
           path: organizer/buildsrc089/MyOrganizer-v0.8.9-source/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 1
 
       - name: Collect signing tools
         shell: bash
@@ -76,3 +77,4 @@ jobs:
           name: android-signing-tools-35
           path: organizer/signing-tools
           if-no-files-found: error
+          retention-days: 1
