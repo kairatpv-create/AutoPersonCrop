@@ -45,7 +45,9 @@ jobs:
           cd organizer/buildsrc089
           patch -p1 < ../v0.8.8.patch
           mv MyOrganizer-v0.8.7-source MyOrganizer-v0.8.8-source
-          patch -p1 < ../v0.8.9.patch
+          cd MyOrganizer-v0.8.8-source
+          patch -p1 < ../../v0.8.9.patch
+          cd ..
           mv MyOrganizer-v0.8.8-source MyOrganizer-v0.8.9-source
 
       - name: Build APK
