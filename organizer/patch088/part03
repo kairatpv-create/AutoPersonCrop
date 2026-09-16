@@ -1,0 +1,90 @@
+(0)}
+-    val list=db.getMoneyEntries()
++    var balanceExpanded by rememberSaveable{mutableStateOf(false)}
++    val list=remember(refresh,externalRevision){db.getMoneyEntries()}
+     val income=list.filter{it.type=="income"}
+     val expense=list.filter{it.type=="expense"}
+     val incTotal=income.sumOf{it.amount}
+@@ -313,14 +315,37 @@
+                 )
+             }
+             Spacer(Modifier.height(8.dp))
+-            Card(Modifier.fillMaxWidth().height(48.dp)){
+-                Row(Modifier.fillMaxSize().padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically){
+-                    Text(AppStrings.t(lang,"balance"),style=MaterialTheme.typography.titleSmall,modifier=Modifier.weight(1f))
+-                    Text(
+-                        (if(balance>0)"+ " else if(balance<0)"− " else "")+"%,.0f ₸".format(kotlin.math.abs(balance)),
+-                        style=MaterialTheme.typography.titleMedium,
+-                        color=when{balance>0->MaterialTheme.colorScheme.primary;balance<0->MaterialTheme.colorScheme.error;else->MaterialTheme.colorScheme.onSurface}
+-                    )
++            Card(
++                Modifier.fillMaxWidth().clickable{balanceExpanded=!balanceExpanded}
++            ){
++                if(balanceExpanded){
++                    Column(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=9.dp),verticalArrangement=Arrangement.spacedBy(5.dp)){
++                        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
++                            Text(AppStrings.t(lang,"balance"),style=MaterialTheme.typography.titleSmall,modifier=Modifier.weight(1f))
++                            Icon(Icons.Default.KeyboardArrowUp,null,Modifier.size(20.dp))
++                        }
++                        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
++                            Text(AppStrings.t(lang,"income"),style=MaterialTheme.typography.bodySmall,modifier=Modifier.weight(1f),color=MaterialTheme.colorScheme.onSurfaceVariant)
++                            Text("%,.0f ₸".format(incTotal),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.primary)
++                        }
++                        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
++                            Text(AppStrings.t(lang,"expense"),style=MaterialTheme.typography.bodySmall,modifier=Modifier.weight(1f),color=MaterialTheme.colorScheme.onSurfaceVariant)
++                            Text("%,.0f ₸".format(expTotal),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
++                        }
++                        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
++                            Text(AppStrings.t(lang,"balance"),style=MaterialTheme.typography.titleSmall,modifier=Modifier.weight(1f))
++                            Text(
++                                (if(balance>0)"+ " else if(balance<0)"− " else "")+"%,.0f ₸".format(kotlin.math.abs(balance)),
++                                style=MaterialTheme.typography.titleMedium,
++                                color=when{balance>0->MaterialTheme.colorScheme.primary;balance<0->MaterialTheme.colorScheme.error;else->MaterialTheme.colorScheme.onSurface}
++                            )
++                        }
++                    }
++                }else{
++                    Row(Modifier.fillMaxWidth().height(28.dp).padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically){
++                        Text(AppStrings.t(lang,"balance"),style=MaterialTheme.typography.labelMedium,modifier=Modifier.weight(1f))
++                        Icon(Icons.Default.KeyboardArrowDown,null,Modifier.size(18.dp))
++                    }
+                 }
+             }
+         }
+@@ -379,6 +404,7 @@
+             label=AppStrings.t(lang,"category"),
+             suggestions=db.getMoneyCategorySuggestions(cat),
+             onSuggestion={cat=it},
++            onDeleteSuggestion={db.hideSuggestion("money_category",it)},
+             modifier=Modifier.fillMaxWidth()
+         )
+         OutlinedTextField(note,{note=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"comment"))},keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences))
+@@ -453,25 +479,42 @@
+     label:String,
+     suggestions:List<String>,
+     onSuggestion:(String)->Unit,
++    onDeleteSuggestion:(String)->Unit,
+     modifier:Modifier=Modifier
+ ){
+     var expanded by remember{mutableStateOf(false)}
+-    ExposedDropdownMenuBox(expanded=expanded&&suggestions.isNotEmpty(),onExpandedChange={expanded=it}){
++    var locallyHidden by remember{mutableStateOf(setOf<String>())}
++    val visibleSuggestions=suggestions.filterNot{candidate->locallyHidden.any{it.equals(candidate,ignoreCase=true)}}
++    ExposedDropdownMenuBox(expanded=expanded&&visibleSuggestions.isNotEmpty(),onExpandedChange={expanded=it}){
+         OutlinedTextField(
+             value=value,
+             onValueChange={onValueChange(it);expanded=true},
+             label={Text(label)},
+             singleLine=true,
+             keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences),
+-            trailingIcon={if(suggestions.isNotEmpty())ExposedDropdownMenuDefaults.TrailingIcon(expanded=expanded)},
++            trailingIcon={if(visibleSuggestions.isNotEmpty())ExposedDropdownMenuDefaults.TrailingIcon(expanded=expanded)},
+             modifier=modifier.menuAnchor()
+         )
+-        ExposedDropdownMenu(expanded=expanded&&suggestions.isNotEmpty(),onDismissRequest={expanded=false}){
+-            suggestions.take(8).forEach{item->
+-                DropdownMenuItem(
+-                    text={Text(item,maxLines=1,overflow=TextOverflow.Ellipsis)},
+-                    onClick={onSuggestion(item);expanded=false}
+-                )
++        ExposedDropdownMenu(expanded=expanded&&visibleSuggestions.isNotEmpty(),onDismi

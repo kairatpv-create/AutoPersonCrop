@@ -1,0 +1,23 @@
+ssRequest={expanded=false}){
++            visibleSuggestions.take(8).forEach{item->
++                Row(
++                    Modifier.fillMaxWidth().padding(start=4.dp,end=8.dp),
++                    verticalAlignment=Alignment.CenterVertically
++                ){
++                    Text(
++                        item,
++                        maxLines=1,
++                        overflow=TextOverflow.Ellipsis,
++                        modifier=Modifier.weight(1f).clickable{onSuggestion(item);expanded=false}.padding(horizontal=8.dp,vertical=12.dp)
++                    )
++                    Spacer(Modifier.width(22.dp))
++                    IconButton(
++                        onClick={locallyHidden=locallyHidden+item;onDeleteSuggestion(item)},
++                        modifier=Modifier.size(38.dp)
++                    ){
++                        Icon(Icons.Default.Close,null,Modifier.size(17.dp))
++                    }
++                }
+             }
+         }
+     }

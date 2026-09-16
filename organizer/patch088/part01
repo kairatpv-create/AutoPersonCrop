@@ -1,0 +1,67 @@
+ables(db); createV5Tables(db)
+     }
+     private fun createV2Tables(db: SQLiteDatabase) {
+         db.execSQL("CREATE TABLE IF NOT EXISTS projects(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',created_at INTEGER NOT NULL)")
+@@ -21,19 +21,25 @@
+     private fun createV4Tables(db: SQLiteDatabase) {
+         try { db.execSQL("ALTER TABLE reminders ADD COLUMN sound_key TEXT NOT NULL DEFAULT 'system'") } catch (_: Exception) {}
+     }
++    private fun createV5Tables(db: SQLiteDatabase) {
++        db.execSQL("CREATE TABLE IF NOT EXISTS hidden_suggestions(kind TEXT NOT NULL,value TEXT NOT NULL,hidden_at INTEGER NOT NULL,PRIMARY KEY(kind,value))")
++    }
+     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+         if (oldVersion < 2) createV2Tables(db)
+         if (oldVersion < 3) createV3Tables(db)
+         if (oldVersion < 4) createV4Tables(db)
++        if (oldVersion < 5) createV5Tables(db)
+     }
+-    override fun onOpen(db: SQLiteDatabase) { super.onOpen(db); createV2Tables(db); createV3Tables(db); createV4Tables(db) }
++    override fun onOpen(db: SQLiteDatabase) { super.onOpen(db); createV2Tables(db); createV3Tables(db); createV4Tables(db); createV5Tables(db) }
+ 
+     fun save(id: Long?, title: String, body: String): Long {
+         val now = System.currentTimeMillis()
+         val values = ContentValues().apply { put("title", title); put("body", body); put("updated_at", now) }
+-        return if (id == null || id <= 0L) {
++        val result = if (id == null || id <= 0L) {
+             values.put("created_at", now); writableDatabase.insertOrThrow("notes", null, values)
+         } else { writableDatabase.update("notes", values, "id=?", arrayOf(id.toString())); id }
++        if(title.isNotBlank()) unhideSuggestion("note_title", title.trim())
++        return result
+     }
+     fun delete(noteId: Long) { writableDatabase.delete("notes", "id=?", arrayOf(noteId.toString())) }
+     fun getNotes(query: String = ""): List<Note> {
+@@ -47,10 +53,11 @@
+ 
+     fun getNoteTitleSuggestions(query:String=""):List<String>{
+         val q=query.trim()
++        val hidden="AND NOT EXISTS (SELECT 1 FROM hidden_suggestions h WHERE h.kind='note_title' AND h.value=notes.title COLLATE NOCASE)"
+         val (sql,args)=if(q.isBlank())
+-            "SELECT title, MAX(updated_at) AS last_used FROM notes WHERE TRIM(title)<>'' GROUP BY title ORDER BY last_used DESC LIMIT 12" to emptyArray<String>()
++            "SELECT title, MAX(updated_at) AS last_used FROM notes WHERE TRIM(title)<>'' $hidden GROUP BY title ORDER BY last_used DESC LIMIT 12" to emptyArray<String>()
+         else
+-            "SELECT title, MAX(updated_at) AS last_used FROM notes WHERE TRIM(title)<>'' AND title LIKE ? GROUP BY title ORDER BY CASE WHEN title LIKE ? THEN 0 ELSE 1 END,last_used DESC LIMIT 12" to arrayOf("%$q%","$q%")
++            "SELECT title, MAX(updated_at) AS last_used FROM notes WHERE TRIM(title)<>'' $hidden AND title LIKE ? GROUP BY title ORDER BY CASE WHEN title LIKE ? THEN 0 ELSE 1 END,last_used DESC LIMIT 12" to arrayOf("%$q%","$q%")
+         return readableDatabase.rawQuery(sql,args).use{c->buildList{while(c.moveToNext())add(c.getString(0))}}
+     }
+ 
+@@ -63,19 +70,33 @@
+     fun getProjects():List<Project> = readableDatabase.rawQuery("SELECT id,name,description,created_at FROM projects ORDER BY created_at DESC",null).use{c->buildList{while(c.moveToNext())add(Project(c.getLong(0),c.getString(1),c.getString(2),c.getLong(3)))}}
+     fun deleteProject(id:Long){ writableDatabase.execSQL("UPDATE money_entries SET project_id=NULL WHERE project_id=?",arrayOf(id)); writableDatabase.delete("projects","id=?",arrayOf(id.toString())) }
+ 
+-    fun addMoneyEntry(type:String,amount:Double,category:String,projectId:Long?,note:String):Long = writableDatabase.insertOrThrow("money_entries",null,ContentValues().apply{put("type",type);put("amount",amount);put("category",category);if(projectId==null)putNull("project_id")else put("project_id",projectId);put("note",note);put("created_at",System.currentTimeMillis())})
++    fun addMoneyEntry(type:String,amount:Double,category:String,projectId:Long?,note:String):Long {
++        val id=writableDatabase.insertOrThrow("money_entries",null,ContentValues().apply{put("type",type);put("amount",amount);put("category",category);if(projectId==null)putNull("project_id")else put("project_id",projectId);put("note",note);put("created_at",System.currentTimeMillis())})
++        if(category.isNotBlank()) unhideSuggestion("money_category",category.trim())
++        return id
++    }
+     fun deleteMoneyEntry(id:Long){ writableDatabase.delete("money_entries","id=?",arrayOf(id.toString())) }
+     fun getMoneyEntries():List<MoneyEntry> = readableDatabase.rawQuery("SELECT m.id,m.type,m.amount,m.category,m.project_id,p.name,m.note,m.created_at FROM money_entries m LEFT JOIN projects p ON p.id=m.project_id ORDER BY m.created_at DESC",null).use{c->buildList{while(c.moveToNext())add(MoneyEntry(c.getLong(0),c.getString(1),c.getDouble(2),c.getString(3),if(c.isNull(4))null else c.getLong(4),if(c.isNull(5))"" else c.getString(5),c.getString(6),c.getLong(7)))}}
+ 
+     fun getMoneyCategorySuggestions(query:String=""):List<String>{
+         val q=query.trim()
++        val hidden="AND NOT EXISTS (SELECT 1 FROM hidden_suggestions h WHERE h.kind='money_category' AND h.value=money_entries.category COLLATE NOCASE)"
+         val (sql,args)=if(q.isBlank())
+-            "SELECT category, MAX(created_at) AS last_used FROM money_entries WHERE TRIM(category)<>'' GROUP BY category ORDER BY last_used DESC LIMIT 12" to emptyArray<String>()
++            "SELECT category, MAX(created_at) AS last_used FROM money_entries WHERE TRIM(category)<>'' $hidden GROUP BY category ORDER BY last_used DESC LIMIT 12" to emptyArray<String>()
+         else
+-            "SELECT category, MAX(created_at) AS last_used FROM money_entries WHERE TRIM(category)<>'' AND category LIKE ? GROUP BY catego
