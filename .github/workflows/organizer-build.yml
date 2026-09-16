@@ -39,7 +39,20 @@ jobs:
         shell: bash
         run: |
           mkdir -p organizer/buildsrc085
-          cat organizer/chunks085/part* > organizer/MyOrganizer-v0.8.5-source.b64
+          cat \
+            organizer/chunks085/part00 \
+            organizer/chunks085fix/part01_0 \
+            organizer/chunks085fix/part01_1 \
+            organizer/chunks085/part02 \
+            organizer/chunks085/part03 \
+            organizer/chunks085/part04 \
+            organizer/chunks085/part05 \
+            organizer/chunks085fix/part06_0 \
+            organizer/chunks085fix/part06_1 \
+            organizer/chunks085fix/part07_0 \
+            organizer/chunks085fix/part07_1 \
+            organizer/chunks085/part08 \
+            > organizer/MyOrganizer-v0.8.5-source.b64
           base64 -d organizer/MyOrganizer-v0.8.5-source.b64 > organizer/MyOrganizer-v0.8.5-source.zip
           unzip -q organizer/MyOrganizer-v0.8.5-source.zip -d organizer/buildsrc085
 
