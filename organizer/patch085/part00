@@ -1,0 +1,37 @@
+diff -ruN MyOrganizer-v0.8.3-source/app/build.gradle.kts MyOrganizer-v0.8.3-source/app/build.gradle.kts
+--- MyOrganizer-v0.8.3-source/app/build.gradle.kts	2026-09-16 03:08:02.375083929 +0000
++++ MyOrganizer-v0.8.3-source/app/build.gradle.kts	2026-09-16 02:47:31.395307495 +0000
+@@ -12,8 +12,8 @@
+         applicationId = "kz.kairat.organizer"
+         minSdk = 26
+         targetSdk = 35
+-        versionCode = 27
+-        versionName = "0.8.4"
++        versionCode = 28
++        versionName = "0.8.5"
+     }
+ 
+     buildFeatures {
+diff -ruN MyOrganizer-v0.8.3-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt MyOrganizer-v0.8.3-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt
+--- MyOrganizer-v0.8.3-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt	2026-09-15 17:54:37.000000000 +0000
++++ MyOrganizer-v0.8.3-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt	2026-09-16 02:47:31.395247856 +0000
+@@ -10,7 +10,7 @@
+         "new_task" to "Новое дело", "details" to "Описание", "add" to "Добавить", "income" to "Доход", "expense" to "Расход", "amount" to "Сумма ₸", "category" to "Категория", "comment" to "Комментарий",
+         "reminders" to "Напоминания", "remind" to "Напомнить", "no_reminders" to "Нет активных напоминаний", "dark" to "Тёмная тема", "bold" to "Жирный шрифт", "font" to "Размер шрифта",
+         "language" to "Язык", "russian" to "Русский", "kazakh" to "Қазақша", "security" to "Защита", "pin" to "PIN-код", "backup" to "Резервная копия", "save_backup" to "Сохранить в файл / Google Drive", "restore" to "Восстановить из файла", "send_backup" to "Отправить по почте / через приложение",
+-        "about" to "О приложении", "version" to "Версия приложения: 0.8.3 (26)", "copyright" to "© 2026 Кайрат Калиев", "total" to "Итого", "balance" to "Баланс", "permission_mic" to "Для голосовой заметки нужен доступ к микрофону",
++        "about" to "О приложении", "version" to "Версия приложения: 0.8.5 (28)", "copyright" to "© 2026 Кайрат Калиев", "total" to "Итого", "balance" to "Баланс", "permission_mic" to "Для голосовой заметки нужен доступ к микрофону", "to_text" to "В текст", "speech_to_text" to "Говорите…", "create" to "Создать", "lock_action" to "Закрыть", "developer_contact" to "Для связи с разработчиком",
+         "audio" to "Голосовая заметка", "record_failed" to "Не удалось сохранить запись", "backup_ok" to "Резервная копия создана", "restore_ok" to "Данные восстановлены", "error" to "Ошибка",
+         "unlock" to "Введите PIN-код", "wrong_pin" to "Неверный PIN", "set_pin" to "Установить PIN", "change_pin" to "Изменить PIN", "disable_pin" to "Отключить PIN", "current_pin" to "Текущий PIN", "new_pin" to "Новый PIN", "pin4" to "PIN (минимум 4 цифры)", "confirm" to "Подтвердить"
+     )
+@@ -23,7 +23,7 @@
+         "new_task" to "Жаңа іс", "details" to "Сипаттама", "add" to "Қосу", "income" to "Кіріс", "expense" to "Шығыс", "amount" to "Сома ₸", "category" to "Санат", "comment" to "Түсініктеме",
+         "reminders" to "Еске салғыштар", "remind" to "Еске салу", "no_reminders" to "Белсенді еске салғыштар жоқ", "dark" to "Қараңғы тақырып", "bold" to "Қалың қаріп", "font" to "Қаріп өлшемі",
+         "language" to "Тіл", "russian" to "Русский", "kazakh" to "Қазақша", "security" to "Қорғау", "pin" to "PIN-код", "backup" to "Резервтік көшірме", "save_backup" to "Файлға / Google Drive-қа сақтау", "restore" to "Файлдан қалпына келтіру", "send_backup" to "Пошта/қосымша арқылы жіберу",
+-        "about" to "Қосымша туралы", "version" to "Қосымша нұсқасы: 0.8.3 (26)", "copyright" to "© 2026 Кайрат Калиев", "total" to "Барлығы", "balance" to "Баланс", "permission_mic" to "Дыбыстық жазба үшін микрофонға рұқсат қажет",
++        "about" to "Қосымша туралы", "version" to "Қосымша нұсқасы: 0.8.5 (28)", "copyright" to "© 2026 Кайрат Калиев", "total" to "Барлығы", "balance" to "Баланс", "permission_mic" to "Дыбыстық жазба үшін микрофонға рұқсат қажет", "to_text" to "Мәтінге", "speech_to_text" to "Сөйлеңіз…", "create" to "Қосу", "lock_action" to "Жабу", "developer_contact" to "Әзірлеушімен байланыс",
+         "audio" to "Дыбыстық жазба", "record_failed" to "Жазбаны сақтау мүмкін болмады", "backup_ok" to "Резервтік көшірме жасалды", "restore_ok" to "Деректер қалпына келтірілді", "error" to "Қате",
+         "unlock" to "PIN-кодты енгізіңіз", "wrong_pin" to "PIN қате", "set_pin" to "PIN орнату", "change_pin" to "PIN өзгерту", "disable_pin" to "PIN өшіру", "current_pin" to "Қазіргі PIN", "new_pin" to "Жаңа PIN", "pin4" to "PIN (кемінде 4 сан)", "confirm" to "Растау"
+     )
+diff -ruN MyOrganizer-v0.8.3-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt MyOrganizer-v0.8.3-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+--- MyOrganizer-v0

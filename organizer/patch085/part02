@@ -1,0 +1,54 @@
+Money=false}
+ }
+ 
+ @Composable private fun NotesScreen(db:NoteDatabase,lang:String,onOpen:(Long)->Unit){
+     var q by rememberSaveable{mutableStateOf("")};var refresh by remember{mutableIntStateOf(0)};val notes=remember(q,refresh){db.getNotes(q)}
+-    Box(Modifier.fillMaxSize()){Column(Modifier.fillMaxSize().padding(12.dp)){OutlinedTextField(q,{q=it},Modifier.fillMaxWidth(),leadingIcon={Icon(Icons.Default.Search,null)},placeholder={Text(AppStrings.t(lang,"search"))},singleLine=true);Spacer(Modifier.height(8.dp));if(notes.isEmpty())EmptyState(AppStrings.t(lang,"no_notes"))else LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)){items(notes,key={it.id}){n->Card(Modifier.fillMaxWidth().clickable{onOpen(n.id)}){Column(Modifier.padding(14.dp)){Text(n.title.ifBlank{AppStrings.t(lang,"note")},style=MaterialTheme.typography.titleMedium);if(n.body.isNotBlank())Text(n.body,maxLines=3,overflow=TextOverflow.Ellipsis);Text(formatTime(n.updatedAt),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}}}}}}
++    Column(Modifier.fillMaxSize().padding(12.dp)){
++        OutlinedTextField(q,{q=it},Modifier.fillMaxWidth(),leadingIcon={Icon(Icons.Default.Search,null)},placeholder={Text(AppStrings.t(lang,"search"))},singleLine=true)
++        Spacer(Modifier.height(8.dp))
++        if(notes.isEmpty()) EmptyState(AppStrings.t(lang,"no_notes"))
++        else LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)){
++            items(notes,key={it.id}){n->Card(Modifier.fillMaxWidth().clickable{onOpen(n.id)}){Column(Modifier.padding(14.dp)){Text(n.title.ifBlank{AppStrings.t(lang,"note")},style=MaterialTheme.typography.titleMedium);if(n.body.isNotBlank())Text(n.body,maxLines=3,overflow=TextOverflow.Ellipsis);Text(formatTime(n.updatedAt),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}}}
++        }
++    }
+ }
+ 
+ @Composable private fun NoteReader(db:NoteDatabase,note:Note,lang:String,onBack:()->Unit,onEdit:()->Unit,onDeleted:()->Unit){
+@@ -113,6 +120,12 @@
+     val context=LocalContext.current;var title by rememberSaveable(note?.id){mutableStateOf(note?.title.orEmpty())};var body by rememberSaveable(note?.id){mutableStateOf(note?.body.orEmpty())};val tempId=remember(note?.id){note?.id?:-System.currentTimeMillis()};var refresh by remember{mutableIntStateOf(0)};val atts=remember(refresh){AttachmentStore.list("note",tempId)}
+     val recorder=remember{VoiceRecorder(context)};var recording by remember{mutableStateOf(false)};var elapsed by remember{mutableLongStateOf(0L)};var startedAt by remember{mutableLongStateOf(0L)}
+     var attachmentMenu by remember{mutableStateOf(false)};var pendingCameraFile by remember{mutableStateOf<File?>(null)}
++    val speechLauncher=rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){result->
++        if(result.resultCode==Activity.RESULT_OK){
++            val spoken=result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim().orEmpty()
++            if(spoken.isNotEmpty()) body=appendRecognizedText(body,spoken)
++        }
++    }
+     DisposableEffect(Unit){onDispose{if(recording)recorder.cancel()}}
+     LaunchedEffect(recording){while(recording){elapsed=android.os.SystemClock.elapsedRealtime()-startedAt;delay(200)}}
+     val filePicker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let{runCatching{AttachmentStore.addFromUri("note",tempId,it)}.onSuccess{refresh++}.onFailure{e->toast(context,e.message?:AppStrings.t(lang,"error"))}}}
+@@ -120,6 +133,16 @@
+     fun startRecording(){runCatching{recorder.start();startedAt=android.os.SystemClock.elapsedRealtime();elapsed=0;recording=true}.onFailure{toast(context,it.message?:AppStrings.t(lang,"error"))}}
+     fun stopRecording(){val v=recorder.stop();recording=false;if(v!=null){AttachmentStore.addLocalFile("note",tempId,v.file,"Голосовая_${SimpleDateFormat("yyyyMMdd_HHmmss",Locale.US).format(Date())}.m4a","audio/mp4",v.durationMs,true);refresh++}else toast(context,AppStrings.t(lang,"record_failed"))}
+     val micPermission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){granted->if(granted)startRecording()else toast(context,AppStrings.t(lang,"permission_mic"))}
++    fun startSpeechToText(){
++        runCatching{
++            val intent=Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{
++                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
++                putExtra(RecognizerIntent.EXTRA_LANGUAGE, if(lang=="kk") "kk-KZ" else "ru-RU")
++                putExtra(RecognizerIntent.EXTRA_PROMPT,AppStrings.t(lang,"speech_to_text"))
++            }
++            speechLauncher.launch(intent)
++        }.onFailure{toast(context,it.message?:AppStrings.t(lang,"error"))}
++    }
+     fun save(){if(recording)stopRecording();val id=db.save(note?.id,title.trim(),body.trim());if(tempId<0)AttachmentStore.reassignTarget("note",tempId,id);onSaved(id)}
+     fun close(){if(recording)recorder.cancel();if(note==null)AttachmentStore.deleteTarget("note",tempId);onClose()}
+     Scaffold(topBar={TopAppBar(title={Text(AppStrings.t(lang,if(note==null)"new_note" else "edit_note"))},navigationIcon={IconButton({close()}){Icon(Icons.Default.ArrowBack,null)}},actions={if(note!=null)IconButton({db.delete(note.id);AttachmentStore.deleteTarget("note",note.id);onClose()}){Icon(Icons.Default.Delete,null)};IconButton({save()}){Icon(Icons.Default.Save,null)}},colors=organizerTopBarColors())}){pad->
+@@ -137,21 +160,30 @@
+                             modifier=Modifier.fillMaxWidth().height(52.dp),
+                             contentPadding=PaddingValues(horizontal=6.dp)
+                         ){
+-                            Icon(Icons.Default.AttachFile,null,Modifier.size(22.dp).offset(x=(-4).dp))
+-                            Spacer(Modifier.width(1.dp))
+-                            Text(AppStrings.t(lang,"atta

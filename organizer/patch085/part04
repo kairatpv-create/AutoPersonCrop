@@ -1,0 +1,37 @@
+)){Text(AppStrings.t(lang,"version"));Spacer(Modifier.height(4.dp));Text("${AppStrings.t(lang,"developer_contact")}: kairat.pv@gmail.com",style=MaterialTheme.typography.bodyMedium);Spacer(Modifier.height(4.dp));Text(AppStrings.t(lang,"copyright"),style=MaterialTheme.typography.bodySmall)}}
+         msg?.let{item{Text(it,color=MaterialTheme.colorScheme.primary)}}
+     }
+     if(showPin)PinSetupDialog(lang,{showPin=false}){pin->settings.setPin(pin);settings.setPinProtectionEnabled(true);showPin=false}
+@@ -356,8 +388,32 @@
+ @Composable private fun SettingsCard(title:String,content: @Composable ColumnScope.() -> Unit){Card(Modifier.fillMaxWidth()){Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){Text(title,style=MaterialTheme.typography.titleMedium);content()}}}
+ @Composable private fun SettingSwitch(label:String,value:Boolean,onChange:(Boolean)->Unit){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(label,Modifier.weight(1f));Switch(value,onChange)}}
+ @Composable private fun PinSetupDialog(lang:String,onDismiss:()->Unit,onSet:(String)->Unit){var pin by remember{mutableStateOf("")};AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"set_pin"))},text={OutlinedTextField(pin,{pin=it.filter(Char::isDigit).take(12)},label={Text(AppStrings.t(lang,"pin4"))},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.NumberPassword),visualTransformation=PasswordVisualTransformation())},confirmButton={Button({if(pin.length>=4)onSet(pin)}){Text(AppStrings.t(lang,"confirm"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})}
++@Composable private fun TopActionPill(text:String,icon:androidx.compose.ui.graphics.vector.ImageVector,onClick:()->Unit){
++    FilledTonalButton(onClick=onClick,shape=RoundedCornerShape(18.dp),contentPadding=PaddingValues(horizontal=12.dp,vertical=0.dp),modifier=Modifier.height(36.dp)){
++        Icon(icon,null,Modifier.size(18.dp))
++        Spacer(Modifier.width(6.dp))
++        Text(text,maxLines=1)
++    }
++}
++@Composable private fun BottomNavPill(selected:Boolean,text:String,icon:androidx.compose.ui.graphics.vector.ImageVector,onClick:()->Unit,modifier:Modifier=Modifier){
++    val shape=RoundedCornerShape(18.dp)
++    if(selected){
++        Button(onClick=onClick,shape=shape,contentPadding=PaddingValues(horizontal=10.dp,vertical=0.dp),modifier=modifier.height(38.dp)){
++            Icon(icon,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));Text(text,maxLines=1)
++        }
++    }else{
++        OutlinedButton(onClick=onClick,shape=shape,contentPadding=PaddingValues(horizontal=10.dp,vertical=0.dp),modifier=modifier.height(38.dp)){
++            Icon(icon,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));Text(text,maxLines=1)
++        }
++    }
++}
+ @Composable private fun organizerTopBarColors()=TopAppBarDefaults.topAppBarColors(containerColor=Color(0xFF0B4B6B),titleContentColor=Color.White,navigationIconContentColor=Color.White,actionIconContentColor=Color.White)
+ @Composable private fun EmptyState(text:String){Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){Text(text,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
++private fun appendRecognizedText(current:String,recognized:String):String{
++    val part=capitalizeSentences(recognized.trim())
++    if(part.isBlank()) return current
++    return if(current.isBlank()) part else current.trimEnd()+" "+part
++}
+ private fun formatTime(ms:Long)=DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(ms))
+ private fun formatDate(ms:Long)=DateFormat.getDateTimeInstance(DateFormat.MEDIUM,DateFormat.SHORT).format(Date(ms))
+ private fun humanDuration(ms:Long):String{val s=(ms/1000).coerceAtLeast(0);return "%02d:%02d".format(s/60,s%60)}

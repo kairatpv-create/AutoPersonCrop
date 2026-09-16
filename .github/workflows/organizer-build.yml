@@ -51,7 +51,7 @@ jobs:
           patch -p0 < ../fix083b.patch
           mv MyOrganizer-v0.8.2-source MyOrganizer-v0.8.3-source
           patch -p0 < ../v0.8.4.patch
-          gzip -dc ../v0.8.5.patch.gz > ../v0.8.5.patch
+          cat ../patch085/part* > ../v0.8.5.patch
           patch -p0 < ../v0.8.5.patch
 
       - name: Build APK

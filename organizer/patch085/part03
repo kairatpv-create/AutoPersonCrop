@@ -1,0 +1,49 @@
+chment"),maxLines=1,softWrap=false,overflow=TextOverflow.Clip)
++                            Icon(Icons.Default.AttachFile,null,Modifier.size(20.dp).offset(x=(-6).dp))
++                            Spacer(Modifier.width(2.dp))
++                            Text(AppStrings.t(lang,"attachment"),maxLines=1,softWrap=false,overflow=TextOverflow.Ellipsis)
+                         }
+                         DropdownMenu(attachmentMenu,{attachmentMenu=false}){DropdownMenuItem({Text(AppStrings.t(lang,"file"))},{attachmentMenu=false;filePicker.launch(arrayOf("image/*","application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","text/plain"))},leadingIcon={Icon(Icons.Default.InsertDriveFile,null)});DropdownMenuItem({Text(AppStrings.t(lang,"camera"))},{attachmentMenu=false;val(f,u)=AttachmentStore.createCameraTarget();pendingCameraFile=f;camera.launch(u)},leadingIcon={Icon(Icons.Default.PhotoCamera,null)})}
+                     }
++                    OutlinedButton(
++                        onClick={ startSpeechToText() },
++                        modifier=Modifier.weight(1f).height(52.dp),
++                        contentPadding=PaddingValues(horizontal=6.dp)
++                    ){
++                        Icon(Icons.Default.KeyboardVoice,null,Modifier.size(20.dp))
++                        Spacer(Modifier.width(4.dp))
++                        Text(AppStrings.t(lang,"to_text"),maxLines=1,softWrap=false,overflow=TextOverflow.Ellipsis)
++                    }
+                     Button(
+-                        onClick={if(recording){{stopRecording()}} else {{if(androidx.core.content.ContextCompat.checkSelfPermission(context,Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)startRecording()else micPermission.launch(Manifest.permission.RECORD_AUDIO)}}},
++                        onClick={if(recording){stopRecording()} else {if(androidx.core.content.ContextCompat.checkSelfPermission(context,Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)startRecording()else micPermission.launch(Manifest.permission.RECORD_AUDIO)}},
+                         modifier=Modifier.weight(1f).height(52.dp),
+                         contentPadding=PaddingValues(horizontal=6.dp),
+                         colors=if(recording)ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.error)else ButtonDefaults.buttonColors()
+                     ){
+-                        Icon(if(recording)Icons.Default.Stop else Icons.Default.Mic,null,Modifier.size(22.dp))
++                        Icon(if(recording)Icons.Default.Stop else Icons.Default.Mic,null,Modifier.size(20.dp))
+                         Spacer(Modifier.width(4.dp))
+-                        Text(if(recording)"${AppStrings.t(lang,"recording")} ${humanDuration(elapsed)}" else AppStrings.t(lang,"microphone"),maxLines=1,softWrap=false,overflow=TextOverflow.Clip)
++                        Text(if(recording)"${AppStrings.t(lang,"recording")} ${humanDuration(elapsed)}" else AppStrings.t(lang,"microphone"),maxLines=1,softWrap=false,overflow=TextOverflow.Ellipsis)
+                     }
+                 }
+             }
+@@ -231,9 +263,9 @@
+ 
+ @Composable private fun AddTaskDialog(lang:String,onDismiss:()->Unit,onAdd:(String,String)->Unit){var t by remember{mutableStateOf("")};var d by remember{mutableStateOf("")};AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"new_task"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(t,{t=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"title"))},keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences));OutlinedTextField(d,{d=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"details"))},keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences))}},confirmButton={Button({if(t.isNotBlank())onAdd(t,d)}){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})}
+ 
+-@Composable private fun MoneyScreen(db:NoteDatabase,lang:String,refreshKey:Int){
++@Composable private fun MoneyScreen(db:NoteDatabase,lang:String){
+     var refresh by remember{mutableIntStateOf(0)}
+-    val list=remember(refresh,refreshKey){db.getMoneyEntries()}
++    val list=db.getMoneyEntries()
+     val income=list.filter{it.type=="income"}
+     val expense=list.filter{it.type=="expense"}
+     val incTotal=income.sumOf{it.amount}
+@@ -338,7 +370,7 @@
+         item{SettingsCard(AppStrings.t(lang,"settings")){SettingSwitch(AppStrings.t(lang,"dark"),dark,onDark);SettingSwitch(AppStrings.t(lang,"bold"),bold,onBold);Text(AppStrings.t(lang,"font"));Slider(fontScale,onFont,valueRange=.85f..1.45f,steps=3)}}
+         item{SettingsCard(AppStrings.t(lang,"security")){val enabled=settings.isPinProtectionEnabled();SettingSwitch(AppStrings.t(lang,"pin"),enabled){want->if(want&&!enabled)showPin=true else if(!want&&enabled)showDisablePin=true};if(enabled)OutlinedButton({showChangePin=true},Modifier.fillMaxWidth()){Text(AppStrings.t(lang,"change_pin"))}}}
+         item{SettingsCard(AppStrings.t(lang,"backup")){Button({saveBackup.launch(BackupManager.suggestedFileName())},Modifier.fillMaxWidth()){Icon(Icons.Default.Backup,null);Spacer(Modifier.width(8.dp));Text(AppStrings.t(lang,"save_backup"))};OutlinedButton({openBackup.launch(arrayOf("application/json","text/plain","*/*"))},Modifier.fillMaxWidth()){Text(AppStrings.t(lang,"restore"))};OutlinedButton({BackupManager.shareBackup(context,BackupManager.createBackup(db,settings),settings.backupEmail)},Modifier.fillMaxWidth()){Text(AppStrings.t(lang,"send_backup"))}}}
+-        item{SettingsCard(AppStrings.t(lang,"about")){Text(AppStrings.t(lang,"version"));Spacer(Modifier.height(4.dp));Text(AppStrings.t(lang,"copyright"),style=MaterialTheme.typography.bodySmall)}}
++        item{SettingsCard(AppStrings.t(lang,"about"

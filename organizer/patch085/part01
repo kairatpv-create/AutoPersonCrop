@@ -1,0 +1,85 @@
+.8.3-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt	2026-09-16 03:08:02.374965781 +0000
++++ MyOrganizer-v0.8.3-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt	2026-09-16 03:02:53.388474659 +0000
+@@ -3,6 +3,9 @@
+ 
+ import android.Manifest
+ import android.content.pm.PackageManager
++import android.app.Activity
++import android.content.Intent
++import android.speech.RecognizerIntent
+ import android.media.MediaPlayer
+ import android.widget.Toast
+ import androidx.activity.compose.rememberLauncherForActivityResult
+@@ -55,53 +58,57 @@
+ }
+ 
+ @Composable private fun OrganizerHome(db:NoteDatabase,settings:SettingsStore,lang:String,onLanguage:(String)->Unit,dark:Boolean,onDark:(Boolean)->Unit,fontScale:Float,onFont:(Float)->Unit,bold:Boolean,onBold:(Boolean)->Unit,onLock:()->Unit){
+-    var section by rememberSaveable{mutableStateOf("notes")}; var editorNoteId by rememberSaveable{mutableStateOf<Long?>(null)}; var newEditor by rememberSaveable{mutableStateOf(false)}; var readerId by rememberSaveable{mutableStateOf<Long?>(null)}; var showReminders by rememberSaveable{mutableStateOf(false)}; var showAddMoney by rememberSaveable{mutableStateOf(false)}; var moneyRevision by remember{mutableIntStateOf(0)}
++    var section by rememberSaveable{mutableStateOf("notes")}; var editorNoteId by rememberSaveable{mutableStateOf<Long?>(null)}; var newEditor by rememberSaveable{mutableStateOf(false)}; var readerId by rememberSaveable{mutableStateOf<Long?>(null)}; var showReminders by rememberSaveable{mutableStateOf(false)}; var showAddMoney by rememberSaveable{mutableStateOf(false)}
+     if(newEditor||editorNoteId!=null){ val n=editorNoteId?.let{db.getNote(it)}; NoteEditor(db,n,lang,onClose={newEditor=false;editorNoteId=null},onSaved={id->newEditor=false;editorNoteId=null;readerId=id});return }
+     readerId?.let{id->db.getNote(id)?.let{n->NoteReader(db,n,lang,onBack={readerId=null},onEdit={editorNoteId=n.id},onDeleted={readerId=null})};return}
+     if(showReminders){RemindersScreen(db,lang){showReminders=false};return}
+     Scaffold(
+-        topBar={TopAppBar(
+-            title={Column{Text(AppStrings.t(lang,"app"),style=MaterialTheme.typography.titleLarge);Text(AppStrings.t(lang,when(section){"money"->"money";"settings"->"settings";else->"notes"}),style=MaterialTheme.typography.bodySmall)}},
+-            actions={
+-                if(section=="notes") IconButton({newEditor=true}){Icon(Icons.Default.Add,AppStrings.t(lang,"new_note"))}
+-                if(section=="money") IconButton({showAddMoney=true}){Icon(Icons.Default.Add,AppStrings.t(lang,"add"))}
+-                if(section!="settings") IconButton({showReminders=true}){Icon(Icons.Default.Notifications,AppStrings.t(lang,"reminders"))}
+-                if(settings.hasPin())IconButton(onLock){Icon(Icons.Default.Lock,null)}
+-            },
+-            colors=organizerTopBarColors()
+-        )},
++        topBar={
++            Surface(color=Color(0xFF0B4B6B),shadowElevation=2.dp){
++                Row(
++                    Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal=12.dp,vertical=8.dp),
++                    horizontalArrangement=Arrangement.spacedBy(8.dp,Alignment.End),
++                    verticalAlignment=Alignment.CenterVertically
++                ){
++                    if(section!="settings") TopActionPill(AppStrings.t(lang,"reminders"),Icons.Default.Notifications,{showReminders=true})
++                    when(section){
++                        "notes" -> TopActionPill(AppStrings.t(lang,"create"),Icons.Default.Add,{newEditor=true})
++                        "money" -> TopActionPill(AppStrings.t(lang,"create"),Icons.Default.Add,{showAddMoney=true})
++                        "settings" -> if(settings.hasPin()) TopActionPill(AppStrings.t(lang,"lock_action"),Icons.Default.Lock,onLock)
++                    }
++                }
++            }
++        },
+         bottomBar={
+-            NavigationBar {
+-                listOf(
+-                    "notes" to Icons.Default.Description,
+-                    "money" to Icons.Default.AccountBalanceWallet,
+-                    "settings" to Icons.Default.Settings
+-                ).forEach { (key,icon) ->
+-                    NavigationBarItem(
+-                        selected=section==key,
+-                        onClick={section=key},
+-                        icon={Icon(icon,contentDescription=AppStrings.t(lang,key),modifier=Modifier.size(25.dp))},
+-                        label={Text(AppStrings.t(lang,key),maxLines=1)},
+-                        alwaysShowLabel=true
+-                    )
++            Surface(tonalElevation=3.dp,shadowElevation=3.dp){
++                Row(
++                    Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=6.dp),
++                    horizontalArrangement=Arrangement.spacedBy(8.dp)
++                ){
++                    BottomNavPill(section=="notes",AppStrings.t(lang,"notes"),Icons.Default.Description,{section="notes"},Modifier.weight(1f))
++                    BottomNavPill(section=="money",AppStrings.t(lang,"money"),Icons.Default.AccountBalanceWallet,{section="money"},Modifier.weight(1f))
++                    BottomNavPill(section=="settings",AppStrings.t(lang,"settings"),Icons.Default.Settings,{section="settings"},Modifier.weight(1f))
+                 }
+             }
+         }
+     ){pad->Box(Modifier.padding(pad)){when(section){
+-        "money"->MoneyScreen(db,lang,moneyRevision)
++        "money"->MoneyScreen(db,lang)
+         "settings"->SettingsScreen(db,settings,lang,onLanguage,dark,onDark,fontScale,onFont,bold,onBold)
+         else->NotesScreen(db,lang,onOpen={readerId=it})
+     }}}
+-    if(showAddMoney) AddMoneyDialog(lang,{showAddMoney=false}) { type,amount,cat,note ->
+-        db.addMoneyEntry(type,amount,cat,null,note)
+-        moneyRevision++
+-        showAddMoney=false
+-    }
++    if(showAddMoney)AddMoneyDialog(lang,{showAddMoney=false}){type,amount,cat,note->db.addMoneyEntry(type,amount,cat,null,note);showAdd
