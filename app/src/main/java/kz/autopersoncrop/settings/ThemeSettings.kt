@@ -2,8 +2,7 @@ package kz.autopersoncrop.settings
 
 import android.app.Activity
 import android.content.Context
-import android.content.res.Configuration
-import kz.autopersoncrop.R
+import androidx.appcompat.app.AppCompatDelegate
 
 enum class ThemeMode(val label: String) {
     SYSTEM("Как в системе"),
@@ -28,11 +27,12 @@ class ThemeSettingsStore(context: Context) {
 }
 
 fun Activity.applyStoredTheme() {
-    val mode = ThemeSettingsStore(this).read()
-    val dark = when (mode) {
-        ThemeMode.DARK -> true
-        ThemeMode.LIGHT -> false
-        ThemeMode.SYSTEM -> (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+    val nightMode = when (ThemeSettingsStore(this).read()) {
+        ThemeMode.SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        ThemeMode.LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
+        ThemeMode.DARK -> AppCompatDelegate.MODE_NIGHT_YES
     }
-    setTheme(if (dark) R.style.Theme_AutoPersonCrop_Dark else R.style.Theme_AutoPersonCrop_Light)
+    if (AppCompatDelegate.getDefaultNightMode() != nightMode) {
+        AppCompatDelegate.setDefaultNightMode(nightMode)
+    }
 }

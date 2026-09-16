@@ -1,8 +1,6 @@
 package kz.autopersoncrop.app
 
 import android.Manifest
-import android.app.Activity
-import android.app.AlertDialog
 import android.content.*
 import android.content.pm.PackageManager
 import android.graphics.Typeface
@@ -12,6 +10,8 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.widget.*
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
 import kz.autopersoncrop.R
 import kz.autopersoncrop.batch.BatchDatabase
 import kz.autopersoncrop.batch.BatchProcessingService
@@ -20,7 +20,7 @@ import kz.autopersoncrop.settings.ThemeMode
 import kz.autopersoncrop.settings.ThemeSettingsStore
 import kz.autopersoncrop.settings.applyStoredTheme
 
-class MainActivity : Activity() {
+class MainActivity : AppCompatActivity() {
     private lateinit var folderText: TextView
     private lateinit var stateText: TextView
     private lateinit var settingsText: TextView

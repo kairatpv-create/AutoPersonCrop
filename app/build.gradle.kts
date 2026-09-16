@@ -53,6 +53,7 @@ android {
 }
 
 dependencies {
+    implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.documentfile:documentfile:1.1.0")
     implementation("androidx.exifinterface:exifinterface:1.4.1")
     implementation("com.google.ai.edge.litert:litert:2.1.5")
