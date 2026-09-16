@@ -1,0 +1,34 @@
+Switch(label:String,value:Boolean,onChange:(Boolean)->Unit){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(label,Modifier.weight(1f));Switch(value,onChange)}}
+ @Composable private fun PinSetupDialog(lang:String,onDismiss:()->Unit,onSet:(String)->Unit){var pin by remember{mutableStateOf("")};AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"set_pin"))},text={OutlinedTextField(pin,{pin=it.filter(Char::isDigit).take(12)},label={Text(AppStrings.t(lang,"pin4"))},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.NumberPassword),visualTransformation=PasswordVisualTransformation())},confirmButton={Button({if(pin.length>=4)onSet(pin)}){Text(AppStrings.t(lang,"confirm"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})}
+ @Composable private fun TopActionPill(text:String,icon:androidx.compose.ui.graphics.vector.ImageVector,onClick:()->Unit){
+-    FilledTonalButton(onClick=onClick,shape=RoundedCornerShape(18.dp),contentPadding=PaddingValues(horizontal=12.dp,vertical=0.dp),modifier=Modifier.height(36.dp)){
+-        Icon(icon,null,Modifier.size(18.dp))
+-        Spacer(Modifier.width(6.dp))
+-        Text(text,maxLines=1)
++    FilledTonalButton(onClick=onClick,shape=RoundedCornerShape(17.dp),contentPadding=PaddingValues(horizontal=10.dp,vertical=0.dp),modifier=Modifier.heightIn(min=34.dp,max=38.dp)){
++        Icon(icon,null,Modifier.size(17.dp))
++        Spacer(Modifier.width(5.dp))
++        Text(text,maxLines=1,softWrap=false,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.labelMedium)
+     }
+ }
+ @Composable private fun BottomNavPill(selected:Boolean,text:String,icon:androidx.compose.ui.graphics.vector.ImageVector,onClick:()->Unit,modifier:Modifier=Modifier){
+-    val shape=RoundedCornerShape(18.dp)
++    val shape=RoundedCornerShape(17.dp)
++    val content: @Composable RowScope.() -> Unit={
++        Icon(icon,null,Modifier.size(16.dp))
++        Spacer(Modifier.width(4.dp))
++        Text(text,maxLines=1,softWrap=false,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.labelSmall.copy(fontSize=11.sp))
++    }
+     if(selected){
+-        Button(onClick=onClick,shape=shape,contentPadding=PaddingValues(horizontal=10.dp,vertical=0.dp),modifier=modifier.height(38.dp)){
+-            Icon(icon,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));Text(text,maxLines=1)
+-        }
++        Button(onClick=onClick,shape=shape,contentPadding=PaddingValues(horizontal=6.dp,vertical=0.dp),modifier=modifier.heightIn(min=36.dp,max=40.dp),content=content)
+     }else{
+-        OutlinedButton(onClick=onClick,shape=shape,contentPadding=PaddingValues(horizontal=10.dp,vertical=0.dp),modifier=modifier.height(38.dp)){
+-            Icon(icon,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));Text(text,maxLines=1)
+-        }
++        OutlinedButton(onClick=onClick,shape=shape,contentPadding=PaddingValues(horizontal=6.dp,vertical=0.dp),modifier=modifier.heightIn(min=36.dp,max=40.dp),content=content)
+     }
+ }
+ @Composable private fun organizerTopBarColors()=TopAppBarDefaults.topAppBarColors(containerColor=Color(0xFF0B4B6B),titleContentColor=Color.White,navigationIconContentColor=Color.White,actionIconContentColor=Color.White)

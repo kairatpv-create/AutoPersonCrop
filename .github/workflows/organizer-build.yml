@@ -1,4 +1,4 @@
-name: Build MyOrganizer v0.8.5
+name: Build MyOrganizer v0.8.6
 
 on:
   push:
@@ -35,10 +35,10 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Rebuild v0.8.5 source archive
+      - name: Rebuild v0.8.5 base and apply v0.8.6
         shell: bash
         run: |
-          mkdir -p organizer/buildsrc085
+          mkdir -p organizer/buildsrc086
           cat \
             organizer/chunks085/part00 \
             organizer/chunks085fix/part01_0 \
@@ -54,17 +54,20 @@ jobs:
             organizer/chunks085/part08 \
             > organizer/MyOrganizer-v0.8.5-source.b64
           base64 -d organizer/MyOrganizer-v0.8.5-source.b64 > organizer/MyOrganizer-v0.8.5-source.zip
-          unzip -q organizer/MyOrganizer-v0.8.5-source.zip -d organizer/buildsrc085
+          unzip -q organizer/MyOrganizer-v0.8.5-source.zip -d organizer/buildsrc086
+          cat organizer/patch086/part* > organizer/v0.8.6.patch
+          cd organizer/buildsrc086
+          patch -p0 < ../v0.8.6.patch
 
       - name: Build APK
-        working-directory: organizer/buildsrc085/MyOrganizer-v0.8.5-source
+        working-directory: organizer/buildsrc086/MyOrganizer-v0.8.5-source
         run: gradle --no-daemon assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MyOrganizer-v0.8.5-debug
-          path: organizer/buildsrc085/MyOrganizer-v0.8.5-source/app/build/outputs/apk/debug/app-debug.apk
+          name: MyOrganizer-v0.8.6-debug
+          path: organizer/buildsrc086/MyOrganizer-v0.8.5-source/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
       - name: Collect signing tools
