@@ -93,7 +93,7 @@ jobs:
             play-build-output.txt
             bundle-config.txt
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 1
 
       - name: Upload unsigned AAB
         uses: actions/upload-artifact@v4
@@ -101,4 +101,4 @@ jobs:
           name: AutoPersonCrop-play-unsigned-aab
           path: app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
