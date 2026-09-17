@@ -86,7 +86,7 @@ class BatchProcessingService : Service() {
             db.sync(folderKey, photos)
             if (forceReprocess) db.resetFolder(folderKey)
 
-            var statusMap = db.statuses(folderKey)
+            val statusMap = db.statuses(folderKey)
             state = state.withCounts(db.counts(folderKey)).copy(
                 total = photos.size,
                 message = if (forceReprocess) "Повторная обработка ${photos.size} JPEG" else "Найдено ${photos.size} JPEG",
@@ -99,8 +99,6 @@ class BatchProcessingService : Service() {
             }
 
             val outputSettings = OutputSettingsStore(this).read()
-            // Slightly lower confidence improves small/partially visible person recall without a
-            // costly multi-pass detector. NMS is a little stricter to avoid duplicate body boxes.
             YoloLiteRtPersonDetector(
                 this,
                 confidence = 0.18f,
@@ -171,8 +169,6 @@ class BatchProcessingService : Service() {
                         statusMap[uriKey] = BatchDatabase.ERROR
                     }
 
-                    // SQLite is the source of truth. Re-read aggregate counts so retries/restarts
-                    // cannot make progress exceed 100% or hide an unresolved file.
                     state = state.withCounts(db.counts(folderKey))
                     store.write(state)
                     publish(state)
@@ -213,7 +209,9 @@ class BatchProcessingService : Service() {
         var last: Throwable? = null
         for (attempt in 1..MAX_ATTEMPTS) {
             try {
-                scanner.invalidateOutputIndex(outDir)
+                // Keep the output directory index cached during the normal pass. Re-read it only
+                // after a failed attempt, when an incomplete output may have been created/deleted.
+                if (attempt > 1) scanner.invalidateOutputIndex(outDir)
                 val existing = scanner.existingOutputUri(outDir, photo.name)
                 return processor.process(
                     photo = photo,
@@ -247,7 +245,6 @@ class BatchProcessingService : Service() {
         stopSelf()
     }
 
-    /** Notification/broadcast churn on every JPEG noticeably slows large folders. */
     private fun publish(s: BatchState, force: Boolean = false) {
         val now = SystemClock.elapsedRealtime()
         if (!force && now - lastPublishAt < PUBLISH_INTERVAL_MS) return
@@ -326,8 +323,6 @@ class BatchProcessingService : Service() {
         val pm = getSystemService(PowerManager::class.java)
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:batch").apply {
             setReferenceCounted(false)
-            // Foreground media processing has its own Android 15+ system time limit. Do not add a
-            // second arbitrary wake-lock timeout: while the service is valid, CPU must stay awake.
             acquire()
         }
     }
