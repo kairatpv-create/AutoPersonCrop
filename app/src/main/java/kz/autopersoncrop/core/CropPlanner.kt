@@ -43,15 +43,20 @@ data class CropPlan(
 )
 
 /**
- * AutoPersonCrop 0.5.1 composition-first planner.
+ * Screen-filling crop planner.
  *
- * The detector boxes represent the visible body area. We never invent a canvas and never force a
- * phone-screen aspect ratio. The selected person/group is kept centred by cropping only source
- * edges. If a body is already cut by the original frame, the visible body box itself becomes the
- * centring reference; unavailable margin is not recreated with padding.
+ * Portrait subject/group:
+ * - keep roughly 10% breathing room above and below the visible main subject;
+ * - expand/crop the left and right source edges to the phone portrait aspect ratio.
+ *
+ * Landscape subject/group:
+ * - keep roughly 10% breathing room left and right;
+ * - expand/crop the top and bottom source edges to the phone landscape aspect ratio.
+ *
+ * The result is crop-only: no canvas, black bars, stretching or squashing.
+ * The selected person/group is kept as close to the exact centre as source boundaries allow.
  */
 object CropPlanner {
-    @Suppress("UNUSED_PARAMETER")
     fun plan(
         image: ImageSize,
         people: List<RectD>,
@@ -65,50 +70,164 @@ object CropPlanner {
         val subject = union(selected).clampTo(image)
         if (subject.width < 2.0 || subject.height < 2.0) return fullImage(image, subject)
 
-        val margin = marginFraction.coerceIn(0.0, 0.20)
-        val desiredX = max(subject.width * margin, subject.height * 0.035)
-        val desiredY = max(subject.height * margin, subject.width * 0.035)
+        val shortSide = min(screenWidth.coerceAtLeast(1), screenHeight.coerceAtLeast(1)).toDouble()
+        val longSide = max(screenWidth.coerceAtLeast(1), screenHeight.coerceAtLeast(1)).toDouble()
+        val portraitAspect = shortSide / longSide
+        val landscapeAspect = longSide / shortSide
 
-        // Symmetric margin is deliberately limited by the smaller amount of real source pixels
-        // available on opposite sides. That keeps the visible person/group in the centre even when
-        // the original photo already cuts off a head, leg, arm or side of the body.
-        val marginX = min(desiredX, min(subject.left, image.width - subject.right).coerceAtLeast(0.0))
-        val marginY = min(desiredY, min(subject.top, image.height - subject.bottom).coerceAtLeast(0.0))
+        var layout = chooseLayout(subject, selected.size)
+        var targetAspect = if (layout == SubjectLayout.PORTRAIT) portraitAspect else landscapeAspect
 
-        val required = RectD(
-            subject.left - marginX,
-            subject.top - marginY,
-            subject.right + marginX,
-            subject.bottom + marginY,
-        ).clampTo(image)
+        // If the intended orientation physically cannot contain the detected subject inside the
+        // source image at the phone aspect ratio, use the other orientation rather than cut a body.
+        if (!canContainSubject(image, subject, targetAspect)) {
+            val alternate = if (layout == SubjectLayout.PORTRAIT) SubjectLayout.LANDSCAPE else SubjectLayout.PORTRAIT
+            val alternateAspect = if (alternate == SubjectLayout.PORTRAIT) portraitAspect else landscapeAspect
+            if (canContainSubject(image, subject, alternateAspect)) {
+                layout = alternate
+                targetAspect = alternateAspect
+            }
+        }
 
-        val rect = PixelRect(
-            floor(required.left).toInt().coerceIn(0, image.width - 1),
-            floor(required.top).toInt().coerceIn(0, image.height - 1),
-            ceil(required.right).toInt().coerceIn(1, image.width),
-            ceil(required.bottom).toInt().coerceIn(1, image.height),
-        )
+        val requestedMargin = marginFraction.coerceIn(0.0, 0.20)
+        val margins = buildList {
+            add(requestedMargin)
+            for (m in listOf(0.08, 0.06, 0.04, 0.02, 0.0)) if (m < requestedMargin) add(m)
+        }
 
-        if (rect.width <= 1 || rect.height <= 1) return fullImage(image, subject)
+        for ((index, margin) in margins.withIndex()) {
+            val required = requiredBounds(subject, image, layout, margin)
+            val placed = fitAndPlace(image, required, subject, targetAspect) ?: continue
+            return CropPlan(
+                rect = placed.toPixelRect(image),
+                layout = layout,
+                targetAspect = targetAspect,
+                status = when {
+                    index > 0 -> CropStatus.ADAPTIVE_MARGIN
+                    placed.shifted -> CropStatus.SHIFTED_TO_IMAGE_EDGE
+                    else -> CropStatus.EXACT
+                },
+                subjectBounds = subject,
+                requiredBounds = required,
+            )
+        }
 
-        val layout = if (subject.width > subject.height * 1.05) SubjectLayout.LANDSCAPE else SubjectLayout.PORTRAIT
-        val exactMargins = marginX + 0.5 >= desiredX && marginY + 0.5 >= desiredY
-        return CropPlan(
-            rect = rect,
-            layout = layout,
-            targetAspect = rect.width.toDouble() / rect.height.toDouble(),
-            status = if (exactMargins) CropStatus.EXACT else CropStatus.ADAPTIVE_MARGIN,
-            subjectBounds = subject,
-            requiredBounds = required,
-        )
+        // Last safe attempt: exact phone aspect containing the visible subject with no requested
+        // breathing room. If even this is impossible, keep the whole source rather than cut a body.
+        fitAndPlace(image, subject, subject, targetAspect)?.let { placed ->
+            return CropPlan(
+                rect = placed.toPixelRect(image),
+                layout = layout,
+                targetAspect = targetAspect,
+                status = CropStatus.ADAPTIVE_MARGIN,
+                subjectBounds = subject,
+                requiredBounds = subject,
+            )
+        }
+
+        return fullImage(image, subject)
+    }
+
+    private fun chooseLayout(subject: RectD, subjectCount: Int): SubjectLayout {
+        val ratio = subject.width / subject.height.coerceAtLeast(1.0)
+        return if (subjectCount <= 1) {
+            if (ratio > 1.05) SubjectLayout.LANDSCAPE else SubjectLayout.PORTRAIT
+        } else {
+            // Two people / a group side-by-side should fill a landscape screen; a narrow/tall group
+            // remains portrait.
+            if (ratio >= 0.92) SubjectLayout.LANDSCAPE else SubjectLayout.PORTRAIT
+        }
+    }
+
+    private fun canContainSubject(image: ImageSize, subject: RectD, aspect: Double): Boolean {
+        val maxWidthAtAspect = min(image.width.toDouble(), image.height * aspect)
+        val maxHeightAtAspect = min(image.height.toDouble(), image.width / aspect)
+        return subject.width <= maxWidthAtAspect + 1.0 && subject.height <= maxHeightAtAspect + 1.0
     }
 
     /**
-     * Selection rules:
+     * Portrait = 10% above/below. Landscape = 10% left/right.
+     * A tiny 2% safety on the cross axis prevents hands/shoulders from sitting exactly on an edge.
+     */
+    private fun requiredBounds(
+        subject: RectD,
+        image: ImageSize,
+        layout: SubjectLayout,
+        margin: Double,
+    ): RectD {
+        val cross = 0.02
+        return when (layout) {
+            SubjectLayout.PORTRAIT -> RectD(
+                left = subject.left - subject.width * cross,
+                top = subject.top - subject.height * margin,
+                right = subject.right + subject.width * cross,
+                bottom = subject.bottom + subject.height * margin,
+            ).clampTo(image)
+            SubjectLayout.LANDSCAPE -> RectD(
+                left = subject.left - subject.width * margin,
+                top = subject.top - subject.height * cross,
+                right = subject.right + subject.width * margin,
+                bottom = subject.bottom + subject.height * cross,
+            ).clampTo(image)
+        }
+    }
+
+    private data class Placed(
+        val left: Double,
+        val top: Double,
+        val right: Double,
+        val bottom: Double,
+        val shifted: Boolean,
+    )
+
+    /** Smallest rectangle with the exact target aspect that contains required, then centred on focus. */
+    private fun fitAndPlace(
+        image: ImageSize,
+        required: RectD,
+        focus: RectD,
+        aspect: Double,
+    ): Placed? {
+        if (aspect <= 0.0) return null
+
+        var cropH = max(required.height, required.width / aspect)
+        var cropW = cropH * aspect
+        if (cropW > image.width + EPS || cropH > image.height + EPS) return null
+
+        // Numerical cleanup close to source boundaries.
+        cropW = min(cropW, image.width.toDouble())
+        cropH = min(cropH, image.height.toDouble())
+
+        val maxLeft = image.width - cropW
+        val maxTop = image.height - cropH
+
+        // A valid crop containing required has its left/top inside these intervals.
+        val leftMin = max(0.0, required.right - cropW)
+        val leftMax = min(required.left, maxLeft)
+        val topMin = max(0.0, required.bottom - cropH)
+        val topMax = min(required.top, maxTop)
+        if (leftMin > leftMax + EPS || topMin > topMax + EPS) return null
+
+        val idealLeft = focus.centerX - cropW / 2.0
+        val idealTop = focus.centerY - cropH / 2.0
+        val left = idealLeft.coerceIn(leftMin, leftMax)
+        val top = idealTop.coerceIn(topMin, topMax)
+        val shifted = kotlin.math.abs(left - idealLeft) > 0.75 || kotlin.math.abs(top - idealTop) > 0.75
+
+        return Placed(left, top, left + cropW, top + cropH, shifted)
+    }
+
+    private fun Placed.toPixelRect(image: ImageSize): PixelRect {
+        var l = floor(left).toInt().coerceIn(0, image.width - 1)
+        var t = floor(top).toInt().coerceIn(0, image.height - 1)
+        var r = ceil(right).toInt().coerceIn(l + 1, image.width)
+        var b = ceil(bottom).toInt().coerceIn(t + 1, image.height)
+        return PixelRect(l, t, r, b)
+    }
+
+    /**
      * 1) Prefer complete main people over body fragments touching a source edge.
-     * 2) Keep two or more similarly scaled complete people when they form one group.
-     * 3) If everybody is partial, use the largest/most central visible body area and include only
-     *    nearby bodies of comparable scale.
+     * 2) Keep similarly scaled complete people when they form one group.
+     * 3) If everybody is partial, centre by the largest/most central visible body area.
      */
     private fun selectPrincipalSubjects(image: ImageSize, input: List<RectD>): List<RectD> {
         val valid = input
@@ -144,8 +263,6 @@ object CropPlanner {
             return selected.ifEmpty { listOf(anchor) }
         }
 
-        // No complete person exists: centre by the largest visible body part instead of trying to
-        // reconstruct missing anatomy beyond the original image boundary.
         val anchor = valid.maxByOrNull(::score) ?: valid.first()
         val selected = valid.filter { candidate ->
             if (candidate == anchor) return@filter true
@@ -208,4 +325,6 @@ object CropPlanner {
         subjectBounds = subject,
         requiredBounds = subject,
     )
+
+    private const val EPS = 1e-6
 }
