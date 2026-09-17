@@ -7,10 +7,10 @@ enum class OutputQuality(
     val jpegQuality: Int,
     val lossless: Boolean,
 ) {
-    ORIGINAL("Оригинал • без пересжатия", 100, true),
-    HIGH("Высокое • JPEG 95", 95, false),
-    MEDIUM("Среднее • JPEG 88", 88, false),
-    COMPACT("Экономное • JPEG 80", 80, false),
+    ORIGINAL_LOSSLESS("Оригинал • без пересжатия", 100, true),
+    HIGH_95("Высокое • JPEG 95", 95, false),
+    MEDIUM_88("Среднее • JPEG 88", 88, false),
+    COMPACT_80("Экономное • JPEG 80", 80, false),
 }
 
 enum class OutputResolution(val label: String, val maxLongSide: Int) {
@@ -18,7 +18,7 @@ enum class OutputResolution(val label: String, val maxLongSide: Int) {
 }
 
 data class OutputSettings(
-    val quality: OutputQuality = OutputQuality.ORIGINAL,
+    val quality: OutputQuality = OutputQuality.ORIGINAL_LOSSLESS,
     val resolution: OutputResolution = OutputResolution.ORIGINAL,
 ) {
     val strictLossless: Boolean get() = quality.lossless
@@ -30,12 +30,13 @@ class OutputSettingsStore(context: Context) {
     fun read(): OutputSettings {
         val qualityName = prefs.getString(KEY_QUALITY, null)
         val quality = when (qualityName) {
-            // Migrate the previous 0.5.0 names without changing the user's original-quality default.
-            "LOW" -> OutputQuality.COMPACT
-            "MEDIUM" -> OutputQuality.MEDIUM
-            "HIGH" -> OutputQuality.ORIGINAL
-            else -> runCatching { OutputQuality.valueOf(qualityName ?: OutputQuality.ORIGINAL.name) }
-                .getOrDefault(OutputQuality.ORIGINAL)
+            // Names used by 0.5.0. That release always forced HIGH as its lossless default.
+            "LOW" -> OutputQuality.COMPACT_80
+            "MEDIUM" -> OutputQuality.MEDIUM_88
+            "HIGH" -> OutputQuality.ORIGINAL_LOSSLESS
+            else -> runCatching {
+                OutputQuality.valueOf(qualityName ?: OutputQuality.ORIGINAL_LOSSLESS.name)
+            }.getOrDefault(OutputQuality.ORIGINAL_LOSSLESS)
         }
         return OutputSettings(quality = quality, resolution = OutputResolution.ORIGINAL)
     }
