@@ -1,0 +1,864 @@
++        val projects=root.optJSONArray("projects").objs().map{o->
++            val created=o.optLong("createdAt")
++            Project(o.optLong("id"),o.optString("name"),o.optString("description"),o.optString("status","planned"),o.optInt("progress",0),o.optLong("startAt",created),o.optLong("dueAt",0),o.optDouble("budget",0.0),o.optString("client"),o.optString("address"),o.optString("contact"),created,o.optLong("updatedAt",created))
++        }.toList()
++        val stages=root.optJSONArray("projectStages").objs().map{o->ProjectStage(o.optLong("id"),o.optLong("projectId"),o.optString("title"),o.optBoolean("done"),o.optLong("dueAt"),o.optLong("createdAt"))}.toList()
++        val journal=root.optJSONArray("projectJournal").objs().map{o->ProjectJournalEntry(o.optLong("id"),o.optLong("projectId"),o.optString("text"),o.optLong("createdAt"))}.toList()
++        val links=root.optJSONArray("projectNoteLinks").objs().map{o->ProjectNoteLink(o.optLong("projectId"),o.optLong("noteId"))}.toList()
+         val money=root.optJSONArray("money").objs().map{o->MoneyEntry(o.optLong("id"),o.optString("type"),o.optDouble("amount"),o.optString("category"),if(o.has("projectId"))o.optLong("projectId")else null,o.optString("projectName"),o.optString("note"),o.optLong("createdAt"))}.toList()
+-        val reminders=root.optJSONArray("reminders").objs().map{o->ReminderEntry(o.optLong("id"),o.optString("targetType"),o.optLong("targetId"),o.optLong("triggerAt"),o.optBoolean("sound",true),o.optBoolean("vibrate",true),o.optString("soundKey","system"),o.optLong("createdAt"),"","")}.toList()
+-        db.replaceAll(notes,tasks,projects,money,reminders); root.optJSONArray("attachments")?.let{AttachmentStore.restoreBackup(it)}
++        val reminders=root.optJSONArray("reminders").objs().map{o->ReminderEntry(o.optLong("id"),o.optString("targetType"),o.optLong("targetId"),o.optLong("triggerAt"),o.optBoolean("sound",true),o.optBoolean("vibrate",true),o.optString("soundKey","system"),o.optLong("createdAt"),"","",o.optString("scheduleType","once"),o.optInt("daysMask",0),o.optString("dayMode","single"),o.optInt("baseMinutes",540))}.toList()
++        db.replaceAll(notes,tasks,projects,money,reminders,stages,journal,links); root.optJSONArray("attachments")?.let{AttachmentStore.restoreBackup(it)}
+         val s=root.optJSONObject("settings")?:JSONObject(); return RestoredPreferences(if(s.has("darkTheme"))s.optBoolean("darkTheme")else null,if(s.has("fontScale"))s.optDouble("fontScale").toFloat()else null,s.optString("backupMode","manual"),s.optString("email",""),if(s.has("boldText"))s.optBoolean("boldText")else null,s.optString("language",null))
+     }
+     fun writeToUri(context:Context,uri:Uri,json:String){context.contentResolver.openOutputStream(uri,"wt")!!.bufferedWriter().use{it.write(json)}}
+diff -ruN old/app/src/main/java/kz/kairat/organizer/MainActivity.kt new/app/src/main/java/kz/kairat/organizer/MainActivity.kt
+--- old/app/src/main/java/kz/kairat/organizer/MainActivity.kt	2026-09-15 15:04:57.000000000 +0000
++++ new/app/src/main/java/kz/kairat/organizer/MainActivity.kt	2026-09-17 15:45:43.064391037 +0000
+@@ -1,10 +1,18 @@
+ package kz.kairat.organizer
+ 
+ import android.os.Bundle
++import android.Manifest
++import android.content.pm.PackageManager
++import android.os.Build
+ import androidx.activity.ComponentActivity
+ import androidx.activity.compose.setContent
+ import androidx.core.view.WindowCompat
+ 
+ class MainActivity:ComponentActivity(){
+-    override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);WindowCompat.setDecorFitsSystemWindows(window,true);setContent{OrganizerApp()}}
++    override fun onCreate(savedInstanceState:Bundle?){
++        super.onCreate(savedInstanceState)
++        WindowCompat.setDecorFitsSystemWindows(window,true)
++        if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS),1001)
++        setContent{OrganizerApp()}
++    }
+ }
+diff -ruN old/app/src/main/java/kz/kairat/organizer/Models.kt new/app/src/main/java/kz/kairat/organizer/Models.kt
+--- old/app/src/main/java/kz/kairat/organizer/Models.kt	2026-09-15 15:04:57.000000000 +0000
++++ new/app/src/main/java/kz/kairat/organizer/Models.kt	2026-09-17 16:01:20.345731736 +0000
+@@ -2,12 +2,44 @@
+ 
+ data class Note(val id: Long, val title: String, val body: String, val createdAt: Long, val updatedAt: Long)
+ data class TaskItem(val id: Long, val title: String, val details: String, val done: Boolean, val createdAt: Long, val updatedAt: Long)
+-data class Project(val id: Long, val name: String, val description: String, val createdAt: Long)
++
++data class Project(
++    val id: Long,
++    val name: String,
++    val description: String,
++    val status: String = "planned",
++    val progress: Int = 0,
++    val startAt: Long = 0L,
++    val dueAt: Long = 0L,
++    val budget: Double = 0.0,
++    val client: String = "",
++    val address: String = "",
++    val contact: String = "",
++    val createdAt: Long,
++    val updatedAt: Long = createdAt
++)
++
++data class ProjectStage(
++    val id: Long,
++    val projectId: Long,
++    val title: String,
++    val done: Boolean,
++    val dueAt: Long,
++    val createdAt: Long
++)
++
++data class ProjectJournalEntry(val id: Long, val projectId: Long, val text: String, val createdAt: Long)
++data class ProjectNoteLink(val projectId: Long, val noteId: Long)
++
+ data class MoneyEntry(val id: Long, val type: String, val amount: Double, val category: String, val projectId: Long?, val projectName: String, val note: String, val createdAt: Long)
+ data class ReminderEntry(
+     val id: Long, val targetType: String, val targetId: Long, val triggerAt: Long,
+     val sound: Boolean, val vibrate: Boolean, val soundKey: String, val createdAt: Long,
+-    val title: String, val details: String
++    val title: String, val details: String,
++    val scheduleType: String = "once", // once | weekly
++    val daysMask: Int = 0,             // Monday bit 0 ... Sunday bit 6
++    val dayMode: String = "single",   // single | all_day
++    val baseMinutes: Int = 9 * 60      // scheduled time of day
+ )
+ data class AttachmentEntry(
+     val id: Long,
+diff -ruN old/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt new/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt
+--- old/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt	2026-09-16 06:39:46.000000000 +0000
++++ new/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt	2026-09-17 16:01:20.350079051 +0000
+@@ -5,59 +5,71 @@
+ import android.database.sqlite.SQLiteDatabase
+ import android.database.sqlite.SQLiteOpenHelper
+ 
+-class NoteDatabase(context: Context) : SQLiteOpenHelper(context, "organizer.db", null, 5) {
++class NoteDatabase(context: Context) : SQLiteOpenHelper(context, "organizer.db", null, 7) {
+     override fun onCreate(db: SQLiteDatabase) {
+         db.execSQL("CREATE TABLE notes(id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL DEFAULT '',body TEXT NOT NULL DEFAULT '',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)")
+-        createV2Tables(db); createV3Tables(db); createV4Tables(db); createV5Tables(db)
++        createV2Tables(db); createV3Tables(db); createV4Tables(db); createV5Tables(db); createV6Tables(db); createV7Tables(db)
+     }
+     private fun createV2Tables(db: SQLiteDatabase) {
+-        db.execSQL("CREATE TABLE IF NOT EXISTS projects(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',created_at INTEGER NOT NULL)")
++        db.execSQL("CREATE TABLE IF NOT EXISTS projects(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'planned',progress INTEGER NOT NULL DEFAULT 0,start_at INTEGER NOT NULL DEFAULT 0,due_at INTEGER NOT NULL DEFAULT 0,budget REAL NOT NULL DEFAULT 0,client TEXT NOT NULL DEFAULT '',address TEXT NOT NULL DEFAULT '',contact TEXT NOT NULL DEFAULT '',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL DEFAULT 0)")
+         db.execSQL("CREATE TABLE IF NOT EXISTS money_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT NOT NULL,amount REAL NOT NULL,category TEXT NOT NULL DEFAULT '',project_id INTEGER,note TEXT NOT NULL DEFAULT '',created_at INTEGER NOT NULL)")
+     }
+     private fun createV3Tables(db: SQLiteDatabase) {
+         db.execSQL("CREATE TABLE IF NOT EXISTS tasks(id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,details TEXT NOT NULL DEFAULT '',done INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)")
+         db.execSQL("CREATE TABLE IF NOT EXISTS reminders(id INTEGER PRIMARY KEY AUTOINCREMENT,target_type TEXT NOT NULL,target_id INTEGER NOT NULL,trigger_at INTEGER NOT NULL,sound INTEGER NOT NULL DEFAULT 1,vibrate INTEGER NOT NULL DEFAULT 1,created_at INTEGER NOT NULL)")
+     }
+-    private fun createV4Tables(db: SQLiteDatabase) {
+-        try { db.execSQL("ALTER TABLE reminders ADD COLUMN sound_key TEXT NOT NULL DEFAULT 'system'") } catch (_: Exception) {}
+-    }
+-    private fun createV5Tables(db: SQLiteDatabase) {
+-        db.execSQL("CREATE TABLE IF NOT EXISTS hidden_suggestions(kind TEXT NOT NULL,value TEXT NOT NULL,hidden_at INTEGER NOT NULL,PRIMARY KEY(kind,value))")
++    private fun createV4Tables(db: SQLiteDatabase) { try { db.execSQL("ALTER TABLE reminders ADD COLUMN sound_key TEXT NOT NULL DEFAULT 'system'") } catch (_: Exception) {} }
++    private fun createV5Tables(db: SQLiteDatabase) { db.execSQL("CREATE TABLE IF NOT EXISTS hidden_suggestions(kind TEXT NOT NULL,value TEXT NOT NULL,hidden_at INTEGER NOT NULL,PRIMARY KEY(kind,value))") }
++    private fun createV6Tables(db: SQLiteDatabase) {
++        try { db.execSQL("ALTER TABLE reminders ADD COLUMN schedule_type TEXT NOT NULL DEFAULT 'once'") } catch (_: Exception) {}
++        try { db.execSQL("ALTER TABLE reminders ADD COLUMN days_mask INTEGER NOT NULL DEFAULT 0") } catch (_: Exception) {}
++        try { db.execSQL("ALTER TABLE reminders ADD COLUMN day_mode TEXT NOT NULL DEFAULT 'single'") } catch (_: Exception) {}
++        try { db.execSQL("ALTER TABLE reminders ADD COLUMN base_minutes INTEGER NOT NULL DEFAULT 540") } catch (_: Exception) {}
++    }
++    private fun createV7Tables(db: SQLiteDatabase) {
++        try { db.execSQL("ALTER TABLE projects ADD COLUMN status TEXT NOT NULL DEFAULT 'planned'") } catch (_: Exception) {}
++        try { db.execSQL("ALTER TABLE projects ADD COLUMN progress INTEGER NOT NULL DEFAULT 0") } catch (_: Exception) {}
++        try { db.execSQL("ALTER TABLE projects ADD COLUMN start_at INTEGER NOT NULL DEFAULT 0") } catch (_: Exception) {}
++        try { db.execSQL("ALTER TABLE projects ADD COLUMN due_at INTEGER NOT NULL DEFAULT 0") } catch (_: Exception) {}
++        try { db.execSQL("ALTER TABLE projects ADD COLUMN budget REAL NOT NULL DEFAULT 0") } catch (_: Exception) {}
++        try { db.execSQL("ALTER TABLE projects ADD COLUMN client TEXT NOT NULL DEFAULT ''") } catch (_: Exception) {}
++        try { db.execSQL("ALTER TABLE projects ADD COLUMN address TEXT NOT NULL DEFAULT ''") } catch (_: Exception) {}
++        try { db.execSQL("ALTER TABLE projects ADD COLUMN contact TEXT NOT NULL DEFAULT ''") } catch (_: Exception) {}
++        try { db.execSQL("ALTER TABLE projects ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0") } catch (_: Exception) {}
++        db.execSQL("UPDATE projects SET updated_at=created_at WHERE updated_at=0")
++        db.execSQL("CREATE TABLE IF NOT EXISTS project_stages(id INTEGER PRIMARY KEY AUTOINCREMENT,project_id INTEGER NOT NULL,title TEXT NOT NULL,done INTEGER NOT NULL DEFAULT 0,due_at INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL)")
++        db.execSQL("CREATE TABLE IF NOT EXISTS project_journal(id INTEGER PRIMARY KEY AUTOINCREMENT,project_id INTEGER NOT NULL,text TEXT NOT NULL,created_at INTEGER NOT NULL)")
++        db.execSQL("CREATE TABLE IF NOT EXISTS project_note_links(project_id INTEGER NOT NULL,note_id INTEGER NOT NULL,PRIMARY KEY(project_id,note_id))")
+     }
+     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+         if (oldVersion < 2) createV2Tables(db)
+         if (oldVersion < 3) createV3Tables(db)
+         if (oldVersion < 4) createV4Tables(db)
+         if (oldVersion < 5) createV5Tables(db)
++        if (oldVersion < 6) createV6Tables(db)
++        if (oldVersion < 7) createV7Tables(db)
+     }
+-    override fun onOpen(db: SQLiteDatabase) { super.onOpen(db); createV2Tables(db); createV3Tables(db); createV4Tables(db); createV5Tables(db) }
++    override fun onOpen(db: SQLiteDatabase) { super.onOpen(db); createV2Tables(db); createV3Tables(db); createV4Tables(db); createV5Tables(db); createV6Tables(db); createV7Tables(db) }
+ 
+     fun save(id: Long?, title: String, body: String): Long {
+         val now = System.currentTimeMillis()
+@@ -70,12 +82,11 @@
+         if(title.isNotBlank()) unhideSuggestion("note_title", title.trim())
+         return result
+     }
+-    fun delete(noteId: Long) { writableDatabase.delete("notes", "id=?", arrayOf(noteId.toString())) }
++    fun delete(noteId: Long) { writableDatabase.delete("project_note_links","note_id=?",arrayOf(noteId.toString())); writableDatabase.delete("notes", "id=?", arrayOf(noteId.toString())) }
+     fun getNotes(query: String = ""): List<Note> {
+-        val db = readableDatabase
+-        val (sql,args) = if (query.isBlank())
+-            "SELECT id,title,body,created_at,updated_at FROM notes ORDER BY updated_at DESC" to emptyArray<String>()
++        val (sql,args) = if (query.isBlank()) "SELECT id,title,body,created_at,updated_at FROM notes ORDER BY updated_at DESC" to emptyArray<String>()
+         else "SELECT id,title,body,created_at,updated_at FROM notes WHERE title LIKE ? OR body LIKE ? ORDER BY updated_at DESC" to arrayOf("%$query%", "%$query%")
+-        return db.rawQuery(sql,args).use { c -> buildList { while(c.moveToNext()) add(Note(c.getLong(0),c.getString(1),c.getString(2),c.getLong(3),c.getLong(4))) } }
++        return readableDatabase.rawQuery(sql,args).use { c -> buildList { while(c.moveToNext()) add(Note(c.getLong(0),c.getString(1),c.getString(2),c.getLong(3),c.getLong(4))) } }
+     }
+     fun getNote(id: Long): Note? = readableDatabase.rawQuery("SELECT id,title,body,created_at,updated_at FROM notes WHERE id=?", arrayOf(id.toString())).use { c -> if(c.moveToFirst()) Note(c.getLong(0),c.getString(1),c.getString(2),c.getLong(3),c.getLong(4)) else null }
+-
+     fun getNoteTitleSuggestions(query:String=""):List<String>{
+-        val q=query.trim()
+-        val hidden="AND NOT EXISTS (SELECT 1 FROM hidden_suggestions h WHERE h.kind='note_title' AND h.value=notes.title COLLATE NOCASE)"
+-        val (sql,args)=if(q.isBlank())
+-            "SELECT title, MAX(updated_at) AS last_used FROM notes WHERE TRIM(title)<>'' $hidden GROUP BY title ORDER BY last_used DESC LIMIT 12" to emptyArray<String>()
++        val q=query.trim(); val hidden="AND NOT EXISTS (SELECT 1 FROM hidden_suggestions h WHERE h.kind='note_title' AND h.value=notes.title COLLATE NOCASE)"
++        val (sql,args)=if(q.isBlank()) "SELECT title, MAX(updated_at) AS last_used FROM notes WHERE TRIM(title)<>'' $hidden GROUP BY title ORDER BY last_used DESC LIMIT 12" to emptyArray<String>()
+         else
+             "SELECT title, MAX(updated_at) AS last_used FROM notes WHERE TRIM(title)<>'' $hidden AND title LIKE ? GROUP BY title ORDER BY CASE WHEN title LIKE ? THEN 0 ELSE 1 END,last_used DESC LIMIT 12" to arrayOf("%$q%","$q%")
+         return readableDatabase.rawQuery(sql,args).use{c->buildList{while(c.moveToNext())add(c.getString(0))}}
+@@ -86,19 +97,67 @@
+     fun deleteTask(id:Long){ writableDatabase.delete("tasks","id=?",arrayOf(id.toString())) }
+     fun getTasks():List<TaskItem> = readableDatabase.rawQuery("SELECT id,title,details,done,created_at,updated_at FROM tasks ORDER BY done ASC, updated_at DESC",null).use{c->buildList{while(c.moveToNext())add(TaskItem(c.getLong(0),c.getString(1),c.getString(2),c.getInt(3)!=0,c.getLong(4),c.getLong(5)))}}
+ 
+-    fun addProject(name:String,description:String):Long = writableDatabase.insertOrThrow("projects",null,ContentValues().apply{put("name",name);put("description",description);put("created_at",System.currentTimeMillis())})
+-    fun getProjects():List<Project> = readableDatabase.rawQuery("SELECT id,name,description,created_at FROM projects ORDER BY created_at DESC",null).use{c->buildList{while(c.moveToNext())add(Project(c.getLong(0),c.getString(1),c.getString(2),c.getLong(3)))}}
+-    fun deleteProject(id:Long){ writableDatabase.execSQL("UPDATE money_entries SET project_id=NULL WHERE project_id=?",arrayOf(id)); writableDatabase.delete("projects","id=?",arrayOf(id.toString())) }
++    fun addProject(name:String,description:String):Long = saveProject(null,name,description,"planned",0,System.currentTimeMillis(),0L,0.0,"","","")
++    fun saveProject(id:Long?,name:String,description:String,status:String,progress:Int,startAt:Long,dueAt:Long,budget:Double,client:String,address:String,contact:String):Long{
++        val now=System.currentTimeMillis(); val values=ContentValues().apply{put("name",name);put("description",description);put("status",status);put("progress",progress.coerceIn(0,100));put("start_at",startAt);put("due_at",dueAt);put("budget",budget);put("client",client);put("address",address);put("contact",contact);put("updated_at",now)}
++        return if(id==null||id<=0L){values.put("created_at",now);writableDatabase.insertOrThrow("projects",null,values)}else{writableDatabase.update("projects",values,"id=?",arrayOf(id.toString()));id}
++    }
++    fun updateProjectProgress(id:Long,progress:Int){writableDatabase.update("projects",ContentValues().apply{put("progress",progress.coerceIn(0,100));put("updated_at",System.currentTimeMillis())},"id=?",arrayOf(id.toString()))}
++    fun getProjects():List<Project> = readableDatabase.rawQuery("SELECT id,name,description,status,progress,start_at,due_at,budget,client,address,contact,created_at,updated_at FROM projects ORDER BY updated_at DESC,created_at DESC",null).use{c->buildList{while(c.moveToNext())add(projectFromCursor(c))}}
++    fun getProject(id:Long):Project?=readableDatabase.rawQuery("SELECT id,name,description,status,progress,start_at,due_at,budget,client,address,contact,created_at,updated_at FROM projects WHERE id=?",arrayOf(id.toString())).use{c->if(c.moveToFirst())projectFromCursor(c)else null}
++    private fun projectFromCursor(c:android.database.Cursor)=Project(c.getLong(0),c.getString(1),c.getString(2),c.getString(3),c.getInt(4),c.getLong(5),c.getLong(6),c.getDouble(7),c.getString(8),c.getString(9),c.getString(10),c.getLong(11),c.getLong(12))
++    fun deleteProject(id:Long){
++        writableDatabase.beginTransaction();try{
++            writableDatabase.execSQL("UPDATE money_entries SET project_id=NULL WHERE project_id=?",arrayOf(id));
++            listOf("project_stages","project_journal","project_note_links").forEach{writableDatabase.delete(it,"project_id=?",arrayOf(id.toString()))}
++            writableDatabase.delete("reminders","target_type='project' AND target_id=?",arrayOf(id.toString()));writableDatabase.delete("projects","id=?",arrayOf(id.toString()));writableDatabase.setTransactionSuccessful()
++        }finally{writableDatabase.endTransaction()}
++    }
++
++    fun addProjectStage(projectId:Long,title:String,dueAt:Long):Long{val id=writableDatabase.insertOrThrow("project_stages",null,ContentValues().apply{put("project_id",projectId);put("title",title);put("done",0);put("due_at",dueAt);put("created_at",System.currentTimeMillis())});recalculateProjectProgress(projectId);return id}
++    fun getProjectStages(projectId:Long):List<ProjectStage> = readableDatabase.rawQuery("SELECT id,project_id,title,done,due_at,created_at FROM project_stages WHERE project_id=? ORDER BY done ASC,created_at ASC",arrayOf(projectId.toString())).use{c->buildList{while(c.moveToNext())add(ProjectStage(c.getLong(0),c.getLong(1),c.getString(2),c.getInt(3)!=0,c.getLong(4),c.getLong(5)))}}
++    fun setProjectStageDone(id:Long,done:Boolean){val p=readableDatabase.rawQuery("SELECT project_id FROM project_stages WHERE id=?",arrayOf(id.toString())).use{c->if(c.moveToFirst())c.getLong(0)else 0L};writableDatabase.update("project_stages",ContentValues().apply{put("done",if(done)1 else 0)},"id=?",arrayOf(id.toString()));if(p>0)recalculateProjectProgress(p)}
++    fun deleteProjectStage(id:Long){val p=readableDatabase.rawQuery("SELECT project_id FROM project_stages WHERE id=?",arrayOf(id.toString())).use{c->if(c.moveToFirst())c.getLong(0)else 0L};writableDatabase.delete("project_stages","id=?",arrayOf(id.toString()));if(p>0)recalculateProjectProgress(p)}
++    private fun recalculateProjectProgress(projectId:Long){val stages=getProjectStages(projectId);if(stages.isNotEmpty())updateProjectProgress(projectId,(stages.count{it.done}*100/stages.size))}
++
++    fun addProjectJournal(projectId:Long,text:String):Long=writableDatabase.insertOrThrow("project_journal",null,ContentValues().apply{put("project_id",projectId);put("text",text);put("created_at",System.currentTimeMillis())})
++    fun getProjectJournal(projectId:Long):List<ProjectJournalEntry> = readableDatabase.rawQuery("SELECT id,project_id,text,created_at FROM project_journal WHERE project_id=? ORDER BY created_at DESC",arrayOf(projectId.toString())).use{c->buildList{while(c.moveToNext())add(ProjectJournalEntry(c.getLong(0),c.getLong(1),c.getString(2),c.getLong(3)))}}
++    fun deleteProjectJournal(id:Long){writableDatabase.delete("project_journal","id=?",arrayOf(id.toString()))}
++
++    fun linkNoteToProject(projectId:Long,noteId:Long){writableDatabase.insertWithOnConflict("project_note_links",null,ContentValues().apply{put("project_id",projectId);put("note_id",noteId)},SQLiteDatabase.CONFLICT_IGNORE)}
++    fun unlinkNoteFromProject(projectId:Long,noteId:Long){writableDatabase.delete("project_note_links","project_id=? AND note_id=?",arrayOf(projectId.toString(),noteId.toString()))}
++    fun getLinkedNotes(projectId:Long):List<Note> = readableDatabase.rawQuery("SELECT n.id,n.title,n.body,n.created_at,n.updated_at FROM notes n INNER JOIN project_note_links l ON l.note_id=n.id WHERE l.project_id=? ORDER BY n.updated_at DESC",arrayOf(projectId.toString())).use{c->buildList{while(c.moveToNext())add(Note(c.getLong(0),c.getString(1),c.getString(2),c.getLong(3),c.getLong(4)))}}
++    fun getProjectNoteLinks():List<ProjectNoteLink> = readableDatabase.rawQuery("SELECT project_id,note_id FROM project_note_links",null).use{c->buildList{while(c.moveToNext())add(ProjectNoteLink(c.getLong(0),c.getLong(1)))}}
+ 
+     fun addMoneyEntry(type:String,amount:Double,category:String,projectId:Long?,note:String):Long {
+         val id=writableDatabase.insertOrThrow("money_entries",null,ContentValues().apply{put("type",type);put("amount",amount);put("category",category);if(projectId==null)putNull("project_id")else put("project_id",projectId);put("note",note);put("created_at",System.currentTimeMillis())})
+-        if(category.isNotBlank()) unhideSuggestion("money_category",category.trim())
+-        return id
++        if(category.isNotBlank()) unhideSuggestion("money_category",category.trim());return id
+     }
+     fun deleteMoneyEntry(id:Long){ writableDatabase.delete("money_entries","id=?",arrayOf(id.toString())) }
+     fun getMoneyEntries():List<MoneyEntry> = readableDatabase.rawQuery("SELECT m.id,m.type,m.amount,m.category,m.project_id,p.name,m.note,m.created_at FROM money_entries m LEFT JOIN projects p ON p.id=m.project_id ORDER BY m.created_at DESC",null).use{c->buildList{while(c.moveToNext())add(MoneyEntry(c.getLong(0),c.getString(1),c.getDouble(2),c.getString(3),if(c.isNull(4))null else c.getLong(4),if(c.isNull(5))"" else c.getString(5),c.getString(6),c.getLong(7)))}}
+-
++    fun getProjectMoneyEntries(projectId:Long):List<MoneyEntry> = getMoneyEntries().filter{it.projectId==projectId}
+     fun getMoneyCategorySuggestions(query:String=""):List<String>{
+-        val q=query.trim()
+-        val hidden="AND NOT EXISTS (SELECT 1 FROM hidden_suggestions h WHERE h.kind='money_category' AND h.value=money_entries.category COLLATE NOCASE)"
+-        val (sql,args)=if(q.isBlank())
+-            "SELECT category, MAX(created_at) AS last_used FROM money_entries WHERE TRIM(category)<>'' $hidden GROUP BY category ORDER BY last_used DESC LIMIT 12" to emptyArray<String>()
++        val q=query.trim();val hidden="AND NOT EXISTS (SELECT 1 FROM hidden_suggestions h WHERE h.kind='money_category' AND h.value=money_entries.category COLLATE NOCASE)"
++        val (sql,args)=if(q.isBlank()) "SELECT category, MAX(created_at) AS last_used FROM money_entries WHERE TRIM(category)<>'' $hidden GROUP BY category ORDER BY last_used DESC LIMIT 12" to emptyArray<String>()
+         else
+             "SELECT category, MAX(created_at) AS last_used FROM money_entries WHERE TRIM(category)<>'' $hidden AND category LIKE ? GROUP BY category ORDER BY CASE WHEN category LIKE ? THEN 0 ELSE 1 END,last_used DESC LIMIT 12" to arrayOf("%$q%","$q%")
+         return readableDatabase.rawQuery(sql,args).use{c->buildList{while(c.moveToNext())add(c.getString(0))}}
+     }
+-
+-    fun hideSuggestion(kind:String,value:String){
+-        val v=value.trim(); if(v.isBlank()) return
+-        writableDatabase.insertWithOnConflict("hidden_suggestions",null,ContentValues().apply{put("kind",kind);put("value",v);put("hidden_at",System.currentTimeMillis())},SQLiteDatabase.CONFLICT_REPLACE)
+-    }
+-    fun unhideSuggestion(kind:String,value:String){
+-        val v=value.trim(); if(v.isBlank()) return
+-        writableDatabase.delete("hidden_suggestions","kind=? AND value=? COLLATE NOCASE",arrayOf(kind,v))
+-    }
+-
+-    fun addReminder(targetType:String,targetId:Long,triggerAt:Long,sound:Boolean,vibrate:Boolean,soundKey:String="system"):Long = writableDatabase.insertOrThrow("reminders",null,ContentValues().apply{put("target_type",targetType);put("target_id",targetId);put("trigger_at",triggerAt);put("sound",if(sound)1 else 0);put("vibrate",if(vibrate)1 else 0);put("sound_key",soundKey);put("created_at",System.currentTimeMillis())})
++    fun hideSuggestion(kind:String,value:String){val v=value.trim();if(v.isBlank())return;writableDatabase.insertWithOnConflict("hidden_suggestions",null,ContentValues().apply{put("kind",kind);put("value",v);put("hidden_at",System.currentTimeMillis())},SQLiteDatabase.CONFLICT_REPLACE)}
++    fun unhideSuggestion(kind:String,value:String){val v=value.trim();if(v.isBlank())return;writableDatabase.delete("hidden_suggestions","kind=? AND value=? COLLATE NOCASE",arrayOf(kind,v))}
++
++    fun addReminder(targetType:String,targetId:Long,triggerAt:Long,sound:Boolean,vibrate:Boolean,soundKey:String="system",scheduleType:String="once",daysMask:Int=0,dayMode:String="single",baseMinutes:Int=540):Long = writableDatabase.insertOrThrow("reminders",null,ContentValues().apply{put("target_type",targetType);put("target_id",targetId);put("trigger_at",triggerAt);put("sound",if(sound)1 else 0);put("vibrate",if(vibrate)1 else 0);put("sound_key",soundKey);put("created_at",System.currentTimeMillis());put("schedule_type",scheduleType);put("days_mask",daysMask);put("day_mode",dayMode);put("base_minutes",baseMinutes)})
++    fun updateReminder(id:Long,triggerAt:Long,scheduleType:String,daysMask:Int,dayMode:String,baseMinutes:Int){ writableDatabase.update("reminders",ContentValues().apply{put("trigger_at",triggerAt);put("schedule_type",scheduleType);put("days_mask",daysMask);put("day_mode",dayMode);put("base_minutes",baseMinutes)},"id=?",arrayOf(id.toString())) }
++    fun updateReminderTrigger(id:Long,triggerAt:Long){ writableDatabase.update("reminders",ContentValues().apply{put("trigger_at",triggerAt)},"id=?",arrayOf(id.toString())) }
+     fun deleteReminder(id:Long){ writableDatabase.delete("reminders","id=?",arrayOf(id.toString())) }
+     fun getReminder(id:Long):ReminderEntry? = getReminders().firstOrNull{it.id==id}
+-    fun getReminders():List<ReminderEntry> = readableDatabase.rawQuery("SELECT id,target_type,target_id,trigger_at,sound,vibrate,sound_key,created_at FROM reminders ORDER BY trigger_at ASC",null).use{c->buildList{while(c.moveToNext()){val type=c.getString(1);val target=c.getLong(2);val note=if(type=="note")getNote(target) else null;val task=if(type=="task")getTasks().firstOrNull{it.id==target} else null;val title=note?.title?:task?.title.orEmpty();val details=note?.body?:task?.details.orEmpty(); add(ReminderEntry(c.getLong(0),type,target,c.getLong(3),c.getInt(4)!=0,c.getInt(5)!=0,c.getString(6),c.getLong(7),title,details))}}}
++    fun getReminders():List<ReminderEntry> = readableDatabase.rawQuery("SELECT id,target_type,target_id,trigger_at,sound,vibrate,sound_key,created_at,schedule_type,days_mask,day_mode,base_minutes FROM reminders ORDER BY trigger_at ASC",null).use{c->buildList{while(c.moveToNext()){
++        val type=c.getString(1);val target=c.getLong(2);val note=if(type=="note")getNote(target)else null;val task=if(type=="task")getTasks().firstOrNull{it.id==target}else null;val project=if(type=="project")getProject(target)else null
++        val title=note?.title?:task?.title?:project?.name.orEmpty();val details=note?.body?:task?.details?:project?.description.orEmpty();add(ReminderEntry(c.getLong(0),type,target,c.getLong(3),c.getInt(4)!=0,c.getInt(5)!=0,c.getString(6),c.getLong(7),title,details,c.getString(8),c.getInt(9),c.getString(10),c.getInt(11)))
++    }}}
++
++    fun getAllProjectStages():List<ProjectStage> = readableDatabase.rawQuery("SELECT id,project_id,title,done,due_at,created_at FROM project_stages",null).use{c->buildList{while(c.moveToNext())add(ProjectStage(c.getLong(0),c.getLong(1),c.getString(2),c.getInt(3)!=0,c.getLong(4),c.getLong(5)))}}
++    fun getAllProjectJournal():List<ProjectJournalEntry> = readableDatabase.rawQuery("SELECT id,project_id,text,created_at FROM project_journal",null).use{c->buildList{while(c.moveToNext())add(ProjectJournalEntry(c.getLong(0),c.getLong(1),c.getString(2),c.getLong(3)))}}
+ 
+-    fun replaceAll(notes:List<Note>,tasks:List<TaskItem>,projects:List<Project>,money:List<MoneyEntry>,reminders:List<ReminderEntry>){
++    fun replaceAll(notes:List<Note>,tasks:List<TaskItem>,projects:List<Project>,money:List<MoneyEntry>,reminders:List<ReminderEntry>,stages:List<ProjectStage> = emptyList(),journal:List<ProjectJournalEntry> = emptyList(),links:List<ProjectNoteLink> = emptyList()){
+         writableDatabase.beginTransaction(); try {
+-            listOf("notes","tasks","projects","money_entries","reminders").forEach{writableDatabase.delete(it,null,null)}
++            listOf("project_stages","project_journal","project_note_links","notes","tasks","projects","money_entries","reminders").forEach{writableDatabase.delete(it,null,null)}
+             notes.forEach{n->writableDatabase.insert("notes",null,ContentValues().apply{put("id",n.id);put("title",n.title);put("body",n.body);put("created_at",n.createdAt);put("updated_at",n.updatedAt)})}
+             tasks.forEach{t->writableDatabase.insert("tasks",null,ContentValues().apply{put("id",t.id);put("title",t.title);put("details",t.details);put("done",if(t.done)1 else 0);put("created_at",t.createdAt);put("updated_at",t.updatedAt)})}
+-            projects.forEach{p->writableDatabase.insert("projects",null,ContentValues().apply{put("id",p.id);put("name",p.name);put("description",p.description);put("created_at",p.createdAt)})}
++            projects.forEach{p->writableDatabase.insert("projects",null,ContentValues().apply{put("id",p.id);put("name",p.name);put("description",p.description);put("status",p.status);put("progress",p.progress);put("start_at",p.startAt);put("due_at",p.dueAt);put("budget",p.budget);put("client",p.client);put("address",p.address);put("contact",p.contact);put("created_at",p.createdAt);put("updated_at",p.updatedAt)})}
+             money.forEach{m->writableDatabase.insert("money_entries",null,ContentValues().apply{put("id",m.id);put("type",m.type);put("amount",m.amount);put("category",m.category);if(m.projectId==null)putNull("project_id")else put("project_id",m.projectId);put("note",m.note);put("created_at",m.createdAt)})}
+-            reminders.forEach{r->writableDatabase.insert("reminders",null,ContentValues().apply{put("id",r.id);put("target_type",r.targetType);put("target_id",r.targetId);put("trigger_at",r.triggerAt);put("sound",if(r.sound)1 else 0);put("vibrate",if(r.vibrate)1 else 0);put("sound_key",r.soundKey);put("created_at",r.createdAt)})}
++            reminders.forEach{r->writableDatabase.insert("reminders",null,ContentValues().apply{put("id",r.id);put("target_type",r.targetType);put("target_id",r.targetId);put("trigger_at",r.triggerAt);put("sound",if(r.sound)1 else 0);put("vibrate",if(r.vibrate)1 else 0);put("sound_key",r.soundKey);put("created_at",r.createdAt);put("schedule_type",r.scheduleType);put("days_mask",r.daysMask);put("day_mode",r.dayMode);put("base_minutes",r.baseMinutes)})}
++            stages.forEach{s->writableDatabase.insert("project_stages",null,ContentValues().apply{put("id",s.id);put("project_id",s.projectId);put("title",s.title);put("done",if(s.done)1 else 0);put("due_at",s.dueAt);put("created_at",s.createdAt)})}
++            journal.forEach{j->writableDatabase.insert("project_journal",null,ContentValues().apply{put("id",j.id);put("project_id",j.projectId);put("text",j.text);put("created_at",j.createdAt)})}
++            links.forEach{l->writableDatabase.insertWithOnConflict("project_note_links",null,ContentValues().apply{put("project_id",l.projectId);put("note_id",l.noteId)},SQLiteDatabase.CONFLICT_IGNORE)}
+             writableDatabase.setTransactionSuccessful()
+         } finally { writableDatabase.endTransaction() }
+     }
+diff -ruN old/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt new/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+--- old/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt	2026-09-16 07:32:08.000000000 +0000
++++ new/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt	2026-09-17 16:03:15.258638179 +0000
+@@ -64,9 +64,19 @@
+ }
+ 
+ @Composable private fun OrganizerHome(db:NoteDatabase,settings:SettingsStore,lang:String,onLanguage:(String)->Unit,dark:Boolean,onDark:(Boolean)->Unit,fontScale:Float,onFont:(Float)->Unit,bold:Boolean,onBold:(Boolean)->Unit,onLock:()->Unit){
+-    var section by rememberSaveable{mutableStateOf("notes")}; var editorNoteId by rememberSaveable{mutableStateOf<Long?>(null)}; var newEditor by rememberSaveable{mutableStateOf(false)}; var readerId by rememberSaveable{mutableStateOf<Long?>(null)}; var showReminders by rememberSaveable{mutableStateOf(false)}; var showAddMoney by rememberSaveable{mutableStateOf(false)}; var moneyRevision by remember{mutableIntStateOf(0)}
++    var section by rememberSaveable{mutableStateOf("notes")}
++    var editorNoteId by rememberSaveable{mutableStateOf<Long?>(null)}
++    var newEditor by rememberSaveable{mutableStateOf(false)}
++    var readerId by rememberSaveable{mutableStateOf<Long?>(null)}
++    var projectId by rememberSaveable{mutableStateOf<Long?>(null)}
++    var showNewProject by rememberSaveable{mutableStateOf(false)}
++    var projectRevision by remember{mutableIntStateOf(0)}
++    var showReminders by rememberSaveable{mutableStateOf(false)}
++    var showAddMoney by rememberSaveable{mutableStateOf(false)}
++    var moneyRevision by remember{mutableIntStateOf(0)}
+     if(newEditor||editorNoteId!=null){ val n=editorNoteId?.let{db.getNote(it)}; NoteEditor(db,n,lang,onClose={newEditor=false;editorNoteId=null},onSaved={id->newEditor=false;editorNoteId=null;readerId=id});return }
+     readerId?.let{id->db.getNote(id)?.let{n->NoteReader(db,n,lang,onBack={readerId=null},onEdit={editorNoteId=n.id},onDeleted={readerId=null})};return}
++    projectId?.let{id->ProjectDetailScreen(db,id,lang,onBack={projectId=null;projectRevision++},onDeleted={projectId=null;projectRevision++});return}
+     if(showReminders){RemindersScreen(db,lang){showReminders=false};return}
+     Scaffold(
+         topBar={
+@@ -81,6 +91,7 @@
+                     if(section!="settings") TopActionPill(AppStrings.t(lang,"reminders"),Icons.Default.Notifications,{showReminders=true})
+                     when(section){
+                         "notes" -> TopActionPill(AppStrings.t(lang,"create"),Icons.Default.Add,{newEditor=true})
++                        "projects" -> TopActionPill(AppStrings.t(lang,"create"),Icons.Default.Add,{showNewProject=true})
+                         "money" -> TopActionPill(AppStrings.t(lang,"create"),Icons.Default.Add,{showAddMoney=true})
+                         "settings" -> if(settings.hasPin()) TopActionPill(AppStrings.t(lang,"lock_action"),Icons.Default.Lock,onLock)
+                     }
+@@ -88,27 +99,23 @@
+             }
+         },
+         bottomBar={
+-            Surface(
+-                tonalElevation=3.dp,
+-                shadowElevation=3.dp,
+-                modifier=Modifier.fillMaxWidth().navigationBarsPadding()
+-            ){
+-                Row(
+-                    Modifier.fillMaxWidth().padding(horizontal=6.dp,vertical=4.dp),
+-                    horizontalArrangement=Arrangement.spacedBy(6.dp)
+-                ){
++            Surface(tonalElevation=3.dp,shadowElevation=3.dp,modifier=Modifier.fillMaxWidth().navigationBarsPadding()){
++                Row(Modifier.fillMaxWidth().padding(horizontal=6.dp,vertical=4.dp),horizontalArrangement=Arrangement.spacedBy(5.dp),verticalAlignment=Alignment.CenterVertically){
+                     BottomNavPill(section=="notes",AppStrings.t(lang,"notes"),Icons.Default.Description,{section="notes"},Modifier.weight(1f))
++                    BottomNavPill(section=="projects",AppStrings.t(lang,"projects"),Icons.Default.FolderSpecial,{section="projects"},Modifier.weight(1f))
+                     BottomNavPill(section=="money",AppStrings.t(lang,"money"),Icons.Default.AccountBalanceWallet,{section="money"},Modifier.weight(1f))
+-                    BottomNavPill(section=="settings",AppStrings.t(lang,"settings"),Icons.Default.Settings,{section="settings"},Modifier.weight(1f))
+-                }
++                    BottomNavIconPill(section=="settings",Icons.Default.Settings,{section="settings"},Modifier.width(48.dp))
+                 }
+             }
+         }
+     ){pad->Box(Modifier.padding(pad)){when(section){
++        "projects"->ProjectsScreen(db,lang,projectRevision,onOpen={projectId=it})
+         "money"->MoneyScreen(db,lang,moneyRevision)
+         "settings"->SettingsScreen(db,settings,lang,onLanguage,dark,onDark,fontScale,onFont,bold,onBold)
+         else->NotesScreen(db,lang,onOpen={readerId=it})
+     }}}
+     if(showAddMoney)AddMoneyDialog(db,lang,{showAddMoney=false}){type,amount,cat,note->db.addMoneyEntry(type,amount,cat,null,note);moneyRevision++;showAddMoney=false}
++    if(showNewProject)AddProjectDialog(lang,{showNewProject=false}){name,description->val id=db.addProject(name,description);showNewProject=false;projectRevision++;projectId=id}
+ }
+ 
+ @Composable private fun NotesScreen(db:NoteDatabase,lang:String,onOpen:(Long)->Unit){
+@@ -299,6 +306,255 @@
+ @Composable private fun AddTaskDialog(lang:String,onDismiss:()->Unit,onAdd:(String,String)->Unit){var t by remember{mutableStateOf("")};var d by remember{mutableStateOf("")};AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"new_task"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(t,{t=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"title"))},keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences));OutlinedTextField(d,{d=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"details"))},keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences))}},confirmButton={Button({if(t.isNotBlank())onAdd(t,d)}){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})}
+ 
+ 
++@Composable private fun ProjectsScreen(db:NoteDatabase,lang:String,externalRevision:Int,onOpen:(Long)->Unit){
++    val projects=remember(externalRevision){db.getProjects()}
++    if(projects.isEmpty()){EmptyState(AppStrings.t(lang,"no_projects"));return}
++    LazyColumn(Modifier.fillMaxSize().padding(12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
++        items(projects,key={it.id}){p->
++            Card(Modifier.fillMaxWidth().clickable{onOpen(p.id)}){
++                Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
++                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
++                        Text(p.name,style=MaterialTheme.typography.titleMedium,modifier=Modifier.weight(1f),maxLines=1,overflow=TextOverflow.Ellipsis)
++                        Text(projectStatusText(lang,p.status),style=MaterialTheme.typography.labelMedium,color=projectStatusColor(p.status))
++                    }
++                    if(p.description.isNotBlank())Text(p.description,maxLines=2,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.bodyMedium)
++                    LinearProgressIndicator(progress={p.progress.coerceIn(0,100)/100f},modifier=Modifier.fillMaxWidth())
++                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
++                        Text("${AppStrings.t(lang,"progress")}: ${p.progress}%",style=MaterialTheme.typography.bodySmall,modifier=Modifier.weight(1f))
++                        if(p.dueAt>0)Text("${AppStrings.t(lang,"due_date")}: ${formatDay(p.dueAt)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
++                    }
++                }
++            }
++        }
++    }
++}
++
++@Composable private fun AddProjectDialog(lang:String,onDismiss:()->Unit,onAdd:(String,String)->Unit){
++    var name by remember{mutableStateOf("")};var description by remember{mutableStateOf("")}
++    AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"new_project"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
++        OutlinedTextField(name,{name=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"title"))},singleLine=true,keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences))
++        OutlinedTextField(description,{description=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"details"))},minLines=3,keyboardOptions=KeyboardOptions(capitalization=KeyboardCapitalization.Sentences))
++    }},confirmButton={Button({if(name.isNotBlank())onAdd(name.trim(),description.trim())}){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
++}
++
++@Composable private fun ProjectDetailScreen(db:NoteDatabase,projectId:Long,lang:String,onBack:()->Unit,onDeleted:()->Unit){
++    val context=LocalContext.current
++    var revision by remember{mutableIntStateOf(0)}
++    val project=remember(projectId,revision){db.getProject(projectId)}
++    if(project==null){LaunchedEffect(Unit){onBack()};return}
++    var tab by rememberSaveable{mutableIntStateOf(0)}
++    var edit by remember{mutableStateOf(false)}
++    var reminder by remember{mutableStateOf(false)}
++    Scaffold(topBar={TopAppBar(title={Text(project.name,maxLines=1,overflow=TextOverflow.Ellipsis)},navigationIcon={IconButton(onBack){Icon(Icons.Default.ArrowBack,null)}},actions={
++        IconButton({reminder=true}){Icon(Icons.Default.Notifications,null)}
++        IconButton({edit=true}){Icon(Icons.Default.Edit,null)}
++        IconButton({ReminderScheduler.cancelAllForTarget(context,"project",project.id,db);AttachmentStore.deleteTarget("project",project.id);db.deleteProject(project.id);onDeleted()}){Icon(Icons.Default.Delete,null)}
++    },colors=organizerTopBarColors())}){pad->
++        Column(Modifier.padding(pad).fillMaxSize()){
++            TabRow(selectedTabIndex=tab){
++                listOf("overview","stages","money","files").forEachIndexed{i,key->Tab(selected=tab==i,onClick={tab=i},text={Text(AppStrings.t(lang,key),maxLines=1,overflow=TextOverflow.Ellipsis)})}
++            }
++            when(tab){
++                0->ProjectOverviewTab(db,project,lang,revision,{revision++})
++                1->ProjectStagesTab(db,project,lang,revision,{revision++})
++                2->ProjectFinanceTab(db,project,lang,revision,{revision++})
++                else->ProjectFilesTab(project,lang,revision,{revision++})
++            }
++        }
++    }
++    if(edit)ProjectEditDialog(db,project,lang,{edit=false}){edit=false;revision++}
++    if(reminder)ReminderEditorDialog(db,lang,"project",project.id,null,{reminder=false}){reminder=false;toast(context,AppStrings.t(lang,"reminder_saved"))}
++}
++
++@Composable private fun ProjectOverviewTab(db:NoteDatabase,project:Project,lang:String,revision:Int,onChanged:()->Unit){
++    var journalDialog by remember{mutableStateOf(false)}
++    var linkDialog by remember{mutableStateOf(false)}
++    val journal=remember(revision){db.getProjectJournal(project.id)}
++    val linked=remember(revision){db.getLinkedNotes(project.id)}
++    LazyColumn(Modifier.fillMaxSize().padding(12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
++        item{Card(Modifier.fillMaxWidth()){Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
++            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(projectStatusText(lang,project.status),style=MaterialTheme.typography.titleMedium,color=projectStatusColor(project.status),modifier=Modifier.weight(1f));Text("${project.progress}%",style=MaterialTheme.typography.titleMedium)}
++            LinearProgressIndicator(progress={project.progress.coerceIn(0,100)/100f},modifier=Modifier.fillMaxWidth())
++            if(project.description.isNotBlank())Text(project.description,style=MaterialTheme.typography.bodyMedium)
++            ProjectInfoRow(AppStrings.t(lang,"start_date"),if(project.startAt>0)formatDay(project.startAt) else AppStrings.t(lang,"not_set"))
++            ProjectInfoRow(AppStrings.t(lang,"due_date"),if(project.dueAt>0)formatDay(project.dueAt) else AppStrings.t(lang,"not_set"))
++            if(project.budget>0)ProjectInfoRow(AppStrings.t(lang,"budget"),"%,.0f ₸".format(project.budget))
++            if(project.client.isNotBlank())ProjectInfoRow(AppStrings.t(lang,"client"),project.client)
++            if(project.address.isNotBlank())ProjectInfoRow(AppStrings.t(lang,"address"),project.address)
++            if(project.contact.isNotBlank())ProjectInfoRow(AppStrings.t(lang,"contact"),project.contact)
++        }}}
++        item{Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(AppStrings.t(lang,"journal"),style=MaterialTheme.typography.titleMedium,modifier=Modifier.weight(1f));TextButton({journalDialog=true}){Icon(Icons.Default.Add,null);Spacer(Modifier.width(4.dp));Text(AppStrings.t(lang,"add_journal"))}}}
++        if(journal.isEmpty())item{Text("—",color=MaterialTheme.colorScheme.onSurfaceVariant)} else items(journal,key={it.id}){j->Card(Modifier.fillMaxWidth()){Row(Modifier.padding(10.dp),verticalAlignment=Alignment.Top){Column(Modifier.weight(1f)){Text(j.text);Text(formatTime(j.createdAt),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)};IconButton({db.deleteProjectJournal(j.id);onChanged()}){Icon(Icons.Default.Close,null)}}}}
++        item{Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(AppStrings.t(lang,"linked_notes"),style=MaterialTheme.typography.titleMedium,modifier=Modifier.weight(1f));TextButton({linkDialog=true}){Icon(Icons.Default.Link,null);Spacer(Modifier.width(4.dp));Text(AppStrings.t(lang,"link_note"))}}}
++        if(linked.isEmpty())item{Text("—",color=MaterialTheme.colorScheme.onSurfaceVariant)} else items(linked,key={it.id}){n->Card(Modifier.fillMaxWidth()){Row(Modifier.padding(10.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(n.title.ifBlank{AppStrings.t(lang,"note")},style=MaterialTheme.typography.titleSmall);if(n.body.isNotBlank())Text(n.body,maxLines=2,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.bodySmall)};IconButton({db.unlinkNoteFromProject(project.id,n.id);onChanged()}){Icon(Icons.Default.Close,null)}}}}
++    }
++    if(journalDialog)AddProjectJournalDialog(db,project.id,lang,{journalDialog=false}){journalDialog=false;onChanged()}
++    if(linkDialog)LinkNoteDialog(db,project.id,lang,{linkDialog=false}){linkDialog=false;onChanged()}
++}
++
++@Composable private fun ProjectInfoRow(label:String,value:String){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Top){Text(label,style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.weight(.42f));Text(value,style=MaterialTheme.typography.bodyMedium,modifier=Modifier.weight(.58f))}}
++
++@Composable private fun ProjectStagesTab(db:NoteDatabase,project:Project,lang:String,revision:Int,onChanged:()->Unit){
++    var add by remember{mutableStateOf(false)}
++    val stages=remember(revision){db.getProjectStages(project.id)}
++    Column(Modifier.fillMaxSize().padding(12.dp)){
++        Button({add=true},Modifier.fillMaxWidth()){Icon(Icons.Default.AddTask,null);Spacer(Modifier.width(6.dp));Text(AppStrings.t(lang,"add_stage"))}
++        Spacer(Modifier.height(10.dp))
++        if(stages.isEmpty())EmptyState(AppStrings.t(lang,"stages")) else LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)){
++            items(stages,key={it.id}){st->Card(Modifier.fillMaxWidth()){Row(Modifier.padding(horizontal=8.dp,vertical=6.dp),verticalAlignment=Alignment.CenterVertically){Checkbox(st.done,{db.setProjectStageDone(st.id,it);onChanged()});Column(Modifier.weight(1f)){Text(st.title,style=if(st.done)MaterialTheme.typography.bodyMedium.copy(textDecoration=TextDecoration.LineThrough) else MaterialTheme.typography.bodyMedium);if(st.dueAt>0)Text("${AppStrings.t(lang,"due_date")}: ${formatDay(st.dueAt)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)};IconButton({db.deleteProjectStage(st.id);onChanged()}){Icon(Icons.Default.Delete,null)}}}}
++        }
++    }
++    if(add)AddProjectStageDialog(db,project.id,lang,{add=false}){add=false;onChanged()}
++}
++
++@Composable private fun AddProjectStageDialog(db:NoteDatabase,projectId:Long,lang:String,onDismiss:()->Unit,onAdded:()->Unit){
++    val context=LocalContext.current
++    var title by remember{mutableStateOf("")};var due by remember{mutableLongStateOf(0L)}
++    AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"add_stage"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(title,{title=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"title"))},singleLine=true);OutlinedButton({launchDatePicker(context,if(due>0)due else System.currentTimeMillis()){due=it}},Modifier.fillMaxWidth()){Icon(Icons.Default.Event,null);Spacer(Modifier.width(6.dp));Text(if(due>0)formatDay(due) else AppStrings.t(lang,"due_date"))}}},confirmButton={Button({if(title.isNotBlank()){db.addProjectStage(projectId,title.trim(),due);onAdded()}}){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
++}
++
++@Composable private fun ProjectFinanceTab(db:NoteDatabase,project:Project,lang:String,revision:Int,onChanged:()->Unit){
++    var add by remember{mutableStateOf(false)}
++    val list=remember(revision){db.getProjectMoneyEntries(project.id)}
++    val inc=list.filter{it.type=="income"}.sumOf{it.amount};val exp=list.filter{it.type=="expense"}.sumOf{it.amount};val bal=inc-exp
++    Column(Modifier.fillMaxSize().padding(12.dp)){
++        Card(Modifier.fillMaxWidth()){Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){ProjectMoneySummaryRow(AppStrings.t(lang,"income"),inc,MaterialTheme.colorScheme.primary);ProjectMoneySummaryRow(AppStrings.t(lang,"expense"),exp,MaterialTheme.colorScheme.error);ProjectMoneySummaryRow(AppStrings.t(lang,"balance"),bal,MaterialTheme.colorScheme.tertiary)}}
++        Spacer(Modifier.height(8.dp))
++        Button({add=true},Modifier.fillMaxWidth()){Icon(Icons.Default.Add,null);Spacer(Modifier.width(6.dp));Text(AppStrings.t(lang,"add"))}
++        Spacer(Modifier.height(8.dp))
++        if(list.isEmpty())EmptyState(AppStrings.t(lang,"no_money")) else LazyColumn(verticalArrangement=Arrangement.spacedBy(6.dp)){items(list,key={it.id}){m->MoneyEntryCard(m,lang,if(m.type=="income")MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error){db.deleteMoneyEntry(it);onChanged()}}}
++    }
++    if(add)AddProjectMoneyDialog(db,project.id,lang,{add=false}){add=false;onChanged()}
++}
++
++@Composable private fun ProjectMoneySummaryRow(label:String,amount:Double,color:Color){Row(Modifier.fillMaxWidth()){Text(label,style=MaterialTheme.typography.titleMedium,modifier=Modifier.weight(1f));Text("%,.0f ₸".format(amount),style=MaterialTheme.typography.titleMedium,color=color)}}
++
++@Composable private fun AddProjectMoneyDialog(db:NoteDatabase,projectId:Long,lang:String,onDismiss:()->Unit,onAdded:()->Unit){
++    var type by remember{mutableStateOf("expense")};var amount by remember{mutableStateOf("")};var cat by remember{mutableStateOf("")};var note by remember{mutableStateOf("")}
++    AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"project_finance"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
++        Row{FilterChip(type=="expense",{type="expense"},{Text(AppStrings.t(lang,"expense"))});Spacer(Modifier.width(8.dp));FilterChip(type=="income",{type="income"},{Text(AppStrings.t(lang,"income"))})}
++        OutlinedTextField(amount,{amount=formatAmountInput(it)},label={Text(AppStrings.t(lang,"amount"))},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
++        SuggestionTextField(cat,{cat=capitalizeSentences(it)},AppStrings.t(lang,"category"),db.getMoneyCategorySuggestions(cat),{cat=it},{db.hideSuggestion("money_category",it)},Modifier.fillMaxWidth())
++        OutlinedTextField(note,{note=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"comment"))})
++    }},confirmButton={Button({parseAmountInput(amount)?.let{db.addMoneyEntry(type,it,cat,projectId,note);onAdded()}}){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
++}
++
++@Composable private fun ProjectFilesTab(project:Project,lang:String,revision:Int,onChanged:()->Unit){
++    val context=LocalContext.current
++    var localRevision by remember(revision){mutableIntStateOf(revision)}
++    val files=remember(localRevision){AttachmentStore.list("project",project.id)}
++    var pendingCameraFile by remember{mutableStateOf<File?>(null)}
++    val recorder=remember{VoiceRecorder(context)};var recording by remember{mutableStateOf(false)};var startedAt by remember{mutableLongStateOf(0L)};var elapsed by remember{mutableLongStateOf(0L)}
++    DisposableEffect(Unit){onDispose{if(recording)recorder.cancel()}}
++    LaunchedEffect(recording){while(recording){elapsed=android.os.SystemClock.elapsedRealtime()-startedAt;delay(200)}}
++    fun changed(){localRevision++;onChanged()}
++    fun startRecording(){runCatching{recorder.start("project_${project.id}");recording=true;startedAt=android.os.SystemClock.elapsedRealtime();elapsed=0}.onFailure{toast(context,it.message?:AppStrings.t(lang,"error"))}}
++    fun stopRecording(){val r=runCatching{recorder.stop()}.getOrNull();recording=false;if(r!=null)runCatching{AttachmentStore.addLocalFile("project",project.id,r.file,"project_voice_${System.currentTimeMillis()}.m4a","audio/mp4",r.durationMs,true)}.onSuccess{changed()}.onFailure{toast(context,it.message?:AppStrings.t(lang,"record_failed"))}}
++    val micPermission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){if(it)startRecording() else toast(context,AppStrings.t(lang,"permission_mic"))}
++    val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let{runCatching{AttachmentStore.addFromUri("project",project.id,it)}.onSuccess{changed()}.onFailure{e->toast(context,e.message?:AppStrings.t(lang,"error"))}}}
++    val camera=rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()){ok->val f=pendingCameraFile;if(ok&&f!=null)runCatching{AttachmentStore.addLocalFile("project",project.id,f,f.name,"image/jpeg",0,true)}.onSuccess{changed()}.onFailure{toast(context,it.message?:AppStrings.t(lang,"error"))} else f?.delete();pendingCameraFile=null}
++    Column(Modifier.fillMaxSize().padding(12.dp)){
++        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
++            OutlinedButton({picker.launch(arrayOf("image/*","application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","text/plain"))},Modifier.weight(1f)){Icon(Icons.Default.AttachFile,null);Spacer(Modifier.width(4.dp));Text(AppStrings.t(lang,"file"),maxLines=1)}
++            OutlinedButton({val(f,u)=AttachmentStore.createCameraTarget();pendingCameraFile=f;camera.launch(u)},Modifier.weight(1f)){Icon(Icons.Default.PhotoCamera,null);Spacer(Modifier.width(4.dp));Text(AppStrings.t(lang,"camera"),maxLines=1)}
++            Button({if(recording)stopRecording() else if(androidx.core.content.ContextCompat.checkSelfPermission(context,Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)startRecording() else micPermission.launch(Manifest.permission.RECORD_AUDIO)},Modifier.weight(1f),colors=if(recording)ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.error)else ButtonDefaults.buttonColors()){Icon(if(recording)Icons.Default.Stop else Icons.Default.Mic,null);Spacer(Modifier.width(4.dp));Text(if(recording)humanDuration(elapsed) else AppStrings.t(lang,"microphone"),maxLines=1,overflow=TextOverflow.Ellipsis)}
++        }
++        Spacer(Modifier.height(10.dp))
++        if(files.isEmpty())EmptyState(AppStrings.t(lang,"files")) else LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)){items(files,key={it.id}){a->if(a.isVoice)VoiceNoteBlock(a,lang,{AttachmentStore.delete(a);changed()})else AttachmentRow(a,lang){changed()}}}
++    }
++}
++
++@Composable private fun ProjectEditDialog(db:NoteDatabase,project:Project,lang:String,onDismiss:()->Unit,onSaved:()->Unit){
++    val context=LocalContext.current
++    var name by remember{mutableStateOf(project.name)};var description by remember{mutableStateOf(project.description)};var status by remember{mutableStateOf(project.status)};var progress by remember{mutableFloatStateOf(project.progress.toFloat())};var startAt by remember{mutableLongStateOf(project.startAt)};var dueAt by remember{mutableLongStateOf(project.dueAt)};var budget by remember{mutableStateOf(if(project.budget>0)formatAmountInput(project.budget.toLong().toString()) else "")};var client by remember{mutableStateOf(project.client)};var address by remember{mutableStateOf(project.address)};var contact by remember{mutableStateOf(project.contact)}
++    AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"edit_project"))},text={LazyColumn(Modifier.heightIn(max=560.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
++        item{OutlinedTextField(name,{name=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"title"))},singleLine=true,modifier=Modifier.fillMaxWidth())}
++        item{OutlinedTextField(description,{description=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"details"))},minLines=3,modifier=Modifier.fillMaxWidth())}
++        item{Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(5.dp)){listOf("planned","in_progress","paused","completed").forEach{st->FilterChip(selected=status==st,onClick={status=st},label={Text(projectStatusText(lang,st),maxLines=1,style=MaterialTheme.typography.labelSmall)})}}}
++        item{Text("${AppStrings.t(lang,"progress")}: ${progress.toInt()}%",style=MaterialTheme.typography.bodyMedium);Slider(progress,{progress=it},valueRange=0f..100f,steps=19)}
++        item{Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){OutlinedButton({launchDatePicker(context,if(startAt>0)startAt else System.currentTimeMillis()){startAt=it}},Modifier.weight(1f)){Text(if(startAt>0)formatDay(startAt) else AppStrings.t(lang,"start_date"),maxLines=1,overflow=TextOverflow.Ellipsis)};OutlinedButton({launchDatePicker(context,if(dueAt>0)dueAt else System.currentTimeMillis()){dueAt=it}},Modifier.weight(1f)){Text(if(dueAt>0)formatDay(dueAt) else AppStrings.t(lang,"due_date"),maxLines=1,overflow=TextOverflow.Ellipsis)}}}
++        item{OutlinedTextField(budget,{budget=formatAmountInput(it)},label={Text(AppStrings.t(lang,"budget"))},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.fillMaxWidth())}
++        item{OutlinedTextField(client,{client=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"client"))},singleLine=true,modifier=Modifier.fillMaxWidth())}
++        item{OutlinedTextField(address,{address=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"address"))},singleLine=true,modifier=Modifier.fillMaxWidth())}
++        item{OutlinedTextField(contact,{contact=it},label={Text(AppStrings.t(lang,"contact"))},singleLine=true,modifier=Modifier.fillMaxWidth())}
++    }},confirmButton={Button({if(name.isNotBlank()){db.saveProject(project.id,name.trim(),description.trim(),status,progress.toInt(),startAt,dueAt,parseAmountInput(budget)?:0.0,client.trim(),address.trim(),contact.trim());onSaved()}}){Text(AppStrings.t(lang,"save"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
++}
++
++@Composable private fun AddProjectJournalDialog(db:NoteDatabase,projectId:Long,lang:String,onDismiss:()->Unit,onAdded:()->Unit){
++    var text by remember{mutableStateOf("")}
++    val speech=rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){r->if(r.resultCode==Activity.RESULT_OK){val spoken=r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty();text=appendRecognizedText(text,spoken)}}
++    AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"add_journal"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(text,{text=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"note"))},minLines=5,modifier=Modifier.fillMaxWidth());OutlinedButton({runCatching{speech.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,if(lang=="kk")"kk-KZ" else "ru-RU")})}},Modifier.fillMaxWidth()){Icon(Icons.Default.KeyboardVoice,null);Spacer(Modifier.width(6.dp));Text(AppStrings.t(lang,"to_text"))}}},confirmButton={Button({if(text.isNotBlank()){db.addProjectJournal(projectId,text.trim());onAdded()}}){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
++}
++
++@Composable private fun LinkNoteDialog(db:NoteDatabase,projectId:Long,lang:String,onDismiss:()->Unit,onChanged:()->Unit){
++    val linkedIds=remember{db.getLinkedNotes(projectId).map{it.id}.toSet()}
++    val available=remember{db.getNotes().filterNot{it.id in linkedIds}}
++    AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"link_note"))},text={if(available.isEmpty())Text(AppStrings.t(lang,"no_notes")) else LazyColumn(Modifier.heightIn(max=420.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){items(available,key={it.id}){n->Card(Modifier.fillMaxWidth().clickable{db.linkNoteToProject(projectId,n.id);onChanged()}){Column(Modifier.padding(10.dp)){Text(n.title.ifBlank{AppStrings.t(lang,"note")},style=MaterialTheme.typography.titleSmall);if(n.body.isNotBlank())Text(n.body,maxLines=2,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.bodySmall)}}}}},confirmButton={TextButton(onDismiss){Text(AppStrings.t(lang,"close"))}})
++}
++
++private fun projectStatusText(lang:String,status:String)=AppStrings.t(lang,when(status){"in_progress"->"in_progress";"paused"->"paused";"completed"->"completed";else->"planned"})
++private fun projectStatusColor(status:String)=when(status){"completed"->Color(0xFF2E7D32);"paused"->Color(0xFFF57C00);"in_progress"->Color(0xFF1565C0);else->Color(0xFF6A1B9A)}
++private fun formatDay(ms:Long)=DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(ms))
++private fun launchDatePicker(context:android.content.Context,initial:Long,onSelected:(Long)->Unit){val c=java.util.Calendar.getInstance().apply{timeInMillis=initial};android.app.DatePickerDialog(context,{_,y,m,d->val out=java.util.Calendar.getInstance().apply{set(y,m,d,9,0,0);set(java.util.Calendar.MILLISECOND,0)};onSelected(out.timeInMillis)},c.get(java.util.Calendar.YEAR),c.get(java.util.Calendar.MONTH),c.get(java.util.Calendar.DAY_OF_MONTH)).show()}
++
+ @Composable private fun MoneyScreen(db:NoteDatabase,lang:String,externalRevision:Int){
+     var refresh by remember{mutableIntStateOf(0)}
+     var balanceExpanded by rememberSaveable{mutableStateOf(false)}
+@@ -329,11 +585,11 @@
+                         }
+                         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+-                            Text(AppStrings.t(lang,"balance"),style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f))
++                            Text(AppStrings.t(lang,"balance"),style=MaterialTheme.typography.titleMedium,modifier=Modifier.weight(1f),color=MaterialTheme.colorScheme.tertiary)
+                             Text(
+                                 (if(balance>0)"+ " else if(balance<0)"− " else "")+"%,.0f ₸".format(kotlin.math.abs(balance)),
+-                                style=MaterialTheme.typography.titleLarge,
+-                                color=when{balance>0->MaterialTheme.colorScheme.primary;balance<0->MaterialTheme.colorScheme.error;else->MaterialTheme.colorScheme.onSurface}
++                                style=MaterialTheme.typography.titleMedium,
++                                color=MaterialTheme.colorScheme.tertiary
+                             )
+                             Spacer(Modifier.width(6.dp))
+                             Icon(Icons.Default.KeyboardArrowUp,null,Modifier.size(20.dp))
+@@ -414,6 +670,60 @@
+     editing?.let{r->ReminderEditorDialog(db,lang,r.targetType,r.targetId,r,{editing=null}){editing=null;refresh++}}
+ }
+ 
++@Composable private fun ReminderEditorDialog(db:NoteDatabase,lang:String,targetType:String,targetId:Long,existing:ReminderEntry?,onDismiss:()->Unit,onSaved:()->Unit){
++    val context=LocalContext.current
++    var scheduleType by remember(existing?.id){mutableStateOf(existing?.scheduleType?:"once")}
++    var dayMode by remember(existing?.id){mutableStateOf(existing?.dayMode?:"single")}
++    var selectedAt by remember(existing?.id){mutableLongStateOf(existing?.triggerAt?: (System.currentTimeMillis()+3600_000L))}
++    var baseMinutes by remember(existing?.id){mutableIntStateOf(existing?.baseMinutes?:ReminderTime.minutesOfDay(selectedAt))}
++    var daysMask by remember(existing?.id){mutableIntStateOf(existing?.daysMask?:0)}
++    val dayLabels=if(lang=="kk") listOf("Дс","Сс","Ср","Бс","Жм","Сб","Жс") else listOf("Пн","Вт","Ср","Чт","Пт","Сб","Вс")
++    val canSave=scheduleType=="once" || daysMask!=0
++    AlertDialog(
++        onDismissRequest=onDismiss,
++        title={Text(AppStrings.t(lang,"reminders"))},
++        text={Column(verticalArrangement=Arrangement.spacedBy(12.dp)){
++            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
++                FilterChip(scheduleType=="once",{scheduleType="once"},{Text(AppStrings.t(lang,"once"))},modifier=Modifier.weight(1f))
++                FilterChip(scheduleType=="weekly",{scheduleType="weekly"},{Text(AppStrings.t(lang,"weekdays"),maxLines=1,overflow=TextOverflow.Ellipsis)},modifier=Modifier.weight(1f))
++            }
++            if(scheduleType=="once"){
++                OutlinedButton({launchDateTimePicker(context,selectedAt){selectedAt=it;baseMinutes=ReminderTime.minutesOfDay(it)}},Modifier.fillMaxWidth()){
++                    Icon(Icons.Default.Event,null);Spacer(Modifier.width(8.dp));Text("${AppStrings.t(lang,"reminder_date_time")}: ${formatDate(selectedAt)}")
++                }
++            }else{
++                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
++                    dayLabels.forEachIndexed{i,label->
++                        Column(horizontalAlignment=Alignment.CenterHorizontally,modifier=Modifier.weight(1f)){
++                            Text(label,style=MaterialTheme.typography.labelMedium)
++                            Checkbox(checked=(daysMask and (1 shl i))!=0,onCheckedChange={checked->daysMask=if(checked) daysMask or (1 shl i) else daysMask and (1 shl i).inv()},modifier=Modifier.size(34.dp))
++                        }
++                    }
++                }
++                OutlinedButton({launchTimePicker(context,baseMinutes){baseMinutes=it}},Modifier.fillMaxWidth()){
++                    Icon(Icons.Default.Schedule,null);Spacer(Modifier.width(8.dp));Text("${AppStrings.t(lang,"reminder_time")}: %02d:%02d".format(baseMinutes/60,baseMinutes%60))
++                }
++            }
++            HorizontalDivider()
++            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
++                FilterChip(dayMode=="single",{dayMode="single"},{Text(AppStrings.t(lang,"one_signal"))},modifier=Modifier.weight(1f))
++                FilterChip(dayMode=="all_day",{dayMode="all_day"},{Text(AppStrings.t(lang,"all_day"))},modifier=Modifier.weight(1f))
++            }
++            if(dayMode=="all_day") Text(AppStrings.t(lang,"all_day_hint"),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
++        }},
++        confirmButton={Button(enabled=canSave,onClick={
++            val trigger=if(scheduleType=="weekly") ReminderTime.nextWeekly(daysMask,baseMinutes,System.currentTimeMillis()-1) else selectedAt
++            val id=if(existing==null) db.addReminder(targetType,targetId,trigger,true,true,"system",scheduleType,daysMask,dayMode,baseMinutes) else existing.id.also{ReminderScheduler.cancel(context,it);db.updateReminder(it,trigger,scheduleType,daysMask,dayMode,baseMinutes)}
++            db.getReminder(id)?.let{ReminderScheduler.schedule(context,it)}
++            onSaved()
++        }){Text(AppStrings.t(lang,"save"))}},
++        dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}}
++    )
++}
++
++private fun reminderSummary(r:ReminderEntry,lang:String):String{
++    val mode=if(r.scheduleType=="once") AppStrings.t(lang,"once") else AppStrings.t(lang,"weekdays")
++    val signal=if(r.dayMode=="all_day") AppStrings.t(lang,"all_day") else AppStrings.t(lang,"one_signal")
++    return "$mode • $signal • ${formatDate(r.triggerAt)}"
++}
++
+ @Composable private fun SettingsScreen(db:NoteDatabase,settings:SettingsStore,lang:String,onLanguage:(String)->Unit,dark:Boolean,onDark:(Boolean)->Unit,fontScale:Float,onFont:(Float)->Unit,bold:Boolean,onBold:(Boolean)->Unit){
+     val context=LocalContext.current;var msg by remember{mutableStateOf<String?>(null)};var showPin by remember{mutableStateOf(false)};var showDisablePin by remember{mutableStateOf(false)};var showChangePin by remember{mutableStateOf(false)}
+     val saveBackup=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")){uri->uri?.let{runCatching{val j=BackupManager.createBackup(db,settings);BackupManager.writeToUri(context,it,j);settings.lastBackupAt=System.currentTimeMillis()}.onSuccess{msg=AppStrings.t(lang,"backup_ok")}.onFailure{e->msg=e.message}}}
+@@ -618,15 +928,17 @@
+ @Composable private fun BottomNavPill(selected:Boolean,text:String,icon:androidx.compose.ui.graphics.vector.ImageVector,onClick:()->Unit,modifier:Modifier=Modifier){
+     val shape=RoundedCornerShape(17.dp)
+     val content: @Composable RowScope.() -> Unit={
+-        Icon(icon,null,Modifier.size(16.dp))
++        Icon(icon,null,Modifier.size(18.dp))
+         Spacer(Modifier.width(4.dp))
+-        Text(text,maxLines=1,softWrap=false,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.labelSmall.copy(fontSize=11.sp))
++        Text(text,maxLines=1,softWrap=false,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.bodyMedium.copy(fontSize=14.sp))
+     }
+-    if(selected){
+-        Button(onClick=onClick,shape=shape,contentPadding=PaddingValues(horizontal=6.dp,vertical=0.dp),modifier=modifier.heightIn(min=36.dp,max=40.dp),content=content)
+-    }else{
+-        OutlinedButton(onClick=onClick,shape=shape,contentPadding=PaddingValues(horizontal=6.dp,vertical=0.dp),modifier=modifier.heightIn(min=36.dp,max=40.dp),content=content)
+-    }
++    if(selected) Button(onClick=onClick,shape=shape,contentPadding=PaddingValues(horizontal=5.dp,vertical=0.dp),modifier=modifier.heightIn(min=40.dp,max=44.dp),content=content)
++    else OutlinedButton(onClick=onClick,shape=shape,contentPadding=PaddingValues(horizontal=5.dp,vertical=0.dp),modifier=modifier.heightIn(min=40.dp,max=44.dp),content=content)
++}
++@Composable private fun BottomNavIconPill(selected:Boolean,icon:androidx.compose.ui.graphics.vector.ImageVector,onClick:()->Unit,modifier:Modifier=Modifier){
++    val shape=RoundedCornerShape(17.dp)
++    val content: @Composable RowScope.() -> Unit={Icon(icon,AppStrings.t("ru","settings"),Modifier.size(20.dp))}
++    if(selected) Button(onClick=onClick,shape=shape,contentPadding=PaddingValues(0.dp),modifier=modifier.heightIn(min=40.dp,max=44.dp),content=content)
++    else OutlinedButton(onClick=onClick,shape=shape,contentPadding=PaddingValues(0.dp),modifier=modifier.heightIn(min=40.dp,max=44.dp),content=content)
+ }
+ @Composable private fun organizerTopBarColors()=TopAppBarDefaults.topAppBarColors(containerColor=Color(0xFF0B4B6B),titleContentColor=Color.White,navigationIconContentColor=Color.White,actionIconContentColor=Color.White)
+ @Composable private fun EmptyState(text:String){Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){Text(text,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
+diff -ruN old/app/src/main/java/kz/kairat/organizer/ReminderAlertActivity.kt new/app/src/main/java/kz/kairat/organizer/ReminderAlertActivity.kt
+--- old/app/src/main/java/kz/kairat/organizer/ReminderAlertActivity.kt	1970-01-01 00:00:00.000000000 +0000
++++ new/app/src/main/java/kz/kairat/organizer/ReminderAlertActivity.kt	2026-09-17 15:45:02.350685922 +0000
+@@ -0,0 +1,51 @@
++package kz.kairat.organizer
++
++import android.app.Activity
++import android.os.Bundle
++import android.view.WindowManager
++import androidx.activity.ComponentActivity
++import androidx.activity.compose.setContent
++import androidx.compose.foundation.layout.*
++import androidx.compose.material3.*
++import androidx.compose.runtime.*
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.text.style.TextAlign
++import androidx.compose.ui.unit.dp
++
++class ReminderAlertActivity:ComponentActivity(){
++    override fun onCreate(savedInstanceState:Bundle?){
++        super.onCreate(savedInstanceState)
++        if(android.os.Build.VERSION.SDK_INT>=27){setShowWhenLocked(true);setTurnScreenOn(true)}
++        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
++        val id=intent.getLongExtra("id",0L)
++        setContent{
++            val db=remember{NoteDatabase(this)}
++            val settings=remember{SettingsStore(this)}
++            val reminder=remember{id.let{db.getReminder(it)}}
++            OrganizerTheme(settings.darkTheme,settings.fontScale,settings.boldText){
++                if(reminder==null){finish()}else ReminderAlertContent(reminder,settings.language)
++            }
++        }
++    }
++    @Composable private fun ReminderAlertContent(r:ReminderEntry,lang:String){
++        var snoozeMenu by remember{mutableStateOf(false)}
++        Surface(Modifier.fillMaxSize(),color=MaterialTheme.colorScheme.background){
++            Box(Modifier.fillMaxSize().padding(24.dp),contentAlignment=Alignment.Center){
++                Card(Modifier.fillMaxWidth()){
++                    Column(Modifier.padding(24.dp),verticalArrangement=Arrangement.spacedBy(18.dp),horizontalAlignment=Alignment.CenterHorizontally){
++                        Text(r.title.ifBlank{AppStrings.t(lang,"reminders")},style=MaterialTheme.typography.headlineSmall,textAlign=TextAlign.Center)
++                        Text(r.details.ifBlank{r.title},style=MaterialTheme.typography.bodyLarge,textAlign=TextAlign.Start,modifier=Modifier.fillMaxWidth())
++                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)){
++                            OutlinedButton(onClick={ReminderScheduler.dismissCurrent(this@ReminderAlertActivity,r);finish()},modifier=Modifier.weight(1f)){Text(AppStrings.t(lang,"dismiss_alarm"))}
++                            Button(onClick={snoozeMenu=true},modifier=Modifier.weight(1f)){Text(AppStrings.t(lang,"snooze"))}
++                        }
++                        if(snoozeMenu){
++                            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
++                                listOf(10,30,60).forEach{m->OutlinedButton(onClick={ReminderScheduler.snooze(this@ReminderAlertActivity,r,m);finish()},modifier=Modifier.weight(1f)){Text(if(m<60)"$m мин" else "1 ч")}}
++                            }
++                        }
++                    }
++                }
++            }
++        }
++    }
++}
+diff -ruN old/app/src/main/java/kz/kairat/organizer/ReminderSystem.kt new/app/src/main/java/kz/kairat/organizer/ReminderSystem.kt
+--- old/app/src/main/java/kz/kairat/organizer/ReminderSystem.kt	2026-09-15 15:04:57.000000000 +0000
++++ new/app/src/main/java/kz/kairat/organizer/ReminderSystem.kt	2026-09-17 16:03:30.739503425 +0000
+@@ -7,28 +7,139 @@
+ import androidx.core.app.NotificationCompat
+ import java.util.Calendar
+ 
++object ReminderTime {
++    fun minutesOfDay(ms:Long):Int = Calendar.getInstance().apply{timeInMillis=ms}.let{it.get(Calendar.HOUR_OF_DAY)*60+it.get(Calendar.MINUTE)}
++    fun sameDay(a:Long,b:Long):Boolean{
++        val x=Calendar.getInstance().apply{timeInMillis=a}; val y=Calendar.getInstance().apply{timeInMillis=b}
++        return x.get(Calendar.YEAR)==y.get(Calendar.YEAR)&&x.get(Calendar.DAY_OF_YEAR)==y.get(Calendar.DAY_OF_YEAR)
++    }
++    fun weekdayBit(ms:Long):Int{
++        val dow=Calendar.getInstance().apply{timeInMillis=ms}.get(Calendar.DAY_OF_WEEK)
++        val mondayIndex=(dow+5)%7
++        return 1 shl mondayIndex
++    }
++    fun nextWeekly(daysMask:Int,baseMinutes:Int,after:Long=System.currentTimeMillis(),skipCurrentDay:Boolean=false):Long{
++        val base=Calendar.getInstance().apply{timeInMillis=after}
++        val hour=baseMinutes/60; val minute=baseMinutes%60
++        for(delta in 0..7){
++            if(delta==0 && skipCurrentDay) continue
++            val c=(base.clone() as Calendar).apply{
++                add(Calendar.DAY_OF_YEAR,delta)
++                set(Calendar.HOUR_OF_DAY,hour);set(Calendar.MINUTE,minute);set(Calendar.SECOND,0);set(Calendar.MILLISECOND,0)
++            }
++            val selected=(daysMask and weekdayBit(c.timeInMillis))!=0
++            if(selected && c.timeInMillis>after) return c.timeInMillis
++        }
++        return after+24*60*60_000L
++    }
++}
++
+ object ReminderScheduler {
+-    fun schedule(context:Context,entry:ReminderEntry){
+-        val am=context.getSystemService(AlarmManager::class.java); val pi=pending(context,entry.id)
+-        if(Build.VERSION.SDK_INT>=31 && am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,entry.triggerAt,pi)
+-        else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,entry.triggerAt,pi)
++    fun schedule(context:Context,entry:ReminderEntry){ scheduleAt(context,entry.id,entry.triggerAt) }
++    private fun scheduleAt(context:Context,id:Long,at:Long){
++        val am=context.getSystemService(AlarmManager::class.java); val pi=pending(context,id)
++        if(Build.VERSION.SDK_INT>=31 && am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,pi)
++        else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,pi)
+     }
+     fun cancel(context:Context,id:Long){context.getSystemService(AlarmManager::class.java).cancel(pending(context,id))}
++    fun cancelAllForTarget(context:Context,targetType:String,targetId:Long,db:NoteDatabase=NoteDatabase(context)){
++        db.getReminders().filter{it.targetType==targetType&&it.targetId==targetId}.forEach{r->cancel(context,r.id);ReminderNotifications.cancel(context,r.id);db.deleteReminder(r.id)}
++    }
+     private fun pending(c:Context,id:Long)=PendingIntent.getBroadcast(c,id.toInt(),Intent(c,ReminderReceiver::class.java).putExtra("id",id),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+     fun rescheduleAll(context:Context){val db=NoteDatabase(context);db.getReminders().filter{it.triggerAt>System.currentTimeMillis()}.forEach{schedule(context,it)}}
++
++    fun advanceAfterFire(context:Context,r:ReminderEntry){
++        val db=NoteDatabase(context)
++        val next=when(r.scheduleType){
++            "weekly" -> {
++                if(r.dayMode=="all_day"){
++                    val hourly=r.triggerAt+60*60_000L
++                    if(ReminderTime.sameDay(hourly,r.triggerAt)) hourly else ReminderTime.nextWeekly(r.daysMask,r.baseMinutes,r.triggerAt,true)
++                }else ReminderTime.nextWeekly(r.daysMask,r.baseMinutes,r.triggerAt+60_000L)
++            }
++            else -> {
++                if(r.dayMode=="all_day"){
++                    val hourly=r.triggerAt+60*60_000L
++                    if(ReminderTime.sameDay(hourly,r.triggerAt)) hourly else 0L
++                }else 0L
++            }
++        }
++        if(next>0L){db.updateReminderTrigger(r.id,next);scheduleAt(context,r.id,next)}
++    }
++
++    fun dismissCurrent(context:Context,r:ReminderEntry){
++        val db=NoteDatabase(context); cancel(context,r.id)
++        when{
++            r.scheduleType=="once" -> db.deleteReminder(r.id)
++            r.scheduleType=="weekly" && r.dayMode=="all_day" -> {
++                val next=ReminderTime.nextWeekly(r.daysMask,r.baseMinutes,System.currentTimeMillis(),true)
++                db.updateReminderTrigger(r.id,next);scheduleAt(context,r.id,next)
++            }
++            r.scheduleType=="weekly" -> {
++                val current=db.getReminder(r.id)
++                if(current!=null && current.triggerAt<=System.currentTimeMillis()){
++                    val next=ReminderTime.nextWeekly(r.daysMask,r.baseMinutes,System.currentTimeMillis())
++                    db.updateReminderTrigger(r.id,next);scheduleAt(context,r.id,next)
++                }
++            }
++        }
++        ReminderNotifications.cancel(context,r.id)
++    }
++
++    fun snooze(context:Context,r:ReminderEntry,minutes:Int){
++        cancel(context,r.id)
++        val at=System.currentTimeMillis()+minutes*60_000L
++        NoteDatabase(context).updateReminderTrigger(r.id,at)
++        scheduleAt(context,r.id,at)
++        ReminderNotifications.cancel(context,r.id)
++    }
+ }
+ 
+-class ReminderReceiver:BroadcastReceiver(){override fun onReceive(context:Context,intent:Intent){val id=intent.getLongExtra("id",0);val r=NoteDatabase(context).getReminder(id)?:return;ReminderNotifications.show(context,r)}}
++class ReminderReceiver:BroadcastReceiver(){
++    override fun onReceive(context:Context,intent:Intent){
++        val id=intent.getLongExtra("id",0);val r=NoteDatabase(context).getReminder(id)?:return
++        ReminderNotifications.show(context,r)
++        ReminderScheduler.advanceAfterFire(context,r)
++    }
++}
+ class BootReceiver:BroadcastReceiver(){override fun onReceive(context:Context,intent:Intent){ReminderScheduler.rescheduleAll(context)}}
++
+ object ReminderNotifications{
+-    private const val CH="organizer_reminders"
++    private const val CH="organizer_reminders_v2"
+     fun show(c:Context,r:ReminderEntry){
+-        val nm=c.getSystemService(NotificationManager::class.java); if(Build.VERSION.SDK_INT>=26)nm.createNotificationChannel(NotificationChannel(CH,"Напоминания",NotificationManager.IMPORTANCE_HIGH).apply{description="Напоминания «Мой органайзер»"})
+-        val pi=PendingIntent.getActivity(c,0,Intent(c,MainActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+-        val b=NotificationCompat.Builder(c,CH).setSmallIcon(R.drawable.ic_notification).setContentTitle(r.title.ifBlank{"Напоминание"}).setContentText(r.details.ifBlank{"Откройте «Мой органайзер»"}).setAutoCancel(true).setContentIntent(pi).setPriority(NotificationCompat.PRIORITY_HIGH)
+-        if(r.sound)b.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)) else b.setSilent(true); if(r.vibrate)b.setVibrate(longArrayOf(0,300,150,300)); nm.notify(r.id.toInt(),b.build())
++        val nm=c.getSystemService(NotificationManager::class.java)
++        if(Build.VERSION.SDK_INT>=26){
++            nm.createNotificationChannel(NotificationChannel(CH,"Напоминания",NotificationManager.IMPORTANCE_HIGH).apply{
++                description="Напоминания «Мой органайзер»";lockscreenVisibility=android.app.Notification.VISIBILITY_PUBLIC
++            })
++        }
++        val alertIntent=Intent(c,ReminderAlertActivity::class.java).putExtra("id",r.id).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
++        val alertPi=PendingIntent.getActivity(c,r.id.toInt(),alertIntent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
++        val text=r.details.ifBlank{r.title.ifBlank{"Напоминание"}}
++        val b=NotificationCompat.Builder(c,CH)
++            .setSmallIcon(R.drawable.ic_notification)
++            .setContentTitle(r.title.ifBlank{"Напоминание"})
++            .setContentText(text)
++            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
++            .setAutoCancel(false)
++            .setOngoing(false)
++            .setCategory(NotificationCompat.CATEGORY_ALARM)
++            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
++            .setContentIntent(alertPi)
++            .setFullScreenIntent(alertPi,true)
++            .setPriority(NotificationCompat.PRIORITY_MAX)
++        if(r.sound)b.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)) else b.setSilent(true)
++        if(r.vibrate)b.setVibrate(longArrayOf(0,500,250,500))
++        nm.notify(r.id.toInt(),b.build())
+     }
++    fun cancel(c:Context,id:Long){c.getSystemService(NotificationManager::class.java).cancel(id.toInt())}
+ }
++
+ fun launchDateTimePicker(context:Context,initial:Long=System.currentTimeMillis()+3600_000,onSelected:(Long)->Unit){
+     val c=Calendar.getInstance().apply{timeInMillis=initial}; DatePickerDialog(context,{_,y,m,d->TimePickerDialog(context,{_,h,min->val out=Calendar.getInstance().apply{set(y,m,d,h,min,0);set(Calendar.MILLISECOND,0)};onSelected(out.timeInMillis)},c.get(Calendar.HOUR_OF_DAY),c.get(Calendar.MINUTE),true).show()},c.get(Calendar.YEAR),c.get(Calendar.MONTH),c.get(Calendar.DAY_OF_MONTH)).show()
+ }
++
++fun launchTimePicker(context:Context,initialMinutes:Int,onSelected:(Int)->Unit){
++    val h=(initialMinutes/60).coerceIn(0,23);val m=(initialMinutes%60).coerceIn(0,59)
++    TimePickerDialog(context,{_,hour,minute->onSelected(hour*60+minute)},h,m,true).show()
++}

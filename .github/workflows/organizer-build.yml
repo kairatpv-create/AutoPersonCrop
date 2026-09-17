@@ -1,4 +1,4 @@
-name: Build MyOrganizer v0.8.9
+name: Build MyOrganizer v0.9.0
 
 on:
   push:
@@ -35,30 +35,35 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Rebuild v0.8.8 base and apply v0.8.9
+      - name: Rebuild v0.8.9 and apply v0.9.0
         shell: bash
         run: |
-          mkdir -p organizer/buildsrc089
+          mkdir -p organizer/buildsrc090
           cat organizer/chunks087/part00 organizer/chunks087/part01 organizer/chunks087/part02 organizer/chunks087/part03 organizer/chunks087/part04 organizer/chunks087/part05 organizer/chunks087/part06 > organizer/MyOrganizer-v0.8.7-source.zip
-          unzip -q organizer/MyOrganizer-v0.8.7-source.zip -d organizer/buildsrc089
+          unzip -q organizer/MyOrganizer-v0.8.7-source.zip -d organizer/buildsrc090
           cat organizer/patch088/part00 organizer/patch088/part01 organizer/patch088/part02 organizer/patch088/part03 organizer/patch088/part04 > organizer/v0.8.8.patch
-          cd organizer/buildsrc089
+          cd organizer/buildsrc090
           patch -p1 < ../v0.8.8.patch
           mv MyOrganizer-v0.8.7-source MyOrganizer-v0.8.8-source
           cd MyOrganizer-v0.8.8-source
           patch -p1 < ../../v0.8.9.patch
           cd ..
           mv MyOrganizer-v0.8.8-source MyOrganizer-v0.8.9-source
+          cat ../patch090final/part00 ../patch090final/rest > ../v0.9.0-final.patch
+          cd MyOrganizer-v0.8.9-source
+          patch -p1 < ../../v0.9.0-final.patch
+          cd ..
+          mv MyOrganizer-v0.8.9-source MyOrganizer-v0.9.0-source
 
       - name: Build APK
-        working-directory: organizer/buildsrc089/MyOrganizer-v0.8.9-source
+        working-directory: organizer/buildsrc090/MyOrganizer-v0.9.0-source
         run: gradle --no-daemon assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MyOrganizer-v0.8.9-debug
-          path: organizer/buildsrc089/MyOrganizer-v0.8.9-source/app/build/outputs/apk/debug/app-debug.apk
+          name: MyOrganizer-v0.9.0-debug
+          path: organizer/buildsrc090/MyOrganizer-v0.9.0-source/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 1
 
