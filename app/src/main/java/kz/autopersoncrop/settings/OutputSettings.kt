@@ -2,45 +2,47 @@ package kz.autopersoncrop.settings
 
 import android.content.Context
 
-enum class OutputQuality(val label: String, val jpegQuality: Int) {
-    LOW("Низкое", 78),
-    MEDIUM("Среднее", 88),
-    HIGH("Оригинальное", 100),
+enum class OutputQuality(
+    val label: String,
+    val jpegQuality: Int,
+    val lossless: Boolean,
+) {
+    ORIGINAL("Оригинал • без пересжатия", 100, true),
+    HIGH("Высокое • JPEG 95", 95, false),
+    MEDIUM("Среднее • JPEG 88", 88, false),
+    COMPACT("Экономное • JPEG 80", 80, false),
 }
 
 enum class OutputResolution(val label: String, val maxLongSide: Int) {
     ORIGINAL("Оригинальное", 0),
-    UHD_4K("4K (3840 px)", 3840),
-    QHD_2K("2K (2560 px)", 2560),
-    FULL_HD("Full HD (1920 px)", 1920),
 }
 
-/**
- * AutoPersonCrop 0.5+ edits only the crop rectangle. Output is always kept at the original
- * resolution and uses the native lossless JPEG transformer, so there is no JPEG recompression.
- */
 data class OutputSettings(
-    val quality: OutputQuality = OutputQuality.HIGH,
+    val quality: OutputQuality = OutputQuality.ORIGINAL,
     val resolution: OutputResolution = OutputResolution.ORIGINAL,
 ) {
-    val strictLossless: Boolean get() = true
+    val strictLossless: Boolean get() = quality.lossless
 }
 
 class OutputSettingsStore(context: Context) {
     private val prefs = context.getSharedPreferences("output_settings", Context.MODE_PRIVATE)
 
     fun read(): OutputSettings {
-        // Migrate any old reduced-quality/reduced-resolution preference to the new lossless rule.
-        prefs.edit()
-            .putString(KEY_QUALITY, OutputQuality.HIGH.name)
-            .putString(KEY_RESOLUTION, OutputResolution.ORIGINAL.name)
-            .apply()
-        return OutputSettings(OutputQuality.HIGH, OutputResolution.ORIGINAL)
+        val qualityName = prefs.getString(KEY_QUALITY, null)
+        val quality = when (qualityName) {
+            // Migrate the previous 0.5.0 names without changing the user's original-quality default.
+            "LOW" -> OutputQuality.COMPACT
+            "MEDIUM" -> OutputQuality.MEDIUM
+            "HIGH" -> OutputQuality.ORIGINAL
+            else -> runCatching { OutputQuality.valueOf(qualityName ?: OutputQuality.ORIGINAL.name) }
+                .getOrDefault(OutputQuality.ORIGINAL)
+        }
+        return OutputSettings(quality = quality, resolution = OutputResolution.ORIGINAL)
     }
 
     fun write(settings: OutputSettings) {
         prefs.edit()
-            .putString(KEY_QUALITY, OutputQuality.HIGH.name)
+            .putString(KEY_QUALITY, settings.quality.name)
             .putString(KEY_RESOLUTION, OutputResolution.ORIGINAL.name)
             .apply()
     }

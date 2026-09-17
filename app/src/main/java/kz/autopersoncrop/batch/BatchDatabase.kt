@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import kz.autopersoncrop.io.SourcePhoto
 
 /** Persistent queue for very large batches. */
-class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queue.db", null, 3) {
+class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queue.db", null, 4) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """CREATE TABLE queue (
@@ -18,15 +18,21 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
                 status INTEGER NOT NULL DEFAULT 0,
                 message TEXT NOT NULL DEFAULT '',
                 seen INTEGER NOT NULL DEFAULT 1,
+                sort_index INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY(folder, uri)
             )""".trimIndent()
         )
         db.execSQL("CREATE INDEX idx_queue_folder_status ON queue(folder, status)")
+        db.execSQL("CREATE INDEX idx_queue_folder_sort ON queue(folder, sort_index)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) {
             runCatching { db.execSQL("ALTER TABLE queue ADD COLUMN seen INTEGER NOT NULL DEFAULT 1") }
+        }
+        if (oldVersion < 4) {
+            runCatching { db.execSQL("ALTER TABLE queue ADD COLUMN sort_index INTEGER NOT NULL DEFAULT 0") }
+            runCatching { db.execSQL("CREATE INDEX idx_queue_folder_sort ON queue(folder, sort_index)") }
         }
     }
 
@@ -37,26 +43,28 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
             db.execSQL("UPDATE queue SET seen=0 WHERE folder=?", arrayOf(folder))
 
             val insert = db.compileStatement(
-                "INSERT OR IGNORE INTO queue(folder,uri,name,rel,status,message,seen) VALUES(?,?,?,?,0,'',1)"
+                "INSERT OR IGNORE INTO queue(folder,uri,name,rel,status,message,seen,sort_index) VALUES(?,?,?,?,0,'',1,?)"
             )
             val update = db.compileStatement(
-                "UPDATE queue SET name=?, rel=?, seen=1 WHERE folder=? AND uri=?"
+                "UPDATE queue SET name=?, rel=?, seen=1, sort_index=? WHERE folder=? AND uri=?"
             )
             try {
-                for (p in photos) {
+                photos.forEachIndexed { index, p ->
                     val uri = p.uri.toString()
                     insert.clearBindings()
                     insert.bindString(1, folder)
                     insert.bindString(2, uri)
                     insert.bindString(3, p.name)
                     insert.bindString(4, p.relativeDir)
+                    insert.bindLong(5, index.toLong())
                     val row = insert.executeInsert()
                     if (row == -1L) {
                         update.clearBindings()
                         update.bindString(1, p.name)
                         update.bindString(2, p.relativeDir)
-                        update.bindString(3, folder)
-                        update.bindString(4, uri)
+                        update.bindLong(3, index.toLong())
+                        update.bindString(4, folder)
+                        update.bindString(5, uri)
                         update.executeUpdateDelete()
                     }
                 }
@@ -81,10 +89,6 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
         writableDatabase.update("queue", v, "folder=?", arrayOf(folder))
     }
 
-    /**
-     * True when the folder still contains work that a Resume action can actually process.
-     * Errors and a row left in PROCESSING after Android killed the service are deliberately resumable.
-     */
     fun hasRecoverable(folder: String): Boolean {
         if (folder.isBlank()) return false
         readableDatabase.rawQuery(
@@ -100,7 +104,7 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
     fun statuses(folder: String): HashMap<String, Int> {
         val result = HashMap<String, Int>()
         readableDatabase.query(
-            "queue", arrayOf("uri", "status"), "folder=?", arrayOf(folder), null, null, null
+            "queue", arrayOf("uri", "status"), "folder=?", arrayOf(folder), null, null, "sort_index ASC"
         ).use { c ->
             while (c.moveToNext()) result[c.getString(0)] = c.getInt(1)
         }
@@ -142,7 +146,10 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
         val errors: Int,
         val existing: Int,
         val processing: Int,
-    )
+    ) {
+        val finished: Int get() = done + noPeople + existing
+        val unresolved: Int get() = pending + processing + errors
+    }
 
     companion object {
         const val PENDING = 0

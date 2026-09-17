@@ -20,8 +20,12 @@ data class PhotoFrame(
 )
 
 class ImageFrameLoader(private val context: Context) {
-    /** YOLO itself uses ~640 px input, so larger previews only waste decode/memory work. */
-    fun load(uri: Uri, previewMaxSide: Int = 720): PhotoFrame {
+    /**
+     * Keep enough real pixels for YOLO small-person recall. The previous power-of-two loop could
+     * overshoot badly (for example 6000 px -> 375 px), then upscale that tiny preview back to the
+     * model input. We now stop before the next sample would fall below the detector target.
+     */
+    fun load(uri: Uri, detectorTargetSide: Int = 640): PhotoFrame {
         val pfd = context.contentResolver.openFileDescriptor(uri, "r")
             ?: error("Не удалось открыть изображение")
         pfd.use {
@@ -41,8 +45,10 @@ class ImageFrameLoader(private val context: Context) {
                 "Не удалось прочитать размер изображения"
             }
 
+            val longest = max(bounds.outWidth, bounds.outHeight)
             var sample = 1
-            while (max(bounds.outWidth / sample, bounds.outHeight / sample) > previewMaxSide) sample *= 2
+            while (longest / (sample * 2) >= detectorTargetSide) sample *= 2
+
             val opts = BitmapFactory.Options().apply {
                 inSampleSize = sample
                 inPreferredConfig = Bitmap.Config.ARGB_8888

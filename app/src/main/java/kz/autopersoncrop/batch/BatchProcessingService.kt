@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
 import kz.autopersoncrop.R
 import kz.autopersoncrop.io.DocumentTreeScanner
 import kz.autopersoncrop.jpeg.LosslessJpegTransformer
@@ -24,6 +25,7 @@ class BatchProcessingService : Service() {
     private lateinit var store: BatchStateStore
     private lateinit var db: BatchDatabase
     private var wakeLock: PowerManager.WakeLock? = null
+    private var lastPublishAt = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -42,7 +44,6 @@ class BatchProcessingService : Service() {
                 val sw = intent.getIntExtra(EXTRA_SCREEN_W, 1080)
                 val sh = intent.getIntExtra(EXTRA_SCREEN_H, 2400)
                 val forceRequested = intent.getBooleanExtra(EXTRA_FORCE_REPROCESS, false)
-                // A redelivered intent after process death must continue, not reset the whole batch again.
                 val forceReprocess = forceRequested && (flags and START_FLAG_REDELIVERY == 0)
                 startForegroundCompat(notification("Подготовка…", 0, 0))
                 if (running.compareAndSet(false, true)) {
@@ -55,19 +56,18 @@ class BatchProcessingService : Service() {
             CMD_PAUSE -> {
                 paused.set(true)
                 val s = store.read().copy(paused = true, message = "Пауза")
-                store.write(s); publish(s)
+                store.write(s); publish(s, force = true)
             }
             CMD_RESUME -> {
                 paused.set(false)
                 val s = store.read().copy(paused = false, message = "Обработка…")
-                store.write(s); publish(s)
+                store.write(s); publish(s, force = true)
             }
             CMD_STOP -> {
                 stopRequested.set(true)
                 paused.set(false)
             }
         }
-        // Ask Android to recreate the foreground service with the same START intent after process death.
         return START_REDELIVER_INTENT
     }
 
@@ -78,24 +78,20 @@ class BatchProcessingService : Service() {
             running = true,
             message = if (forceReprocess) "Подготовка повторной обработки…" else "Сканирование папки…",
         )
-        store.write(state, sync = true); publish(state)
+        store.write(state, sync = true); publish(state, force = true)
+
         try {
             val scanner = DocumentTreeScanner(this)
             val (cropRoot, photos) = scanner.scan(treeUri)
             db.sync(folderKey, photos)
             if (forceReprocess) db.resetFolder(folderKey)
 
-            val initial = db.counts(folderKey)
-            val statusMap = db.statuses(folderKey)
-            state = state.copy(
+            var statusMap = db.statuses(folderKey)
+            state = state.withCounts(db.counts(folderKey)).copy(
                 total = photos.size,
-                completed = initial.done,
-                noPeople = initial.noPeople,
-                skipped = initial.existing,
-                errors = initial.errors,
                 message = if (forceReprocess) "Повторная обработка ${photos.size} JPEG" else "Найдено ${photos.size} JPEG",
             )
-            store.write(state); publish(state)
+            store.write(state); publish(state, force = true)
 
             if (photos.isEmpty()) {
                 finishState(state.copy(running = false, message = "JPEG-файлы не найдены"))
@@ -103,9 +99,15 @@ class BatchProcessingService : Service() {
             }
 
             val outputSettings = OutputSettingsStore(this).read()
-            YoloLiteRtPersonDetector(this).use { detector ->
+            // Slightly lower confidence improves small/partially visible person recall without a
+            // costly multi-pass detector. NMS is a little stricter to avoid duplicate body boxes.
+            YoloLiteRtPersonDetector(
+                this,
+                confidence = 0.18f,
+                iouThreshold = 0.65f,
+            ).use { detector ->
                 state = state.copy(message = "Обработка • ${detector.accelerator} • ${outputSettings.quality.label}")
-                store.write(state); publish(state)
+                store.write(state); publish(state, force = true)
 
                 val transformer = LosslessJpegTransformer(this)
                 val processor = PhotoProcessor(
@@ -119,69 +121,139 @@ class BatchProcessingService : Service() {
 
                 for (photo in photos) {
                     val uriKey = photo.uri.toString()
-                    val prior = statusMap[uriKey]
+                    val prior = statusMap[uriKey] ?: BatchDatabase.PENDING
                     if (prior == BatchDatabase.DONE || prior == BatchDatabase.NO_PEOPLE || prior == BatchDatabase.EXISTING) continue
+
                     if (stopRequested.get()) {
-                        finishState(state.copy(running = false, paused = false, currentName = "", message = "Остановлено. Нажмите «Возобновить» — готовые файлы будут пропущены."))
+                        finishState(
+                            state.withCounts(db.counts(folderKey)).copy(
+                                running = false,
+                                paused = false,
+                                currentName = "",
+                                message = "Остановлено. Нажмите «Возобновить» — готовые файлы будут пропущены.",
+                            )
+                        )
                         return
                     }
-                    while (paused.get() && !stopRequested.get()) Thread.sleep(150)
+
+                    while (paused.get() && !stopRequested.get()) Thread.sleep(100)
                     if (stopRequested.get()) continue
 
-                    state = state.copy(currentName = photo.name, paused = false, message = "Обработка в фоне • ${detector.accelerator}")
-                    store.write(state); publish(state)
+                    state = state.copy(
+                        currentName = photo.name,
+                        paused = false,
+                        message = "Обработка в фоне • ${detector.accelerator}",
+                    )
+                    store.write(state)
+                    publish(state)
+
+                    db.mark(folderKey, uriKey, BatchDatabase.PROCESSING)
+                    statusMap[uriKey] = BatchDatabase.PROCESSING
+                    val outDir = scanner.ensureOutputDir(cropRoot, photo.relativeDir)
+
                     try {
-                        val overwriteOutput = forceReprocess || prior == BatchDatabase.ERROR || prior == BatchDatabase.PROCESSING
-                        db.mark(folderKey, uriKey, BatchDatabase.PROCESSING)
-                        statusMap[uriKey] = BatchDatabase.PROCESSING
-                        val outDir = scanner.ensureOutputDir(cropRoot, photo.relativeDir)
-                        val existingOutput = scanner.existingOutputUri(outDir, photo.name)
-                        when (processor.process(
+                        val result = processWithRetry(
+                            scanner = scanner,
+                            processor = processor,
                             photo = photo,
-                            outputDir = outDir,
-                            existingOutputUri = existingOutput,
-                            overwriteExisting = overwriteOutput,
-                        )) {
-                            ProcessResult.Cropped, ProcessResult.CopiedFull -> {
-                                db.mark(folderKey, uriKey, BatchDatabase.DONE)
-                                statusMap[uriKey] = BatchDatabase.DONE
-                                state = state.copy(completed = state.completed + 1)
-                            }
-                            ProcessResult.NoPeopleCopied -> {
-                                db.mark(folderKey, uriKey, BatchDatabase.NO_PEOPLE)
-                                statusMap[uriKey] = BatchDatabase.NO_PEOPLE
-                                state = state.copy(noPeople = state.noPeople + 1)
-                            }
-                            ProcessResult.AlreadyExists -> {
-                                db.mark(folderKey, uriKey, BatchDatabase.EXISTING)
-                                statusMap[uriKey] = BatchDatabase.EXISTING
-                                state = state.copy(skipped = state.skipped + 1)
-                            }
+                            outDir = outDir,
+                            overwriteFromStart = forceReprocess || prior == BatchDatabase.ERROR || prior == BatchDatabase.PROCESSING,
+                        )
+                        val newStatus = when (result) {
+                            ProcessResult.Cropped, ProcessResult.CopiedFull -> BatchDatabase.DONE
+                            ProcessResult.NoPeopleCopied -> BatchDatabase.NO_PEOPLE
+                            ProcessResult.AlreadyExists -> BatchDatabase.EXISTING
                         }
+                        db.mark(folderKey, uriKey, newStatus)
+                        statusMap[uriKey] = newStatus
                     } catch (t: Throwable) {
                         db.mark(folderKey, uriKey, BatchDatabase.ERROR, t.message ?: t.javaClass.simpleName)
                         statusMap[uriKey] = BatchDatabase.ERROR
-                        state = state.copy(errors = state.errors + 1, message = "Ошибка: ${t.message ?: t.javaClass.simpleName}")
                     }
-                    store.write(state); publish(state)
+
+                    // SQLite is the source of truth. Re-read aggregate counts so retries/restarts
+                    // cannot make progress exceed 100% or hide an unresolved file.
+                    state = state.withCounts(db.counts(folderKey))
+                    store.write(state)
+                    publish(state)
                 }
             }
-            finishState(state.copy(running = false, paused = false, currentName = "", message = "Готово"))
+
+            val finalCounts = db.counts(folderKey)
+            state = state.withCounts(finalCounts)
+            val finalMessage = when {
+                finalCounts.errors > 0 -> "Завершено. Ошибок: ${finalCounts.errors}. Нажмите «Возобновить» для повторной попытки."
+                finalCounts.pending + finalCounts.processing > 0 -> "Есть необработанные файлы. Нажмите «Возобновить»."
+                else -> "Готово"
+            }
+            finishState(state.copy(running = false, paused = false, currentName = "", message = finalMessage))
         } catch (t: Throwable) {
-            finishState(state.copy(running = false, paused = false, currentName = "", message = "Остановлено: ${t.message ?: t.javaClass.simpleName}. Можно возобновить."))
+            val counts = runCatching { db.counts(folderKey) }.getOrNull()
+            if (counts != null) state = state.withCounts(counts)
+            finishState(
+                state.copy(
+                    running = false,
+                    paused = false,
+                    currentName = "",
+                    message = "Остановлено: ${t.message ?: t.javaClass.simpleName}. Можно возобновить.",
+                )
+            )
         } finally {
             running.set(false)
         }
     }
 
+    private fun processWithRetry(
+        scanner: DocumentTreeScanner,
+        processor: PhotoProcessor,
+        photo: kz.autopersoncrop.io.SourcePhoto,
+        outDir: androidx.documentfile.provider.DocumentFile,
+        overwriteFromStart: Boolean,
+    ): ProcessResult {
+        var last: Throwable? = null
+        for (attempt in 1..MAX_ATTEMPTS) {
+            try {
+                scanner.invalidateOutputIndex(outDir)
+                val existing = scanner.existingOutputUri(outDir, photo.name)
+                return processor.process(
+                    photo = photo,
+                    outputDir = outDir,
+                    existingOutputUri = existing,
+                    overwriteExisting = overwriteFromStart || attempt > 1,
+                )
+            } catch (t: Throwable) {
+                last = t
+                if (attempt < MAX_ATTEMPTS) {
+                    scanner.invalidateOutputIndex(outDir)
+                    Thread.sleep(120)
+                }
+            }
+        }
+        throw last ?: IllegalStateException("Неизвестная ошибка обработки")
+    }
+
+    private fun BatchState.withCounts(c: BatchDatabase.Counts): BatchState = copy(
+        completed = c.done,
+        noPeople = c.noPeople,
+        skipped = c.existing,
+        errors = c.errors,
+    )
+
     private fun finishState(s: BatchState) {
-        store.write(s, sync = true); publish(s)
+        store.write(s, sync = true)
+        publish(s, force = true)
+        releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
-    private fun publish(s: BatchState) {
-        val done = s.completed + s.noPeople + s.skipped + s.errors
+    /** Notification/broadcast churn on every JPEG noticeably slows large folders. */
+    private fun publish(s: BatchState, force: Boolean = false) {
+        val now = SystemClock.elapsedRealtime()
+        if (!force && now - lastPublishAt < PUBLISH_INTERVAL_MS) return
+        lastPublishAt = now
+
+        val done = s.completed + s.noPeople + s.skipped
         val n = notification(
             if (s.paused) "Пауза" else s.message.ifBlank { "Обработка…" }, done, s.total
         )
@@ -222,17 +294,13 @@ class BatchProcessingService : Service() {
         }
     }
 
-    /**
-     * Removing/minimizing the Activity must not stop the user-started batch.
-     * The manifest also explicitly uses stopWithTask=false.
-     */
     override fun onTaskRemoved(rootIntent: Intent?) {
         if (running.get()) {
             val s = store.read()
             store.write(s.copy(message = "Обработка продолжается в фоне"), sync = true)
             getSystemService(NotificationManager::class.java).notify(
                 NOTIFICATION_ID,
-                notification("Обработка продолжается в фоне", s.completed + s.noPeople + s.skipped + s.errors, s.total),
+                notification("Обработка продолжается в фоне", s.completed + s.noPeople + s.skipped, s.total),
             )
         }
         super.onTaskRemoved(rootIntent)
@@ -240,9 +308,15 @@ class BatchProcessingService : Service() {
 
     override fun onTimeout(startId: Int, fgsType: Int) {
         stopRequested.set(true)
-        val s = store.read().copy(running = false, paused = false, currentName = "", message = "Системный лимит фоновой обработки. Нажмите «Возобновить» — прогресс сохранён.")
+        val s = store.read().copy(
+            running = false,
+            paused = false,
+            currentName = "",
+            message = "Системный лимит Android для mediaProcessing достигнут. Прогресс сохранён — откройте приложение и нажмите «Возобновить».",
+        )
         store.write(s, sync = true)
-        publish(s)
+        publish(s, force = true)
+        releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -252,7 +326,9 @@ class BatchProcessingService : Service() {
         val pm = getSystemService(PowerManager::class.java)
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:batch").apply {
             setReferenceCounted(false)
-            acquire(6 * 60 * 60 * 1000L)
+            // Foreground media processing has its own Android 15+ system time limit. Do not add a
+            // second arbitrary wake-lock timeout: while the service is valid, CPU must stay awake.
+            acquire()
         }
     }
 
@@ -262,8 +338,6 @@ class BatchProcessingService : Service() {
     }
 
     override fun onDestroy() {
-        // Normal completion writes running=false before stopSelf(). If Android/OEM destroys the
-        // service unexpectedly, persist an interrupted state so the Activity can offer Resume.
         if (::store.isInitialized) {
             val s = store.read()
             if (s.running && !stopRequested.get()) {
@@ -300,6 +374,8 @@ class BatchProcessingService : Service() {
         private const val EXTRA_FORCE_REPROCESS = "force_reprocess"
         private const val CHANNEL_ID = "processing"
         private const val NOTIFICATION_ID = 77
+        private const val MAX_ATTEMPTS = 2
+        private const val PUBLISH_INTERVAL_MS = 650L
 
         fun command(
             context: Context,

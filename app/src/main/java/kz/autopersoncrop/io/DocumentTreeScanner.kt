@@ -11,6 +11,7 @@ data class SourcePhoto(
     val name: String,
     val mime: String,
     val relativeDir: String,
+    val lastModified: Long = 0L,
 )
 
 class DocumentTreeScanner(private val context: Context) {
@@ -40,6 +41,7 @@ class DocumentTreeScanner(private val context: Context) {
             DocumentsContract.Document.COLUMN_DOCUMENT_ID,
             DocumentsContract.Document.COLUMN_DISPLAY_NAME,
             DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
         )
 
         while (queue.isNotEmpty()) {
@@ -49,6 +51,7 @@ class DocumentTreeScanner(private val context: Context) {
                 val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
                 val nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
                 val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                val modifiedCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
 
                 while (cursor.moveToNext()) {
                     val docId = cursor.getString(idCol) ?: continue
@@ -64,14 +67,27 @@ class DocumentTreeScanner(private val context: Context) {
 
                     val lower = name.lowercase()
                     if (mime !in accepted && !lower.endsWith(".jpg") && !lower.endsWith(".jpeg")) continue
+                    val modified = if (modifiedCol >= 0 && !cursor.isNull(modifiedCol)) cursor.getLong(modifiedCol) else 0L
                     photos += SourcePhoto(
                         uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId),
                         name = name,
                         mime = mime.ifBlank { "image/jpeg" },
                         relativeDir = node.relative,
+                        lastModified = modified,
                     )
                 }
             }
+        }
+
+        // SAF providers are free to return children in any order. Process explicitly in source
+        // chronology so files written to CROP keep a stable, predictable sequence in galleries.
+        photos.sortWith { a, b ->
+            val dir = a.relativeDir.compareTo(b.relativeDir, ignoreCase = true)
+            if (dir != 0) return@sortWith dir
+            if (a.lastModified > 0L && b.lastModified > 0L && a.lastModified != b.lastModified) {
+                return@sortWith a.lastModified.compareTo(b.lastModified)
+            }
+            naturalCompare(a.name, b.name)
         }
 
         return output to photos
@@ -96,14 +112,14 @@ class DocumentTreeScanner(private val context: Context) {
         return current
     }
 
-    /**
-     * Index one output directory once. This avoids DocumentFile.findFile(name) for every image,
-     * which becomes extremely expensive when CROP already contains hundreds or thousands of files.
-     */
     fun existingOutputUri(outputDir: DocumentFile, name: String): Uri? {
         val key = outputDir.uri.toString()
         val index = outputFilesCache.getOrPut(key) { readOutputIndex(outputDir.uri) }
         return index[name]
+    }
+
+    fun invalidateOutputIndex(outputDir: DocumentFile) {
+        outputFilesCache.remove(outputDir.uri.toString())
     }
 
     private fun readOutputIndex(dirUri: Uri): Map<String, Uri> {
@@ -124,6 +140,34 @@ class DocumentTreeScanner(private val context: Context) {
             }
         }
         return map
+    }
+
+    private fun naturalCompare(a: String, b: String): Int {
+        var ia = 0
+        var ib = 0
+        while (ia < a.length && ib < b.length) {
+            val ca = a[ia]
+            val cb = b[ib]
+            if (ca.isDigit() && cb.isDigit()) {
+                var ea = ia
+                var eb = ib
+                while (ea < a.length && a[ea].isDigit()) ea++
+                while (eb < b.length && b[eb].isDigit()) eb++
+                val na = a.substring(ia, ea).trimStart('0').ifEmpty { "0" }
+                val nb = b.substring(ib, eb).trimStart('0').ifEmpty { "0" }
+                if (na.length != nb.length) return na.length.compareTo(nb.length)
+                val n = na.compareTo(nb)
+                if (n != 0) return n
+                ia = ea
+                ib = eb
+                continue
+            }
+            val c = ca.lowercaseChar().compareTo(cb.lowercaseChar())
+            if (c != 0) return c
+            ia++
+            ib++
+        }
+        return a.length.compareTo(b.length)
     }
 
     private fun cacheKey(rootOutput: DocumentFile, relative: String) =

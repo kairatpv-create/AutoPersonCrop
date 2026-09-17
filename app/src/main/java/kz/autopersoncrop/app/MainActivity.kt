@@ -7,6 +7,8 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.widget.*
@@ -16,6 +18,9 @@ import kz.autopersoncrop.R
 import kz.autopersoncrop.batch.BatchDatabase
 import kz.autopersoncrop.batch.BatchProcessingService
 import kz.autopersoncrop.batch.BatchStateStore
+import kz.autopersoncrop.settings.OutputQuality
+import kz.autopersoncrop.settings.OutputSettings
+import kz.autopersoncrop.settings.OutputSettingsStore
 import kz.autopersoncrop.settings.ThemeMode
 import kz.autopersoncrop.settings.ThemeSettingsStore
 import kz.autopersoncrop.settings.applyStoredTheme
@@ -59,7 +64,10 @@ class MainActivity : AppCompatActivity() {
         else @Suppress("DEPRECATION") registerReceiver(receiver, filter)
 
         repairStaleRunState()
-        if (mainScreenVisible) refreshState()
+        if (mainScreenVisible) {
+            refreshSettings()
+            refreshState()
+        }
     }
 
     override fun onStop() {
@@ -210,7 +218,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun showSettings() {
         val themeStore = ThemeSettingsStore(this)
+        val outputStore = OutputSettingsStore(this)
         val currentTheme = themeStore.read()
+        val currentOutput = outputStore.read()
         val density = resources.displayMetrics.density
         fun dp(v: Int) = (v * density).toInt()
 
@@ -231,22 +241,56 @@ class MainActivity : AppCompatActivity() {
             )
             setSelection(ThemeMode.entries.indexOf(currentTheme))
         }
+
         val qualityLabel = TextView(this).apply {
-            text = "Фото"
+            text = "Качество изображения"
             setTypeface(typeface, Typeface.BOLD)
             setPadding(0, dp(16), 0, 0)
         }
+        val qualitySpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                OutputQuality.entries.map { it.label }
+            )
+            setSelection(OutputQuality.entries.indexOf(currentOutput.quality))
+        }
         val qualityInfo = TextView(this).apply {
-            text = "Оригинальное разрешение • JPEG без пересжатия. Приложение меняет только область кадра и не добавляет рамки или фон."
+            text = "Размер изображения не уменьшается. «Оригинал» использует lossless JPEG crop без пересжатия; остальные варианты пересжимают только результат в выбранном качестве. Оригинал фотографии никогда не изменяется."
             textSize = 13f
             alpha = 0.78f
             setPadding(0, dp(6), 0, 0)
         }
 
+        val backgroundLabel = TextView(this).apply {
+            text = "Фоновая работа"
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, dp(16), 0, 0)
+        }
+        val pm = getSystemService(PowerManager::class.java)
+        val batteryInfo = TextView(this).apply {
+            text = if (pm.isIgnoringBatteryOptimizations(packageName)) {
+                "Системная оптимизация батареи для приложения отключена. Обработка может продолжаться при погашенном экране."
+            } else {
+                "Оптимизация батареи включена. На Honor рекомендуется разрешить AutoPersonCrop работу без ограничений/в фоне, иначе MagicOS может остановить длительную обработку."
+            }
+            textSize = 13f
+            alpha = 0.78f
+            setPadding(0, dp(6), 0, dp(6))
+        }
+        val batteryButton = Button(this).apply {
+            text = "Настройки фоновой работы"
+            setOnClickListener { openBatterySettings() }
+        }
+
         box.addView(themeLabel)
         box.addView(themeSpinner)
         box.addView(qualityLabel)
+        box.addView(qualitySpinner)
         box.addView(qualityInfo)
+        box.addView(backgroundLabel)
+        box.addView(batteryInfo)
+        box.addView(batteryButton)
 
         AlertDialog.Builder(this)
             .setTitle("Настройки")
@@ -254,7 +298,9 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton("Назад", null)
             .setPositiveButton("Сохранить") { _, _ ->
                 val selectedTheme = ThemeMode.entries[themeSpinner.selectedItemPosition]
+                val selectedQuality = OutputQuality.entries[qualitySpinner.selectedItemPosition]
                 themeStore.write(selectedTheme)
+                outputStore.write(OutputSettings(quality = selectedQuality))
                 if (selectedTheme != currentTheme) {
                     recreate()
                 } else {
@@ -263,6 +309,12 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             .show()
+    }
+
+    private fun openBatterySettings() {
+        val primary = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+        val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+        runCatching { startActivity(primary) }.onFailure { startActivity(fallback) }
     }
 
     private fun showPrivacyPolicy() {
@@ -296,7 +348,7 @@ class MainActivity : AppCompatActivity() {
             setTypeface(typeface, Typeface.BOLD)
         }
         val subtitle = TextView(this).apply {
-            text = "Офлайн • lossless-кроп • работа в фоне"
+            text = "Офлайн • автоцентрирование людей • работа в фоне"
             textSize = 15f
             setPadding(0, dp(6), 0, dp(18))
         }
@@ -350,7 +402,7 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { BatchProcessingService.command(this@MainActivity, BatchProcessingService.CMD_STOP) }
         }
         val note = TextView(this).apply {
-            text = "Оригиналы не изменяются. Результат сохраняется в CROP без пересжатия JPEG. После остановки используйте «Возобновить» — уже готовые фото будут пропущены. «Переработать заново» заменяет только готовые результаты в CROP."
+            text = "Оригиналы не изменяются. Результаты сохраняются в CROP. При «Оригинал • без пересжатия» используется lossless JPEG crop. После остановки используйте «Возобновить» — готовые фото будут пропущены."
             textSize = 13f
             gravity = Gravity.START
             setPadding(0, dp(18), 0, 0)
@@ -384,19 +436,20 @@ class MainActivity : AppCompatActivity() {
     private fun refreshSettings() {
         if (!mainScreenVisible) return
         val theme = ThemeSettingsStore(this).read()
-        settingsText.text = "Фото: оригинал без пересжатия   •   Тема: ${theme.label}"
+        val output = OutputSettingsStore(this).read()
+        settingsText.text = "Фото: ${output.quality.label}   •   Тема: ${theme.label}"
     }
 
     private fun refreshState() {
         if (!mainScreenVisible) return
         val s = BatchStateStore(this).read()
-        val done = s.completed + s.skipped + s.errors + s.noPeople
+        val done = s.completed + s.skipped + s.noPeople
         val pct = if (s.total > 0) done.toDouble() / s.total else 0.0
         progress.progress = (pct * 1000).toInt().coerceIn(0, 1000)
         stateText.text = buildString {
             append("Найдено: ${s.total}\n")
             append("Готово: ${s.completed}   Без людей: ${s.noPeople}\n")
-            append("Пропущено: ${s.skipped}   Ошибки: ${s.errors}\n")
+            append("Пропущено готовых: ${s.skipped}   Ошибки: ${s.errors}\n")
             if (s.currentName.isNotBlank()) append("Сейчас: ${s.currentName}\n")
             append(if (s.running) if (s.paused) "Пауза" else s.message.ifBlank { "Обработка…" } else s.message.ifBlank { "Готов к запуску" })
         }
@@ -412,7 +465,7 @@ class MainActivity : AppCompatActivity() {
                 s.message.contains("прерван", ignoreCase = true) ||
                 s.message.contains("возобнов", ignoreCase = true) ||
                 s.errors > 0 ||
-                (s.total > 0 && done < s.total)
+                (s.total > 0 && done + s.errors < s.total)
             )
         val recoverable = recoverableFromQueue || interruptedByState
 
