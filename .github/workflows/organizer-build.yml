@@ -35,27 +35,14 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Rebuild v0.8.9 and apply v0.9.0
+      - name: Restore v0.9.0 source
         shell: bash
         run: |
           mkdir -p organizer/buildsrc090
-          cat organizer/chunks087/part00 organizer/chunks087/part01 organizer/chunks087/part02 organizer/chunks087/part03 organizer/chunks087/part04 organizer/chunks087/part05 organizer/chunks087/part06 > organizer/MyOrganizer-v0.8.7-source.zip
-          unzip -q organizer/MyOrganizer-v0.8.7-source.zip -d organizer/buildsrc090
-          cat organizer/patch088/part00 organizer/patch088/part01 organizer/patch088/part02 organizer/patch088/part03 organizer/patch088/part04 > organizer/v0.8.8.patch
-          cd organizer/buildsrc090
-          patch -p1 < ../v0.8.8.patch
-          mv MyOrganizer-v0.8.7-source MyOrganizer-v0.8.8-source
-          cd MyOrganizer-v0.8.8-source
-          patch -p1 < ../../v0.8.9.patch
-          cd ..
-          mv MyOrganizer-v0.8.8-source MyOrganizer-v0.8.9-source
-          cat ../patch090final/part00 > ../v0.9.0-final.patch
-          printf '\n' >> ../v0.9.0-final.patch
-          cat ../patch090final/rest >> ../v0.9.0-final.patch
-          cd MyOrganizer-v0.8.9-source
-          patch -p1 < ../../v0.9.0-final.patch
-          cd ..
-          mv MyOrganizer-v0.8.9-source MyOrganizer-v0.9.0-source
+          cat organizer/v090tar/part00 organizer/v090tar/part01 organizer/v090tar/part02 organizer/v090tar/part03 > organizer/MyOrganizer-v0.9.0-source.tar.xz.b64
+          base64 -d organizer/MyOrganizer-v0.9.0-source.tar.xz.b64 > organizer/MyOrganizer-v0.9.0-source.tar.xz
+          tar -xJf organizer/MyOrganizer-v0.9.0-source.tar.xz -C organizer/buildsrc090
+          test -f organizer/buildsrc090/MyOrganizer-v0.9.0-source/app/build.gradle.kts
 
       - name: Build APK
         working-directory: organizer/buildsrc090/MyOrganizer-v0.9.0-source
