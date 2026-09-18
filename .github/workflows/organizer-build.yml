@@ -43,6 +43,7 @@ jobs:
           base64 -d organizer/MyOrganizer-v0.9.0-source.tar.xz.b64 > organizer/MyOrganizer-v0.9.0-source.tar.xz
           tar -xJf organizer/MyOrganizer-v0.9.0-source.tar.xz -C organizer/buildsrc090
           test -f organizer/buildsrc090/MyOrganizer-v0.9.0-source/app/build.gradle.kts
+          sed -i 's/recorder.start("project_${project.id}")/recorder.start()/g' organizer/buildsrc090/MyOrganizer-v0.9.0-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
 
       - name: Build APK
         working-directory: organizer/buildsrc090/MyOrganizer-v0.9.0-source
