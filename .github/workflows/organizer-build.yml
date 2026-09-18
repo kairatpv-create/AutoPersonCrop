@@ -49,7 +49,9 @@ jobs:
           patch -p1 < ../../v0.8.9.patch
           cd ..
           mv MyOrganizer-v0.8.8-source MyOrganizer-v0.8.9-source
-          cat ../patch090final/part00 ../patch090final/rest > ../v0.9.0-final.patch
+          cat ../patch090final/part00 > ../v0.9.0-final.patch
+          printf '\n' >> ../v0.9.0-final.patch
+          cat ../patch090final/rest >> ../v0.9.0-final.patch
           cd MyOrganizer-v0.8.9-source
           patch -p1 < ../../v0.9.0-final.patch
           cd ..
