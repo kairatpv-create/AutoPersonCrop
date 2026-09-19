@@ -1,19 +1,33 @@
 package kz.autopersoncrop.app
 
 import android.Manifest
-import android.content.*
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
+import android.provider.DocumentsContract
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
-import android.widget.*
+import android.widget.ArrayAdapter
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.ScrollView
+import android.widget.Spinner
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import kz.autopersoncrop.BuildConfig
 import kz.autopersoncrop.R
 import kz.autopersoncrop.batch.BatchDatabase
 import kz.autopersoncrop.batch.BatchProcessingService
@@ -96,12 +110,43 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun appButton(label: String): Button = Button(this).apply {
+        text = label
+        isAllCaps = false
+        textSize = 16f
+        minHeight = dp(48)
+        setPadding(dp(12), 0, dp(12), 0)
+    }
+
+    /**
+     * Android 15/16 draw apps edge-to-edge. Apply the actual status/navigation/cutout insets
+     * around every full-screen page so controls never disappear under system UI.
+     */
+    private fun setSafeScrollableContent(content: View) {
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            clipToPadding = false
+            addView(content)
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(scroll) { view, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
+        setContentView(scroll)
+        ViewCompat.requestApplyInsets(scroll)
+    }
+
     private fun repairStaleRunState() {
         val store = BatchStateStore(this)
-        val s = store.read()
-        if (s.running && !BatchProcessingService.serviceActive) {
+        val state = store.read()
+        if (state.running && !BatchProcessingService.serviceActive) {
             store.write(
-                s.copy(
+                state.copy(
                     running = false,
                     paused = false,
                     currentName = "",
@@ -114,11 +159,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun showFolderSelectionScreen() {
         mainScreenVisible = false
-        val density = resources.displayMetrics.density
-        fun dp(v: Int) = (v * density).toInt()
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(28), dp(24), dp(28))
+            setPadding(dp(20), dp(16), dp(20), dp(20))
         }
         val title = TextView(this).apply {
             text = "Выбор папки"
@@ -126,16 +169,14 @@ class MainActivity : AppCompatActivity() {
             setTypeface(typeface, Typeface.BOLD)
         }
         val current = TextView(this).apply {
-            text = treeUri?.let { "Текущая папка:\n$it" } ?: "Папка пока не выбрана"
+            text = treeUri?.let { "Текущая папка: ${displayFolderName(it)}" } ?: "Папка пока не выбрана"
             textSize = 14f
-            setPadding(0, dp(14), 0, dp(14))
+            setPadding(0, dp(12), 0, dp(12))
         }
-        val open = Button(this).apply {
-            text = "Открыть системный выбор папки"
+        val open = appButton("Открыть выбор папки").apply {
             setOnClickListener { launchSystemFolderPicker() }
         }
-        val back = Button(this).apply {
-            text = "← Назад"
+        val back = appButton("← Назад").apply {
             setOnClickListener {
                 buildMainUi()
                 refreshFolder()
@@ -145,27 +186,31 @@ class MainActivity : AppCompatActivity() {
             }
         }
         val hint = TextView(this).apply {
-            text = "В системном окне Android также можно вернуться стрелкой ←. Приложение получает доступ только к выбранной вами папке."
+            text = "Приложение получает доступ только к выбранной вами папке."
             textSize = 13f
-            alpha = 0.75f
-            setPadding(0, dp(14), 0, 0)
+            alpha = 0.72f
+            setPadding(0, dp(10), 0, 0)
         }
         listOf(title, current, open, back, hint).forEach {
-            root.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = dp(8)
-            })
+            root.addView(
+                it,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { bottomMargin = dp(8) }
+            )
         }
-        setContentView(root)
+        setSafeScrollableContent(root)
     }
 
     private fun launchSystemFolderPicker() {
-        val i = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
             addFlags(Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
         }
-        @Suppress("DEPRECATION") startActivityForResult(i, REQ_TREE)
+        @Suppress("DEPRECATION") startActivityForResult(intent, REQ_TREE)
     }
 
     private fun startBatch() {
@@ -198,7 +243,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun startBatchFor(uri: Uri, forceReprocess: Boolean = false) {
         val bounds = if (Build.VERSION.SDK_INT >= 30) windowManager.maximumWindowMetrics.bounds else {
-            @Suppress("DEPRECATION") android.graphics.Rect(0, 0, resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
+            @Suppress("DEPRECATION") android.graphics.Rect(
+                0,
+                0,
+                resources.displayMetrics.widthPixels,
+                resources.displayMetrics.heightPixels,
+            )
         }
         BatchProcessingService.command(
             this,
@@ -212,8 +262,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun togglePause() {
         val state = BatchStateStore(this).read()
-        val cmd = if (state.paused) BatchProcessingService.CMD_RESUME else BatchProcessingService.CMD_PAUSE
-        BatchProcessingService.command(this, cmd)
+        val command = if (state.paused) BatchProcessingService.CMD_RESUME else BatchProcessingService.CMD_PAUSE
+        BatchProcessingService.command(this, command)
     }
 
     private fun showSettings() {
@@ -221,65 +271,65 @@ class MainActivity : AppCompatActivity() {
         val outputStore = OutputSettingsStore(this)
         val currentTheme = themeStore.read()
         val currentOutput = outputStore.read()
-        val density = resources.displayMetrics.density
-        fun dp(v: Int) = (v * density).toInt()
 
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(8), dp(20), 0)
+            setPadding(dp(20), dp(8), dp(20), dp(8))
         }
 
         val themeLabel = TextView(this).apply {
-            text = "Оформление"
+            text = "Тема"
+            textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
         }
         val themeSpinner = Spinner(this).apply {
             adapter = ArrayAdapter(
                 this@MainActivity,
                 android.R.layout.simple_spinner_dropdown_item,
-                ThemeMode.entries.map { it.label }
+                ThemeMode.entries.map { it.label },
             )
             setSelection(ThemeMode.entries.indexOf(currentTheme))
         }
 
         val qualityLabel = TextView(this).apply {
             text = "Качество изображения"
+            textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
-            setPadding(0, dp(16), 0, 0)
+            setPadding(0, dp(14), 0, 0)
         }
         val qualitySpinner = Spinner(this).apply {
             adapter = ArrayAdapter(
                 this@MainActivity,
                 android.R.layout.simple_spinner_dropdown_item,
-                OutputQuality.entries.map { it.label }
+                OutputQuality.entries.map { it.label },
             )
             setSelection(OutputQuality.entries.indexOf(currentOutput.quality))
         }
         val qualityInfo = TextView(this).apply {
-            text = "Размер изображения не уменьшается. «Оригинал» использует lossless JPEG crop без пересжатия; остальные варианты пересжимают только результат в выбранном качестве. Оригинал фотографии никогда не изменяется."
+            text = "«Оригинал» сохраняет lossless JPEG crop без пересжатия. Остальные варианты пересжимают только готовый результат."
             textSize = 13f
-            alpha = 0.78f
-            setPadding(0, dp(6), 0, 0)
+            alpha = 0.75f
+            setPadding(0, dp(5), 0, 0)
         }
 
         val backgroundLabel = TextView(this).apply {
-            text = "Фоновая работа"
+            text = "Работа в фоне"
+            textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
-            setPadding(0, dp(16), 0, 0)
+            setPadding(0, dp(14), 0, 0)
         }
-        val pm = getSystemService(PowerManager::class.java)
+        val powerManager = getSystemService(PowerManager::class.java)
         val batteryInfo = TextView(this).apply {
-            text = if (pm.isIgnoringBatteryOptimizations(packageName)) {
-                "Системная оптимизация батареи для приложения отключена. Обработка может продолжаться при погашенном экране."
+            text = if (powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                "Ограничение батареи отключено — обработка может продолжаться при погашенном экране."
             } else {
-                "Оптимизация батареи включена. На Honor рекомендуется разрешить AutoPersonCrop работу без ограничений/в фоне, иначе MagicOS может остановить длительную обработку."
+                "Для длительной обработки на Honor разрешите приложению работу без ограничений."
             }
             textSize = 13f
-            alpha = 0.78f
-            setPadding(0, dp(6), 0, dp(6))
+            alpha = 0.75f
+            setPadding(0, dp(5), 0, dp(5))
         }
-        val batteryButton = Button(this).apply {
-            text = "Настройки фоновой работы"
+        val batteryButton = appButton("Настройки фоновой работы").apply {
             setOnClickListener { openBatterySettings() }
         }
 
@@ -292,9 +342,10 @@ class MainActivity : AppCompatActivity() {
         box.addView(batteryInfo)
         box.addView(batteryButton)
 
+        val scroll = ScrollView(this).apply { addView(box) }
         AlertDialog.Builder(this)
             .setTitle("Настройки")
-            .setView(box)
+            .setView(scroll)
             .setNegativeButton("Назад", null)
             .setPositiveButton("Сохранить") { _, _ ->
                 val selectedTheme = ThemeMode.entries[themeSpinner.selectedItemPosition]
@@ -317,18 +368,30 @@ class MainActivity : AppCompatActivity() {
         runCatching { startActivity(primary) }.onFailure { startActivity(fallback) }
     }
 
+    private fun showAbout() {
+        AlertDialog.Builder(this)
+            .setTitle("О приложении")
+            .setMessage(
+                "${getString(R.string.app_name)}  ${BuildConfig.VERSION_NAME}\n\n" +
+                    "Автоматическая обрезка фотографий с распознаванием людей. Работает полностью офлайн. " +
+                    "Оригиналы не изменяются, готовые фотографии сохраняются в папке CROP.\n\n" +
+                    getString(R.string.developer_label)
+            )
+            .setNeutralButton("Конфиденциальность") { _, _ -> showPrivacyPolicy() }
+            .setPositiveButton("Закрыть", null)
+            .show()
+    }
+
     private fun showPrivacyPolicy() {
         AlertDialog.Builder(this)
             .setTitle("Конфиденциальность")
             .setMessage(
                 "Auto Person Crop обрабатывает фотографии только на вашем устройстве.\n\n" +
-                    "• Приложение не запрашивает доступ к Интернету и не отправляет фотографии, имена файлов или результаты обработки на серверы.\n" +
-                    "• Доступ предоставляется только к папке, которую вы сами выбираете через системное окно Android.\n" +
-                    "• Состояние очереди, выбранная папка и прогресс обработки сохраняются локально на устройстве для продолжения после прерывания.\n" +
-                    "• Оригиналы фотографий не изменяются. Результаты сохраняются в папке CROP.\n" +
-                    "• В приложении нет рекламы, аналитики, регистрации и стороннего облачного хранилища.\n" +
-                    "• Резервное копирование данных приложения средствами Android отключено.\n\n" +
-                    getString(R.string.developer_label)
+                    "• Интернет не используется, фотографии и результаты никуда не отправляются.\n" +
+                    "• Доступ предоставляется только к выбранной вами папке.\n" +
+                    "• Очередь и прогресс сохраняются локально для продолжения после прерывания.\n" +
+                    "• Оригиналы не изменяются. Результаты сохраняются в CROP.\n" +
+                    "• В приложении нет рекламы, аналитики, регистрации и облачного хранилища."
             )
             .setPositiveButton("Понятно", null)
             .show()
@@ -336,99 +399,151 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildMainUi() {
         mainScreenVisible = true
-        val density = resources.displayMetrics.density
-        fun dp(v: Int) = (v * density).toInt()
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(28), dp(24), dp(28))
+            setPadding(dp(20), dp(12), dp(20), dp(18))
         }
+
         val title = TextView(this).apply {
             text = getString(R.string.app_name)
-            textSize = 26f
+            textSize = 25f
             setTypeface(typeface, Typeface.BOLD)
         }
         val subtitle = TextView(this).apply {
-            text = "Офлайн • автоцентрирование людей • работа в фоне"
-            textSize = 15f
-            setPadding(0, dp(6), 0, dp(18))
-        }
-        val developer = TextView(this).apply {
-            text = getString(R.string.developer_label)
+            text = "Автокадрирование людей • полностью офлайн"
             textSize = 13f
-            alpha = 0.72f
-            setPadding(0, 0, 0, dp(14))
+            alpha = 0.78f
+            setPadding(0, dp(3), 0, dp(12))
         }
-        folderText = TextView(this).apply { textSize = 15f }
-        val choose = Button(this).apply {
-            text = "Выбрать папку"
+
+        folderText = TextView(this).apply {
+            textSize = 14f
+            setPadding(0, 0, 0, dp(5))
+        }
+        val choose = appButton("Выбрать папку").apply {
             setOnClickListener { showFolderSelectionScreen() }
+        }
+
+        val settingsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(5), 0, dp(5))
         }
         settingsText = TextView(this).apply {
             textSize = 13f
-            alpha = 0.8f
-            setPadding(0, dp(4), 0, dp(4))
+            alpha = 0.78f
         }
-        val settings = Button(this).apply {
-            text = "Настройки"
+        val settings = appButton("⚙ Настройки").apply {
+            textSize = 14f
             setOnClickListener { showSettings() }
         }
+        settingsRow.addView(
+            settingsText,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = dp(8)
+            },
+        )
+        settingsRow.addView(
+            settings,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 1000
             progress = 0
         }
         stateText = TextView(this).apply {
-            textSize = 16f
-            setPadding(0, dp(10), 0, dp(10))
+            textSize = 15f
+            setPadding(0, dp(8), 0, dp(8))
         }
-        startButton = Button(this).apply {
-            text = "Обработать всё"
+
+        startButton = appButton("Обработать всё").apply {
             setOnClickListener { startBatch() }
         }
-        resumeButton = Button(this).apply {
-            text = "▶ Возобновить"
+        resumeButton = appButton("▶ Возобновить").apply {
             visibility = View.GONE
             setOnClickListener { resumeBatch() }
         }
-        reprocessButton = Button(this).apply {
-            text = "↻ Переработать заново"
+        reprocessButton = appButton("↻ Переработать заново").apply {
+            textSize = 14f
             setOnClickListener { confirmReprocess() }
         }
-        pauseButton = Button(this).apply {
-            text = "Пауза"
+        pauseButton = appButton("Пауза").apply {
             setOnClickListener { togglePause() }
         }
-        val stop = Button(this).apply {
-            text = "Остановить"
-            setOnClickListener { BatchProcessingService.command(this@MainActivity, BatchProcessingService.CMD_STOP) }
+        val stopButton = appButton("Остановить").apply {
+            setOnClickListener {
+                BatchProcessingService.command(this@MainActivity, BatchProcessingService.CMD_STOP)
+            }
         }
+        val runningControls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        runningControls.addView(
+            pauseButton,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = dp(4)
+            },
+        )
+        runningControls.addView(
+            stopButton,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(4)
+            },
+        )
+
         val note = TextView(this).apply {
-            text = "Оригиналы не изменяются. Результаты сохраняются в CROP. При «Оригинал • без пересжатия» используется lossless JPEG crop. После остановки используйте «Возобновить» — готовые фото будут пропущены."
+            text = "Оригиналы не изменяются  •  Результаты: CROP"
             textSize = 13f
-            gravity = Gravity.START
-            setPadding(0, dp(18), 0, 0)
+            alpha = 0.76f
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, dp(8), 0, dp(4))
         }
-        val privacy = Button(this).apply {
-            text = "Конфиденциальность"
-            setOnClickListener { showPrivacyPolicy() }
+        val about = appButton("О приложении").apply {
+            textSize = 14f
+            setOnClickListener { showAbout() }
         }
-        listOf(
-            title, subtitle, developer, folderText, choose, settingsText, settings,
-            progress, stateText, startButton, resumeButton, reprocessButton, pauseButton, stop, note, privacy
-        ).forEach {
-            root.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = dp(8)
-            })
+
+        fun add(view: View, bottom: Int = 7) {
+            root.addView(
+                view,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { bottomMargin = dp(bottom) },
+            )
         }
-        val scroll = ScrollView(this).apply {
-            isFillViewport = true
-            addView(root)
-        }
-        setContentView(scroll)
+
+        add(title, 0)
+        add(subtitle, 4)
+        add(folderText, 0)
+        add(choose, 5)
+        add(settingsRow, 6)
+        add(progress, 2)
+        add(stateText, 4)
+        add(startButton)
+        add(resumeButton)
+        add(reprocessButton)
+        add(runningControls)
+        add(note, 4)
+        add(about, 0)
+
+        setSafeScrollableContent(root)
+    }
+
+    private fun displayFolderName(uri: Uri): String = runCatching {
+        val decoded = Uri.decode(DocumentsContract.getTreeDocumentId(uri))
+        decoded.substringAfter(':', decoded).ifBlank { decoded }
+    }.getOrElse {
+        Uri.decode(uri.lastPathSegment ?: "выбрана")
     }
 
     private fun refreshFolder() {
         if (!mainScreenVisible) return
-        folderText.text = treeUri?.let { "Папка: $it" } ?: "Папка не выбрана"
+        folderText.text = treeUri?.let { "Папка: ${displayFolderName(it)}" } ?: "Папка не выбрана"
         startButton.isEnabled = treeUri != null
         reprocessButton.isEnabled = treeUri != null
     }
@@ -437,49 +552,57 @@ class MainActivity : AppCompatActivity() {
         if (!mainScreenVisible) return
         val theme = ThemeSettingsStore(this).read()
         val output = OutputSettingsStore(this).read()
-        settingsText.text = "Фото: ${output.quality.label}   •   Тема: ${theme.label}"
+        settingsText.text = "${output.quality.label}\n${theme.label}"
     }
 
     private fun refreshState() {
         if (!mainScreenVisible) return
-        val s = BatchStateStore(this).read()
-        val done = s.completed + s.skipped + s.noPeople
-        val pct = if (s.total > 0) done.toDouble() / s.total else 0.0
+        val state = BatchStateStore(this).read()
+        val done = state.completed + state.skipped + state.noPeople
+        val pct = if (state.total > 0) done.toDouble() / state.total else 0.0
         progress.progress = (pct * 1000).toInt().coerceIn(0, 1000)
         stateText.text = buildString {
-            append("Найдено: ${s.total}\n")
-            append("Готово: ${s.completed}   Без людей: ${s.noPeople}\n")
-            append("Пропущено готовых: ${s.skipped}   Ошибки: ${s.errors}\n")
-            if (s.currentName.isNotBlank()) append("Сейчас: ${s.currentName}\n")
-            append(if (s.running) if (s.paused) "Пауза" else s.message.ifBlank { "Обработка…" } else s.message.ifBlank { "Готов к запуску" })
+            append("Найдено: ${state.total}    Готово: ${state.completed}\n")
+            append("Без людей: ${state.noPeople}    Пропущено: ${state.skipped}    Ошибки: ${state.errors}\n")
+            if (state.currentName.isNotBlank()) append("Сейчас: ${state.currentName}\n")
+            append(
+                if (state.running) {
+                    if (state.paused) "Пауза" else state.message.ifBlank { "Обработка…" }
+                } else {
+                    state.message.ifBlank { "Готов к запуску" }
+                }
+            )
         }
 
-        val recoverableFromQueue = if (!s.running && s.folderUri.isNotBlank()) {
+        val recoverableFromQueue = if (!state.running && state.folderUri.isNotBlank()) {
             runCatching {
-                BatchDatabase(this).use { it.hasRecoverable(s.folderUri) }
+                BatchDatabase(this).use { it.hasRecoverable(state.folderUri) }
             }.getOrDefault(false)
         } else false
 
-        val interruptedByState = !s.running && s.folderUri.isNotBlank() && (
-            s.message.contains("останов", ignoreCase = true) ||
-                s.message.contains("прерван", ignoreCase = true) ||
-                s.message.contains("возобнов", ignoreCase = true) ||
-                s.errors > 0 ||
-                (s.total > 0 && done + s.errors < s.total)
+        val interruptedByState = !state.running && state.folderUri.isNotBlank() && (
+            state.message.contains("останов", ignoreCase = true) ||
+                state.message.contains("прерван", ignoreCase = true) ||
+                state.message.contains("возобнов", ignoreCase = true) ||
+                state.errors > 0 ||
+                (state.total > 0 && done + state.errors < state.total)
             )
         val recoverable = recoverableFromQueue || interruptedByState
 
         resumeButton.visibility = if (recoverable) View.VISIBLE else View.GONE
         resumeButton.isEnabled = recoverable
-        startButton.isEnabled = !s.running && treeUri != null
-        reprocessButton.isEnabled = !s.running && treeUri != null
+        startButton.isEnabled = !state.running && treeUri != null
+        reprocessButton.isEnabled = !state.running && treeUri != null
 
-        pauseButton.text = if (s.paused) "Продолжить" else "Пауза"
-        pauseButton.isEnabled = s.running
+        pauseButton.text = if (state.paused) "Продолжить" else "Пауза"
+        pauseButton.isEnabled = state.running
     }
 
     private fun requestNotificationPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+        if (
+            Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFICATIONS)
         }
     }
