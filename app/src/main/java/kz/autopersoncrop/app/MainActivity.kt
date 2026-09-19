@@ -82,6 +82,7 @@ class MainActivity : AppCompatActivity() {
         else @Suppress("DEPRECATION") registerReceiver(receiver, filter)
         repairStaleRunState()
         if (mainScreenVisible) {
+            refreshFolder()
             refreshSettings()
             refreshState()
         }
@@ -128,11 +129,6 @@ class MainActivity : AppCompatActivity() {
         return max(value, dp(fallbackDp))
     }
 
-    /**
-     * Honor/MagicOS on Android 16 can report a smaller edge-to-edge inset than the visible
-     * status/navigation region. We therefore combine WindowInsets with Android's real system
-     * bar dimensions and keep a small visual gap inside the safe area.
-     */
     private fun setSafeScrollableContent(content: View) {
         val scroll = ScrollView(this).apply {
             isFillViewport = true
@@ -140,27 +136,22 @@ class MainActivity : AppCompatActivity() {
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
             addView(content)
         }
-
         val fallbackTop = systemDimen("status_bar_height", 24)
         val fallbackBottom = systemDimen("navigation_bar_height", 24)
-
         ViewCompat.setOnApplyWindowInsetsListener(scroll) { view, insets ->
             val bars = insets.getInsetsIgnoringVisibility(
                 WindowInsetsCompat.Type.statusBars() or
                     WindowInsetsCompat.Type.navigationBars() or
                     WindowInsetsCompat.Type.displayCutout()
             )
-            val safeTop = max(bars.top, fallbackTop)
-            val safeBottom = max(bars.bottom, fallbackBottom)
             view.setPadding(
                 max(bars.left, dp(4)),
-                safeTop + dp(8),
+                max(bars.top, fallbackTop) + dp(8),
                 max(bars.right, dp(4)),
-                safeBottom + dp(8),
+                max(bars.bottom, fallbackBottom) + dp(8),
             )
             insets
         }
-
         setContentView(scroll)
         ViewCompat.requestApplyInsets(scroll)
     }
@@ -174,7 +165,7 @@ class MainActivity : AppCompatActivity() {
                     running = false,
                     paused = false,
                     currentName = "",
-                    message = "Предыдущая обработка прервана. Нажмите «Возобновить» — готовые фото будут пропущены.",
+                    message = "Предыдущая обработка прервана. Нажмите «Возобновить».",
                 ),
                 sync = true,
             )
@@ -193,7 +184,7 @@ class MainActivity : AppCompatActivity() {
             setTypeface(typeface, Typeface.BOLD)
         }
         val current = TextView(this).apply {
-            text = treeUri?.let { "Текущая папка: ${displayFolderName(it)}" } ?: "Папка пока не выбрана"
+            text = treeUri?.let { "Текущая папка: ${displayFolderName(it)}" } ?: "Папка не выбрана"
             textSize = 14f
             setPadding(0, dp(12), 0, dp(12))
         }
@@ -208,7 +199,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         val hint = TextView(this).apply {
-            text = "Приложение получает доступ только к выбранной вами папке."
+            text = "Доступ предоставляется только к выбранной папке."
             textSize = 13f
             alpha = 0.72f
             setPadding(0, dp(10), 0, 0)
@@ -248,7 +239,7 @@ class MainActivity : AppCompatActivity() {
         if (BatchStateStore(this).read().running) return toast("Сначала остановите текущую обработку")
         AlertDialog.Builder(this)
             .setTitle("Переработать заново?")
-            .setMessage("Все фотографии выбранной папки будут обработаны заново. Готовые файлы в CROP будут заменены. Оригиналы не изменяются.")
+            .setMessage("Все фотографии выбранной папки будут обработаны заново. Файлы в CROP будут заменены. Оригиналы не изменяются.")
             .setNegativeButton("Отмена", null)
             .setPositiveButton("Переработать") { _, _ -> startBatchFor(uri, true) }
             .show()
@@ -303,7 +294,7 @@ class MainActivity : AppCompatActivity() {
             setSelection(OutputQuality.entries.indexOf(currentOutput.quality))
         }
         val qualityInfo = TextView(this).apply {
-            text = "«Оригинал» сохраняет lossless JPEG crop без пересжатия. Остальные варианты пересжимают только готовый результат."
+            text = "«Оригинал» — lossless JPEG без пересжатия. Остальные варианты пересжимают только результат."
             textSize = 13f
             alpha = 0.75f
             setPadding(0, dp(5), 0, 0)
@@ -317,16 +308,15 @@ class MainActivity : AppCompatActivity() {
         val powerManager = getSystemService(PowerManager::class.java)
         val batteryInfo = TextView(this).apply {
             text = if (powerManager.isIgnoringBatteryOptimizations(packageName)) {
-                "Ограничение батареи отключено — обработка может продолжаться при погашенном экране."
+                "Ограничение батареи отключено."
             } else {
-                "Для длительной обработки на Honor разрешите приложению работу без ограничений."
+                "На Honor разрешите работу без ограничений."
             }
             textSize = 13f
             alpha = 0.75f
             setPadding(0, dp(5), 0, dp(5))
         }
         val batteryButton = appButton("Настройки фоновой работы").apply { setOnClickListener { openBatterySettings() } }
-
         listOf(themeLabel, themeSpinner, qualityLabel, qualitySpinner, qualityInfo, backgroundLabel, batteryInfo, batteryButton)
             .forEach { box.addView(it) }
 
@@ -358,8 +348,7 @@ class MainActivity : AppCompatActivity() {
             .setTitle("О приложении")
             .setMessage(
                 "${getString(R.string.app_name)}  ${BuildConfig.VERSION_NAME}\n\n" +
-                    "Автоматическая обрезка фотографий с распознаванием людей. Работает полностью офлайн. " +
-                    "Оригиналы не изменяются, готовые фотографии сохраняются в папке CROP.\n\n" +
+                    "Автокадрирование людей. Полностью офлайн. Оригиналы не изменяются, результаты сохраняются в CROP.\n\n" +
                     getString(R.string.developer_label)
             )
             .setNeutralButton("Конфиденциальность") { _, _ -> showPrivacyPolicy() }
@@ -371,12 +360,12 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Конфиденциальность")
             .setMessage(
-                "Auto Person Crop обрабатывает фотографии только на вашем устройстве.\n\n" +
-                    "• Интернет не используется, фотографии и результаты никуда не отправляются.\n" +
-                    "• Доступ предоставляется только к выбранной вами папке.\n" +
-                    "• Очередь и прогресс сохраняются локально.\n" +
-                    "• Оригиналы не изменяются. Результаты сохраняются в CROP.\n" +
-                    "• Нет рекламы, аналитики, регистрации и облачного хранилища."
+                "Auto Person Crop обрабатывает фотографии только на устройстве.\n\n" +
+                    "• Интернет не используется.\n" +
+                    "• Доступ только к выбранной папке.\n" +
+                    "• Очередь и прогресс хранятся локально.\n" +
+                    "• Оригиналы не изменяются. Результаты — в CROP.\n" +
+                    "• Нет рекламы, аналитики и регистрации."
             )
             .setPositiveButton("Понятно", null)
             .show()
@@ -395,14 +384,15 @@ class MainActivity : AppCompatActivity() {
             setTypeface(typeface, Typeface.BOLD)
         }
         val subtitle = TextView(this).apply {
-            text = "Автокадрирование людей • полностью офлайн"
+            text = "Автокадрирование офлайн"
             textSize = 13f
             alpha = 0.78f
-            setPadding(0, dp(3), 0, dp(12))
+            setPadding(0, dp(3), 0, dp(9))
         }
         folderText = TextView(this).apply {
-            textSize = 14f
-            setPadding(0, 0, 0, dp(5))
+            textSize = 13f
+            visibility = View.GONE
+            setPadding(0, 0, 0, dp(3))
         }
         val choose = appButton("Выбрать папку").apply { setOnClickListener { showFolderSelectionScreen() } }
 
@@ -424,7 +414,7 @@ class MainActivity : AppCompatActivity() {
         }
         stateText = TextView(this).apply {
             textSize = 16f
-            setPadding(0, dp(8), 0, dp(8))
+            setPadding(0, dp(7), 0, dp(7))
         }
         startButton = appButton("Обработать всё").apply { setOnClickListener { startBatch() } }
         resumeButton = appButton("▶ Возобновить").apply {
@@ -446,7 +436,7 @@ class MainActivity : AppCompatActivity() {
             textSize = 13f
             alpha = 0.76f
             gravity = Gravity.CENTER
-            setPadding(0, dp(8), 0, dp(4))
+            setPadding(0, dp(7), 0, dp(3))
         }
         val about = appButton("О приложении").apply { setOnClickListener { showAbout() } }
 
@@ -455,17 +445,17 @@ class MainActivity : AppCompatActivity() {
         }
 
         add(title, 0)
-        add(subtitle, 8)
-        add(folderText, 2)
-        add(choose, 8)
-        add(settingsRow, 10)
-        add(progress, 8)
-        add(stateText, 8)
-        add(startButton, 6)
-        add(resumeButton, 6)
-        add(reprocessButton, 6)
-        add(actionRow, 8)
-        add(note, 6)
+        add(subtitle, 6)
+        add(folderText, 0)
+        add(choose, 7)
+        add(settingsRow, 8)
+        add(progress, 6)
+        add(stateText, 6)
+        add(startButton, 5)
+        add(resumeButton, 5)
+        add(reprocessButton, 5)
+        add(actionRow, 6)
+        add(note, 5)
         add(about, 0)
 
         setSafeScrollableContent(root)
@@ -473,17 +463,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshFolder() {
         if (!mainScreenVisible) return
-        folderText.text = treeUri?.let { "Папка: ${displayFolderName(it)}" } ?: "Папка не выбрана"
+        if (treeUri == null) {
+            folderText.text = ""
+            folderText.visibility = View.GONE
+        } else {
+            folderText.text = "Папка: ${displayFolderName(treeUri!!)}"
+            folderText.visibility = View.VISIBLE
+        }
         startButton.isEnabled = treeUri != null
         reprocessButton.isEnabled = treeUri != null
     }
 
-    private fun displayFolderName(uri: Uri): String {
-        return runCatching {
-            val id = DocumentsContract.getTreeDocumentId(uri)
-            id.substringAfterLast(':').substringAfterLast('/').ifBlank { id }
-        }.getOrElse { uri.lastPathSegment ?: "Выбранная папка" }
-    }
+    private fun displayFolderName(uri: Uri): String = runCatching {
+        val id = DocumentsContract.getTreeDocumentId(uri)
+        id.substringAfterLast(':').substringAfterLast('/').ifBlank { id }
+    }.getOrElse { uri.lastPathSegment ?: "Выбранная папка" }
 
     private fun refreshSettings() {
         if (!mainScreenVisible) return
@@ -504,9 +498,11 @@ class MainActivity : AppCompatActivity() {
             append("Без людей: ${state.noPeople}    Пропущено: ${state.skipped}\n")
             append("Ошибки: ${state.errors}\n")
             if (state.currentName.isNotBlank()) append("Сейчас: ${state.currentName}\n")
-            append(if (state.running) {
-                if (state.paused) "Пауза" else state.message.ifBlank { "Обработка…" }
-            } else state.message.ifBlank { "Готов к запуску" })
+            append(
+                if (state.running) {
+                    if (state.paused) "Пауза" else state.message.ifBlank { "Обработка…" }
+                } else state.message.ifBlank { "Готов к запуску" }
+            )
         }
 
         val recoverableFromQueue = if (!state.running && state.folderUri.isNotBlank()) {
