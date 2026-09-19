@@ -78,7 +78,8 @@ class BatchProcessingService : Service() {
             running = true,
             message = if (forceReprocess) "Подготовка повторной обработки…" else "Сканирование папки…",
         )
-        store.write(state, sync = true); publish(state, force = true)
+        store.write(state, sync = true)
+        publish(state, force = true)
 
         try {
             val scanner = DocumentTreeScanner(this)
@@ -91,7 +92,8 @@ class BatchProcessingService : Service() {
                 total = photos.size,
                 message = if (forceReprocess) "Повторная обработка ${photos.size} JPEG" else "Найдено ${photos.size} JPEG",
             )
-            store.write(state); publish(state, force = true)
+            store.write(state)
+            publish(state, force = true)
 
             if (photos.isEmpty()) {
                 finishState(state.copy(running = false, message = "JPEG-файлы не найдены"))
@@ -105,7 +107,8 @@ class BatchProcessingService : Service() {
                 iouThreshold = 0.65f,
             ).use { detector ->
                 state = state.copy(message = "Обработка • ${detector.accelerator} • ${outputSettings.quality.label}")
-                store.write(state); publish(state, force = true)
+                store.write(state)
+                publish(state, force = true)
 
                 val transformer = LosslessJpegTransformer(this)
                 val processor = PhotoProcessor(
@@ -164,12 +167,16 @@ class BatchProcessingService : Service() {
                         }
                         db.mark(folderKey, uriKey, newStatus)
                         statusMap[uriKey] = newStatus
+                        state = state.transitionCount(prior, newStatus)
                     } catch (t: Throwable) {
                         db.mark(folderKey, uriKey, BatchDatabase.ERROR, t.message ?: t.javaClass.simpleName)
                         statusMap[uriKey] = BatchDatabase.ERROR
+                        state = state.transitionCount(prior, BatchDatabase.ERROR)
                     }
 
-                    state = state.withCounts(db.counts(folderKey))
+                    // Do not GROUP BY the entire SQLite queue after every photo. The durable row
+                    // status is still written for every file; only the UI counters are maintained
+                    // locally and reconciled with SQLite at stop/final/error boundaries.
                     store.write(state)
                     publish(state)
                 }
@@ -209,8 +216,6 @@ class BatchProcessingService : Service() {
         var last: Throwable? = null
         for (attempt in 1..MAX_ATTEMPTS) {
             try {
-                // Keep the output directory index cached during the normal pass. Re-read it only
-                // after a failed attempt, when an incomplete output may have been created/deleted.
                 if (attempt > 1) scanner.invalidateOutputIndex(outDir)
                 val existing = scanner.existingOutputUri(outDir, photo.name)
                 return processor.process(
@@ -236,6 +241,28 @@ class BatchProcessingService : Service() {
         skipped = c.existing,
         errors = c.errors,
     )
+
+    private fun BatchState.transitionCount(oldStatus: Int, newStatus: Int): BatchState {
+        if (oldStatus == newStatus) return this
+        var done = completed
+        var noPeopleCount = noPeople
+        var existing = skipped
+        var errorCount = errors
+
+        when (oldStatus) {
+            BatchDatabase.DONE -> done = (done - 1).coerceAtLeast(0)
+            BatchDatabase.NO_PEOPLE -> noPeopleCount = (noPeopleCount - 1).coerceAtLeast(0)
+            BatchDatabase.EXISTING -> existing = (existing - 1).coerceAtLeast(0)
+            BatchDatabase.ERROR -> errorCount = (errorCount - 1).coerceAtLeast(0)
+        }
+        when (newStatus) {
+            BatchDatabase.DONE -> done++
+            BatchDatabase.NO_PEOPLE -> noPeopleCount++
+            BatchDatabase.EXISTING -> existing++
+            BatchDatabase.ERROR -> errorCount++
+        }
+        return copy(completed = done, noPeople = noPeopleCount, skipped = existing, errors = errorCount)
+    }
 
     private fun finishState(s: BatchState) {
         store.write(s, sync = true)
@@ -370,7 +397,7 @@ class BatchProcessingService : Service() {
         private const val CHANNEL_ID = "processing"
         private const val NOTIFICATION_ID = 77
         private const val MAX_ATTEMPTS = 2
-        private const val PUBLISH_INTERVAL_MS = 650L
+        private const val PUBLISH_INTERVAL_MS = 900L
 
         fun command(
             context: Context,
