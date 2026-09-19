@@ -43,20 +43,23 @@ data class CropPlan(
 )
 
 /**
- * Screen-filling crop planner.
+ * Fixed photographic crop frames:
+ * - portrait: 2:3;
+ * - landscape: 3:2.
  *
  * Portrait subject/group:
  * - keep roughly 10% breathing room above and below the visible main subject;
- * - expand/crop the left and right source edges to the phone portrait aspect ratio.
+ * - expand/crop the left and right source edges to 2:3.
  *
  * Landscape subject/group:
  * - keep roughly 10% breathing room left and right;
- * - expand/crop the top and bottom source edges to the phone landscape aspect ratio.
+ * - expand/crop the top and bottom source edges to 3:2.
  *
- * The result is crop-only: no canvas, black bars, stretching or squashing.
+ * Crop-only: no canvas, black bars, stretching or squashing.
  * The selected person/group is kept as close to the exact centre as source boundaries allow.
  */
 object CropPlanner {
+    @Suppress("UNUSED_PARAMETER")
     fun plan(
         image: ImageSize,
         people: List<RectD>,
@@ -70,16 +73,14 @@ object CropPlanner {
         val subject = union(selected).clampTo(image)
         if (subject.width < 2.0 || subject.height < 2.0) return fullImage(image, subject)
 
-        val shortSide = min(screenWidth.coerceAtLeast(1), screenHeight.coerceAtLeast(1)).toDouble()
-        val longSide = max(screenWidth.coerceAtLeast(1), screenHeight.coerceAtLeast(1)).toDouble()
-        val portraitAspect = shortSide / longSide
-        val landscapeAspect = longSide / shortSide
+        val portraitAspect = 2.0 / 3.0
+        val landscapeAspect = 3.0 / 2.0
 
         var layout = chooseLayout(subject, selected.size)
         var targetAspect = if (layout == SubjectLayout.PORTRAIT) portraitAspect else landscapeAspect
 
         // If the intended orientation physically cannot contain the detected subject inside the
-        // source image at the phone aspect ratio, use the other orientation rather than cut a body.
+        // source image at the fixed frame, use the other orientation rather than cut a body.
         if (!canContainSubject(image, subject, targetAspect)) {
             val alternate = if (layout == SubjectLayout.PORTRAIT) SubjectLayout.LANDSCAPE else SubjectLayout.PORTRAIT
             val alternateAspect = if (alternate == SubjectLayout.PORTRAIT) portraitAspect else landscapeAspect
@@ -112,8 +113,6 @@ object CropPlanner {
             )
         }
 
-        // Last safe attempt: exact phone aspect containing the visible subject with no requested
-        // breathing room. If even this is impossible, keep the whole source rather than cut a body.
         fitAndPlace(image, subject, subject, targetAspect)?.let { placed ->
             return CropPlan(
                 rect = placed.toPixelRect(image),
@@ -133,8 +132,6 @@ object CropPlanner {
         return if (subjectCount <= 1) {
             if (ratio > 1.05) SubjectLayout.LANDSCAPE else SubjectLayout.PORTRAIT
         } else {
-            // Two people / a group side-by-side should fill a landscape screen; a narrow/tall group
-            // remains portrait.
             if (ratio >= 0.92) SubjectLayout.LANDSCAPE else SubjectLayout.PORTRAIT
         }
     }
@@ -193,14 +190,12 @@ object CropPlanner {
         var cropW = cropH * aspect
         if (cropW > image.width + EPS || cropH > image.height + EPS) return null
 
-        // Numerical cleanup close to source boundaries.
         cropW = min(cropW, image.width.toDouble())
         cropH = min(cropH, image.height.toDouble())
 
         val maxLeft = image.width - cropW
         val maxTop = image.height - cropH
 
-        // A valid crop containing required has its left/top inside these intervals.
         val leftMin = max(0.0, required.right - cropW)
         val leftMax = min(required.left, maxLeft)
         val topMin = max(0.0, required.bottom - cropH)
@@ -217,18 +212,13 @@ object CropPlanner {
     }
 
     private fun Placed.toPixelRect(image: ImageSize): PixelRect {
-        var l = floor(left).toInt().coerceIn(0, image.width - 1)
-        var t = floor(top).toInt().coerceIn(0, image.height - 1)
-        var r = ceil(right).toInt().coerceIn(l + 1, image.width)
-        var b = ceil(bottom).toInt().coerceIn(t + 1, image.height)
+        val l = floor(left).toInt().coerceIn(0, image.width - 1)
+        val t = floor(top).toInt().coerceIn(0, image.height - 1)
+        val r = ceil(right).toInt().coerceIn(l + 1, image.width)
+        val b = ceil(bottom).toInt().coerceIn(t + 1, image.height)
         return PixelRect(l, t, r, b)
     }
 
-    /**
-     * 1) Prefer complete main people over body fragments touching a source edge.
-     * 2) Keep similarly scaled complete people when they form one group.
-     * 3) If everybody is partial, centre by the largest/most central visible body area.
-     */
     private fun selectPrincipalSubjects(image: ImageSize, input: List<RectD>): List<RectD> {
         val valid = input
             .map { it.clampTo(image) }
@@ -275,7 +265,6 @@ object CropPlanner {
         return selected.ifEmpty { listOf(anchor) }
     }
 
-    /** A second person clipped at left/right/top must not drag a complete main subject's crop. */
     private fun isSideOrTopFragment(r: RectD, image: ImageSize): Boolean {
         val edgeX = max(3.0, image.width * 0.010)
         val edgeY = max(3.0, image.height * 0.010)
