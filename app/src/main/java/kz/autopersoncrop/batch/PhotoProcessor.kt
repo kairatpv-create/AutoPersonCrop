@@ -78,7 +78,7 @@ class PhotoProcessor(
             people = fullBoxes,
             screenWidth = screenWidth,
             screenHeight = screenHeight,
-            marginFraction = 0.10,
+            marginFraction = 0.05,
         )
         val raw = ExifCropMapper.uprightToRaw(
             plan.rect, frame.rawWidth, frame.rawHeight, frame.exifOrientation
