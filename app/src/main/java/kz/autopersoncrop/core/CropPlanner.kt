@@ -1,5 +1,6 @@
 package kz.autopersoncrop.core
 
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -44,19 +45,17 @@ data class CropPlan(
 
 /**
  * Fixed photographic crop frames:
- * - portrait: 2:3;
- * - landscape: 3:2.
+ * - portrait 2:3;
+ * - landscape 3:2.
  *
- * Portrait subject/group:
- * - keep roughly 10% breathing room above and below the visible main subject;
- * - expand/crop the left and right source edges to 2:3.
+ * The planner works on a logical main scene rather than on a single detected person. That main
+ * scene may contain one person, several standing people, several lying people, or a mixed pose
+ * group such as one person lying while another sits/stands/lies next to or on top of them.
  *
- * Landscape subject/group:
- * - keep roughly 10% breathing room left and right;
- * - expand/crop the top and bottom source edges to 3:2.
- *
- * Crop-only: no canvas, black bars, stretching or squashing.
- * The selected person/group is kept as close to the exact centre as source boundaries allow.
+ * Portrait keeps about 5% breathing room above/below the logical scene and derives side crop from
+ * 2:3. Landscape keeps about 5% left/right and derives top/bottom crop from 3:2. The planner
+ * compares both valid frames and picks the tighter natural composition while preserving all main
+ * subjects. No canvas, black bars, stretching or squashing are ever introduced.
  */
 object CropPlanner {
     @Suppress("UNUSED_PARAMETER")
@@ -65,7 +64,7 @@ object CropPlanner {
         people: List<RectD>,
         screenWidth: Int,
         screenHeight: Int,
-        marginFraction: Double = 0.10,
+        marginFraction: Double = 0.05,
     ): CropPlan {
         require(people.isNotEmpty()) { "At least one person box is required" }
 
@@ -73,78 +72,165 @@ object CropPlanner {
         val subject = union(selected).clampTo(image)
         if (subject.width < 2.0 || subject.height < 2.0) return fullImage(image, subject)
 
-        val portraitAspect = 2.0 / 3.0
-        val landscapeAspect = 3.0 / 2.0
+        val requestedMargin = marginFraction.coerceIn(0.0, 0.15)
+        val portrait = buildCandidate(
+            image = image,
+            selected = selected,
+            subject = subject,
+            layout = SubjectLayout.PORTRAIT,
+            aspect = PORTRAIT_ASPECT,
+            requestedMargin = requestedMargin,
+        )
+        val landscape = buildCandidate(
+            image = image,
+            selected = selected,
+            subject = subject,
+            layout = SubjectLayout.LANDSCAPE,
+            aspect = LANDSCAPE_ASPECT,
+            requestedMargin = requestedMargin,
+        )
 
-        var layout = chooseLayout(subject, selected.size)
-        var targetAspect = if (layout == SubjectLayout.PORTRAIT) portraitAspect else landscapeAspect
-
-        // If the intended orientation physically cannot contain the detected subject inside the
-        // source image at the fixed frame, use the other orientation rather than cut a body.
-        if (!canContainSubject(image, subject, targetAspect)) {
-            val alternate = if (layout == SubjectLayout.PORTRAIT) SubjectLayout.LANDSCAPE else SubjectLayout.PORTRAIT
-            val alternateAspect = if (alternate == SubjectLayout.PORTRAIT) portraitAspect else landscapeAspect
-            if (canContainSubject(image, subject, alternateAspect)) {
-                layout = alternate
-                targetAspect = alternateAspect
-            }
+        val winner = when {
+            portrait == null && landscape == null -> null
+            portrait == null -> landscape
+            landscape == null -> portrait
+            else -> if (portrait.score <= landscape.score) portrait else landscape
         }
 
-        val requestedMargin = marginFraction.coerceIn(0.0, 0.20)
-        val margins = buildList {
-            add(requestedMargin)
-            for (m in listOf(0.08, 0.06, 0.04, 0.02, 0.0)) if (m < requestedMargin) add(m)
-        }
+        if (winner == null) return fullImage(image, subject)
 
-        for ((index, margin) in margins.withIndex()) {
+        return CropPlan(
+            rect = winner.placed.toPixelRect(image),
+            layout = winner.layout,
+            targetAspect = winner.aspect,
+            status = when {
+                winner.margin + EPS < requestedMargin -> CropStatus.ADAPTIVE_MARGIN
+                winner.placed.shifted -> CropStatus.SHIFTED_TO_IMAGE_EDGE
+                else -> CropStatus.EXACT
+            },
+            subjectBounds = subject,
+            requiredBounds = winner.required,
+        )
+    }
+
+    private data class Candidate(
+        val layout: SubjectLayout,
+        val aspect: Double,
+        val margin: Double,
+        val required: RectD,
+        val placed: Placed,
+        val score: Double,
+    )
+
+    private fun buildCandidate(
+        image: ImageSize,
+        selected: List<RectD>,
+        subject: RectD,
+        layout: SubjectLayout,
+        aspect: Double,
+        requestedMargin: Double,
+    ): Candidate? {
+        val margins = marginSteps(requestedMargin)
+        for (margin in margins) {
             val required = requiredBounds(subject, image, layout, margin)
-            val placed = fitAndPlace(image, required, subject, targetAspect) ?: continue
-            return CropPlan(
-                rect = placed.toPixelRect(image),
+            val placed = fitAndPlace(image, required, subject, aspect) ?: continue
+            val score = candidateScore(
+                image = image,
+                selected = selected,
+                subject = subject,
                 layout = layout,
-                targetAspect = targetAspect,
-                status = when {
-                    index > 0 -> CropStatus.ADAPTIVE_MARGIN
-                    placed.shifted -> CropStatus.SHIFTED_TO_IMAGE_EDGE
-                    else -> CropStatus.EXACT
-                },
-                subjectBounds = subject,
-                requiredBounds = required,
+                placed = placed,
+                requestedMargin = requestedMargin,
+                actualMargin = margin,
             )
+            return Candidate(layout, aspect, margin, required, placed, score)
         }
-
-        fitAndPlace(image, subject, subject, targetAspect)?.let { placed ->
-            return CropPlan(
-                rect = placed.toPixelRect(image),
-                layout = layout,
-                targetAspect = targetAspect,
-                status = CropStatus.ADAPTIVE_MARGIN,
-                subjectBounds = subject,
-                requiredBounds = subject,
-            )
-        }
-
-        return fullImage(image, subject)
+        return null
     }
 
-    private fun chooseLayout(subject: RectD, subjectCount: Int): SubjectLayout {
-        val ratio = subject.width / subject.height.coerceAtLeast(1.0)
-        return if (subjectCount <= 1) {
-            if (ratio > 1.05) SubjectLayout.LANDSCAPE else SubjectLayout.PORTRAIT
-        } else {
-            if (ratio >= 0.92) SubjectLayout.LANDSCAPE else SubjectLayout.PORTRAIT
+    private fun marginSteps(requested: Double): List<Double> {
+        val result = mutableListOf<Double>()
+        fun add(v: Double) {
+            val c = v.coerceAtLeast(0.0)
+            if (c <= requested + EPS && result.none { abs(it - c) < EPS }) result += c
         }
-    }
-
-    private fun canContainSubject(image: ImageSize, subject: RectD, aspect: Double): Boolean {
-        val maxWidthAtAspect = min(image.width.toDouble(), image.height * aspect)
-        val maxHeightAtAspect = min(image.height.toDouble(), image.width / aspect)
-        return subject.width <= maxWidthAtAspect + 1.0 && subject.height <= maxHeightAtAspect + 1.0
+        add(requested)
+        add(0.04)
+        add(0.03)
+        add(0.02)
+        add(0.01)
+        add(0.0)
+        return result.sortedDescending()
     }
 
     /**
-     * Portrait = 10% above/below. Landscape = 10% left/right.
-     * A tiny 2% safety on the cross axis prevents hands/shoulders from sitting exactly on an edge.
+     * Compare 2:3 and 3:2 by how economically each frame contains the complete logical scene.
+     * Geometry is primary; pose/layout hints only break near-ties. This makes mixed scenes stable:
+     * lying+standing, lying+sitting, two lying side by side, or overlapping people are all judged
+     * as one composition rather than forcing the pose of a single person onto the whole image.
+     */
+    private fun candidateScore(
+        image: ImageSize,
+        selected: List<RectD>,
+        subject: RectD,
+        layout: SubjectLayout,
+        placed: Placed,
+        requestedMargin: Double,
+        actualMargin: Double,
+    ): Double {
+        val cropArea = (placed.right - placed.left) * (placed.bottom - placed.top)
+        val subjectArea = subject.area.coerceAtLeast(1.0)
+        val areaCost = cropArea / subjectArea
+
+        val dx = placed.centerX - subject.centerX
+        val dy = placed.centerY - subject.centerY
+        val diag = sqrt(image.width.toDouble() * image.width + image.height.toDouble() * image.height)
+            .coerceAtLeast(1.0)
+        val centreCost = sqrt(dx * dx + dy * dy) / diag * 2.0
+
+        val marginCost = (requestedMargin - actualMargin).coerceAtLeast(0.0) * 3.0
+        val cueCost = orientationCuePenalty(selected, subject, layout)
+
+        return areaCost + centreCost + marginCost + cueCost
+    }
+
+    /** Small, deliberately conservative orientation hints used only after crop geometry. */
+    private fun orientationCuePenalty(
+        selected: List<RectD>,
+        subject: RectD,
+        layout: SubjectLayout,
+    ): Double {
+        var penalty = 0.0
+        val groupRatio = subject.width / subject.height.coerceAtLeast(1.0)
+
+        if (groupRatio >= 1.20 && layout == SubjectLayout.PORTRAIT) penalty += 0.18
+        if (groupRatio <= 0.83 && layout == SubjectLayout.LANDSCAPE) penalty += 0.18
+
+        val horizontalBodies = selected.count { it.width >= it.height * 1.18 }
+        val verticalBodies = selected.count { it.height >= it.width * 1.18 }
+        val count = selected.size.coerceAtLeast(1).toDouble()
+
+        if (horizontalBodies > verticalBodies && layout == SubjectLayout.PORTRAIT) {
+            penalty += 0.12 * horizontalBodies / count
+        }
+        if (verticalBodies > horizontalBodies && layout == SubjectLayout.LANDSCAPE) {
+            penalty += 0.08 * verticalBodies / count
+        }
+
+        if (selected.size > 1) {
+            val xSpan = selected.maxOf { it.centerX } - selected.minOf { it.centerX }
+            val ySpan = selected.maxOf { it.centerY } - selected.minOf { it.centerY }
+            if (xSpan > ySpan * 1.25 && layout == SubjectLayout.PORTRAIT) penalty += 0.10
+            if (ySpan > xSpan * 1.25 && layout == SubjectLayout.LANDSCAPE) penalty += 0.08
+        }
+
+        return penalty
+    }
+
+    /**
+     * Portrait = 5% above/below. Landscape = 5% left/right.
+     * A very small cross-axis safety protects hands/shoulders from detector-box rounding; the fixed
+     * frame itself determines the actual remaining sides.
      */
     private fun requiredBounds(
         subject: RectD,
@@ -152,7 +238,7 @@ object CropPlanner {
         layout: SubjectLayout,
         margin: Double,
     ): RectD {
-        val cross = 0.02
+        val cross = 0.015
         return when (layout) {
             SubjectLayout.PORTRAIT -> RectD(
                 left = subject.left - subject.width * cross,
@@ -175,9 +261,12 @@ object CropPlanner {
         val right: Double,
         val bottom: Double,
         val shifted: Boolean,
-    )
+    ) {
+        val centerX: Double get() = (left + right) / 2.0
+        val centerY: Double get() = (top + bottom) / 2.0
+    }
 
-    /** Smallest rectangle with the exact target aspect that contains required, then centred on focus. */
+    /** Smallest rectangle with the exact target aspect that contains required, centred on focus. */
     private fun fitAndPlace(
         image: ImageSize,
         required: RectD,
@@ -206,7 +295,7 @@ object CropPlanner {
         val idealTop = focus.centerY - cropH / 2.0
         val left = idealLeft.coerceIn(leftMin, leftMax)
         val top = idealTop.coerceIn(topMin, topMax)
-        val shifted = kotlin.math.abs(left - idealLeft) > 0.75 || kotlin.math.abs(top - idealTop) > 0.75
+        val shifted = abs(left - idealLeft) > 0.75 || abs(top - idealTop) > 0.75
 
         return Placed(left, top, left + cropW, top + cropH, shifted)
     }
@@ -219,6 +308,14 @@ object CropPlanner {
         return PixelRect(l, t, r, b)
     }
 
+    /**
+     * Build the logical main scene as a connected group around the strongest subject.
+     *
+     * Strong overlap deliberately keeps people who sit/lie on one another even when one detection
+     * box is much smaller. Nearby comparable people are also kept. Small edge fragments are ignored
+     * unless they strongly overlap the main scene, preventing an accidental half-person at the edge
+     * from stretching the crop.
+     */
     private fun selectPrincipalSubjects(image: ImageSize, input: List<RectD>): List<RectD> {
         val valid = input
             .map { it.clampTo(image) }
@@ -236,45 +333,70 @@ object CropPlanner {
             return (1.0 - sqrt(dx * dx + dy * dy) / halfDiag).coerceIn(0.0, 1.0)
         }
 
-        fun score(r: RectD): Double =
-            (r.area / maxArea).coerceIn(0.0, 1.0) * 0.72 + centrality(r) * 0.28
+        fun anchorScore(r: RectD): Double {
+            val edgePenalty = if (isEdgeFragment(r, image)) 0.16 else 0.0
+            return (r.area / maxArea).coerceIn(0.0, 1.0) * 0.76 + centrality(r) * 0.24 - edgePenalty
+        }
 
-        val complete = valid.filter { !isSideOrTopFragment(it, image) }
-        if (complete.isNotEmpty()) {
-            val anchor = complete.maxByOrNull(::score) ?: complete.first()
-            val selected = complete.filter { candidate ->
-                if (candidate == anchor) return@filter true
-                val heightRatio = candidate.height / anchor.height.coerceAtLeast(1.0)
+        val anchor = valid.maxByOrNull(::anchorScore) ?: valid.first()
+        val chosen = mutableListOf(anchor)
+        val remaining = valid.toMutableList().also { it.remove(anchor) }
+
+        var changed: Boolean
+        do {
+            changed = false
+            val iterator = remaining.iterator()
+            while (iterator.hasNext()) {
+                val candidate = iterator.next()
                 val areaRatio = candidate.area / anchor.area.coerceAtLeast(1.0)
-                val near = normalizedGap(anchor, candidate, image) <= 0.16 ||
-                    normalizedCenterDistance(anchor, candidate, image) <= 0.58
-                near && heightRatio >= 0.34 && areaRatio >= 0.10
-            }
-            return selected.ifEmpty { listOf(anchor) }
-        }
+                val stronglyOverlaps = chosen.any { overlapFractionOfSmaller(it, candidate) >= 0.10 }
+                val connected = chosen.any { areSceneNeighbours(it, candidate, image) }
+                val smallEdgeFragment = isEdgeFragment(candidate, image) && areaRatio < 0.22
 
-        val anchor = valid.maxByOrNull(::score) ?: valid.first()
-        val selected = valid.filter { candidate ->
-            if (candidate == anchor) return@filter true
-            val areaRatio = candidate.area / anchor.area.coerceAtLeast(1.0)
-            val heightRatio = candidate.height / anchor.height.coerceAtLeast(1.0)
-            val near = normalizedGap(anchor, candidate, image) <= 0.12 ||
-                normalizedCenterDistance(anchor, candidate, image) <= 0.48
-            near && areaRatio >= 0.28 && heightRatio >= 0.45
-        }
-        return selected.ifEmpty { listOf(anchor) }
+                val accept = when {
+                    stronglyOverlaps -> true
+                    smallEdgeFragment -> false
+                    connected && areaRatio >= 0.08 -> true
+                    isEdgeFragment(candidate, image) && connected && areaRatio >= 0.35 -> true
+                    else -> false
+                }
+
+                if (accept) {
+                    chosen += candidate
+                    iterator.remove()
+                    changed = true
+                }
+            }
+        } while (changed)
+
+        return chosen
     }
 
-    private fun isSideOrTopFragment(r: RectD, image: ImageSize): Boolean {
+    private fun areSceneNeighbours(a: RectD, b: RectD, image: ImageSize): Boolean {
+        if (overlapFractionOfSmaller(a, b) > 0.0) return true
+
+        val gap = normalizedGap(a, b, image)
+        if (gap > 0.14) return false
+
+        val dx = abs(a.centerX - b.centerX) / max(a.width, b.width).coerceAtLeast(1.0)
+        val dy = abs(a.centerY - b.centerY) / max(a.height, b.height).coerceAtLeast(1.0)
+        return dx <= 2.1 && dy <= 1.8
+    }
+
+    private fun overlapFractionOfSmaller(a: RectD, b: RectD): Double {
+        val left = max(a.left, b.left)
+        val top = max(a.top, b.top)
+        val right = min(a.right, b.right)
+        val bottom = min(a.bottom, b.bottom)
+        if (right <= left || bottom <= top) return 0.0
+        val intersection = (right - left) * (bottom - top)
+        return intersection / min(a.area, b.area).coerceAtLeast(1.0)
+    }
+
+    private fun isEdgeFragment(r: RectD, image: ImageSize): Boolean {
         val edgeX = max(3.0, image.width * 0.010)
         val edgeY = max(3.0, image.height * 0.010)
         return r.left <= edgeX || r.right >= image.width - edgeX || r.top <= edgeY
-    }
-
-    private fun normalizedCenterDistance(a: RectD, b: RectD, image: ImageSize): Double {
-        val dx = (a.centerX - b.centerX) / image.width.toDouble()
-        val dy = (a.centerY - b.centerY) / image.height.toDouble()
-        return sqrt(dx * dx + dy * dy)
     }
 
     private fun normalizedGap(a: RectD, b: RectD, image: ImageSize): Double {
@@ -315,5 +437,7 @@ object CropPlanner {
         requiredBounds = subject,
     )
 
+    private const val PORTRAIT_ASPECT = 2.0 / 3.0
+    private const val LANDSCAPE_ASPECT = 3.0 / 2.0
     private const val EPS = 1e-6
 }
