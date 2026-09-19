@@ -14,12 +14,13 @@ import kz.autopersoncrop.core.CropPlanner
 import kz.autopersoncrop.core.ImageSize
 import kz.autopersoncrop.core.PixelRect
 import kz.autopersoncrop.core.RectD
+import kz.autopersoncrop.core.SceneAnalyzer
 import kz.autopersoncrop.io.ImageFrameLoader
 import kz.autopersoncrop.io.PhotoFrame
 import kz.autopersoncrop.io.SourcePhoto
 import kz.autopersoncrop.jpeg.ExifCropMapper
 import kz.autopersoncrop.jpeg.LosslessJpegTransformer
-import kz.autopersoncrop.ml.PersonDetector
+import kz.autopersoncrop.ml.ObjectDetector
 import kz.autopersoncrop.settings.OutputSettings
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -33,7 +34,7 @@ sealed class ProcessResult {
 
 class PhotoProcessor(
     private val context: Context,
-    private val detector: PersonDetector,
+    private val detector: ObjectDetector,
     private val transformer: LosslessJpegTransformer,
     private val screenWidth: Int,
     private val screenHeight: Int,
@@ -57,25 +58,35 @@ class PhotoProcessor(
         val frame = loader.load(photo.uri)
         val previewWidth = frame.preview.width
         val previewHeight = frame.preview.height
-        val previewBoxes = try {
+        val previewObjects = try {
             detector.detect(frame.preview)
         } finally {
             if (!frame.preview.isRecycled) frame.preview.recycle()
         }
 
-        if (previewBoxes.isEmpty()) {
+        if (previewObjects.isEmpty()) {
             copyExact(photo, outputDir)
             return ProcessResult.NoPeopleCopied
         }
 
         val sx = frame.uprightWidth.toDouble() / previewWidth.coerceAtLeast(1)
         val sy = frame.uprightHeight.toDouble() / previewHeight.coerceAtLeast(1)
-        val fullBoxes = previewBoxes.map { b ->
-            RectD(b.left * sx, b.top * sy, b.right * sx, b.bottom * sy)
+        val fullObjects = previewObjects.map { detected ->
+            val b = detected.boundingBox
+            detected.copy(
+                boundingBox = RectD(b.left * sx, b.top * sy, b.right * sx, b.bottom * sy)
+            )
         }
+        val imageSize = ImageSize(frame.uprightWidth, frame.uprightHeight)
+        val subjectGroup = SceneAnalyzer.analyze(imageSize, fullObjects)
+        if (subjectGroup == null || subjectGroup.objects.isEmpty()) {
+            copyExact(photo, outputDir)
+            return ProcessResult.NoPeopleCopied
+        }
+
         val plan = CropPlanner.plan(
-            image = ImageSize(frame.uprightWidth, frame.uprightHeight),
-            people = fullBoxes,
+            image = imageSize,
+            people = subjectGroup.objects.map { it.boundingBox },
             screenWidth = screenWidth,
             screenHeight = screenHeight,
             marginFraction = 0.05,

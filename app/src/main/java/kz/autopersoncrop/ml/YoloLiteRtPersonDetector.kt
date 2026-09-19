@@ -19,14 +19,14 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
-/** Offline YOLO detector using Google LiteRT 2.x CompiledModel API. */
+/** Offline multi-class YOLO11n COCO detector using Google LiteRT 2.x CompiledModel API. */
 class YoloLiteRtPersonDetector(
     private val context: Context,
     assetName: String = "person_detector.tflite",
     private val confidence: Float = 0.22f,
     private val iouThreshold: Float = 0.70f,
     useGpu: Boolean = true,
-) : PersonDetector {
+) : ObjectDetector {
     private val modelFile: File = copyAssetIfNeeded(assetName)
     private val compiled: CompiledModel
     private val inputBuffers: List<TensorBuffer>
@@ -146,22 +146,29 @@ class YoloLiteRtPersonDetector(
             }.getOrNull()
             if (dims != null && dims.isNotEmpty()) return dims
         }
-        val features = 84
+        val features = 4 + COCO_CLASSES.size
         if (count % features == 0) return intArrayOf(1, features, count / features)
         if (count % 6 == 0) return intArrayOf(1, count / 6, 6)
         error("Неизвестный выход YOLO: $count float")
     }
 
-    override fun detect(bitmap: Bitmap): List<RectD> {
+    override fun detect(bitmap: Bitmap): List<DetectedObject> {
         val prep = letterboxIntoReusableBitmap(bitmap)
         fillInputFloatBuffer()
         inputBuffers[0].writeFloat(inputFloatBuffer)
         compiled.run(inputBuffers, outputBuffers)
         val out = outputBuffers[0].readFloat()
-        return nms(decode(out, prep)).map { it.rect }
+        return nms(decode(out, prep)).map { candidate ->
+            DetectedObject(
+                classId = candidate.classId,
+                className = COCO_CLASSES.getOrElse(candidate.classId) { "class_${candidate.classId}" },
+                confidence = candidate.score,
+                boundingBox = candidate.rect,
+            )
+        }
     }
 
-    private data class Candidate(val rect: RectD, val score: Float)
+    private data class Candidate(val rect: RectD, val score: Float, val classId: Int)
     private data class Prep(
         val scale: Double,
         val padX: Double,
@@ -215,9 +222,9 @@ class YoloLiteRtPersonDetector(
                     val o = i * 6
                     val conf = out[o + 4]
                     val cls = out[o + 5].toInt()
-                    if (cls != 0 || conf < confidence) continue
+                    if (cls !in COCO_CLASSES.indices || conf < confidence) continue
                     mapXyxy(out[o], out[o + 1], out[o + 2], out[o + 3], p)?.let {
-                        add(Candidate(it, conf))
+                        add(Candidate(it, conf, cls))
                     }
                 }
             }
@@ -234,16 +241,28 @@ class YoloLiteRtPersonDetector(
         fun v(feature: Int, anchor: Int): Float =
             if (featureMajor) out[feature * anchors + anchor] else out[anchor * features + feature]
 
+        val classCount = min(COCO_CLASSES.size, features - 4)
+        require(classCount > 0) { "YOLO output не содержит классов: ${outputShape.contentToString()}" }
+
         val list = ArrayList<Candidate>()
         for (i in 0 until anchors) {
-            val conf = v(4, i)
-            if (conf < confidence) continue
+            var bestClass = 0
+            var bestScore = Float.NEGATIVE_INFINITY
+            for (classId in 0 until classCount) {
+                val score = v(4 + classId, i)
+                if (score > bestScore) {
+                    bestScore = score
+                    bestClass = classId
+                }
+            }
+            if (bestScore < confidence) continue
+
             val cx = v(0, i)
             val cy = v(1, i)
             val w = v(2, i)
             val h = v(3, i)
             mapXyxy(cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f, p)?.let {
-                list += Candidate(it, conf)
+                list += Candidate(it, bestScore, bestClass)
             }
         }
         return list
@@ -263,17 +282,19 @@ class YoloLiteRtPersonDetector(
     }
 
     private fun nms(input: List<Candidate>): List<Candidate> {
-        val sorted = input.sortedByDescending { it.score }.toMutableList()
         val keep = ArrayList<Candidate>()
-        while (sorted.isNotEmpty()) {
-            val best = sorted.removeAt(0)
-            keep += best
-            val it = sorted.iterator()
-            while (it.hasNext()) {
-                if (iou(best.rect, it.next().rect) > iouThreshold) it.remove()
+        for (sameClass in input.groupBy { it.classId }.values) {
+            val sorted = sameClass.sortedByDescending { it.score }.toMutableList()
+            while (sorted.isNotEmpty()) {
+                val best = sorted.removeAt(0)
+                keep += best
+                val iterator = sorted.iterator()
+                while (iterator.hasNext()) {
+                    if (iou(best.rect, iterator.next().rect) > iouThreshold) iterator.remove()
+                }
             }
         }
-        return keep
+        return keep.sortedByDescending { it.score }
     }
 
     private fun iou(a: RectD, b: RectD): Float {
@@ -305,5 +326,20 @@ class YoloLiteRtPersonDetector(
         runCatching { modelBitmap.recycle() }
     }
 
-    companion object { private const val TAG = "AutoPersonCropML" }
+    companion object {
+        private const val TAG = "AutoPersonCropML"
+
+        val COCO_CLASSES: List<String> = listOf(
+            "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
+            "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog",
+            "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella",
+            "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite",
+            "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle",
+            "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich",
+            "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
+            "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote",
+            "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book",
+            "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush",
+        )
+    }
 }
