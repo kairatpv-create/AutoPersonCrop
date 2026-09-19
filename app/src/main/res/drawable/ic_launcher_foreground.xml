@@ -5,26 +5,35 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
+    <!-- Gold crop corners: universal auto-framing, not person-specific. -->
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M54,30 a12,12 0,1 0,0 24 a12,12 0,1 0,0 -24" />
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFFFB300"
+        android:strokeWidth="5.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M39,25 L25,25 L25,39 M69,25 L83,25 L83,39 M25,69 L25,83 L39,83 M83,69 L83,83 L69,83" />
 
+    <!-- Camera lens body. -->
     <path
-        android:fillColor="#F4FAFFFF"
-        android:pathData="M31,80 C33,67 42,60 54,60 C66,60 75,67 77,80 C72,86 36,86 31,80 Z" />
+        android:fillColor="#FFF4F5F7"
+        android:pathData="M54,34 a20,20 0,1 0,0 40 a20,20 0,1 0,0 -40" />
+    <path
+        android:fillColor="#FF2B2E33"
+        android:pathData="M54,39 a15,15 0,1 0,0 30 a15,15 0,1 0,0 -30" />
+    <path
+        android:fillColor="#FF111317"
+        android:pathData="M54,44 a10,10 0,1 0,0 20 a10,10 0,1 0,0 -20" />
+    <path
+        android:fillColor="#FFFFB300"
+        android:pathData="M54,49 a5,5 0,1 0,0 10 a5,5 0,1 0,0 -10" />
 
+    <!-- Small generic scene cue inside the lens: horizon / landscape. -->
     <path
         android:fillColor="@android:color/transparent"
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="4.5"
+        android:strokeWidth="1.7"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M36,24 L24,24 L24,36 M72,24 L84,24 L84,36 M24,72 L24,84 L36,84 M84,72 L84,84 L72,84" />
-
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#802FE4FF"
-        android:strokeWidth="2.4"
-        android:strokeLineCap="round"
-        android:pathData="M36,43 C32,48 31,55 33,61 M72,43 C76,48 77,55 75,61" />
+        android:pathData="M46,60 L51,55 L55,59 L59,54 L63,60" />
 </vector>
