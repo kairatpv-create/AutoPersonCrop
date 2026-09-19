@@ -347,9 +347,13 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("О приложении")
             .setMessage(
-                "${getString(R.string.app_name)}  ${BuildConfig.VERSION_NAME}\n\n" +
-                    "Автокадрирование людей. Полностью офлайн. Оригиналы не изменяются, результаты сохраняются в CROP.\n\n" +
-                    getString(R.string.developer_label)
+                "Версия приложения:\n${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})\n\n" +
+                    "Автокадрирование офлайн\n" +
+                    "Оригиналы не изменяются.\n" +
+                    "Результаты сохраняются в CROP.\n\n" +
+                    "Для связи с разработчиком\n" +
+                    "kairat.pv@gmail.com\n\n" +
+                    "© 2026 Кайрат Калиев"
             )
             .setNeutralButton("Конфиденциальность") { _, _ -> showPrivacyPolicy() }
             .setPositiveButton("Закрыть", null)
