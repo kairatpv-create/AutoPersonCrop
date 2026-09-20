@@ -23,6 +23,7 @@ import kz.autopersoncrop.jpeg.LosslessJpegTransformer
 import kz.autopersoncrop.ml.PersonDetector
 import kz.autopersoncrop.settings.OutputSettings
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 sealed class ProcessResult {
@@ -59,7 +60,7 @@ class PhotoProcessor(
         val previewWidth = frame.preview.width
         val previewHeight = frame.preview.height
         val previewBoxes = try {
-            detector.detect(frame.preview)
+            detectPeopleWithRecovery(frame.preview)
         } finally {
             if (!frame.preview.isRecycled) frame.preview.recycle()
         }
@@ -98,6 +99,86 @@ class PhotoProcessor(
 
         encodeConfigured(photo, outputDir, raw, frame)
         return if (isFull(raw, frame.rawWidth, frame.rawHeight)) ProcessResult.CopiedFull else ProcessResult.Cropped
+    }
+
+    /**
+     * Normal photos keep the exact 0.6.2 path. Recovery is used only if normal YOLO detection
+     * returns no people at all. This helps combat-sport frames where motion, occlusion or an unusual
+     * horizontal/stacked pose lowers confidence without making every photo more permissive.
+     */
+    private fun detectPeopleWithRecovery(preview: Bitmap): List<RectD> {
+        detector.detect(preview).takeIf { it.isNotEmpty() }?.let { return it }
+
+        detector.detect(preview, RECOVERY_CONFIDENCE)
+            .filter { isUsefulRecoveryBox(it, preview) }
+            .takeIf { it.isNotEmpty() }
+            ?.let { return deduplicate(it) }
+
+        return detectInOverlappingTiles(preview)
+    }
+
+    /**
+     * If a full-frame recovery still misses everybody, enlarge the sporting action by running the
+     * same offline model over two overlapping halves. The boxes are mapped back to preview space.
+     */
+    private fun detectInOverlappingTiles(preview: Bitmap): List<RectD> {
+        val horizontalSplit = preview.width >= preview.height
+        val longSide = if (horizontalSplit) preview.width else preview.height
+        if (longSide < 520) return emptyList()
+
+        val tileLong = (longSide * 0.64).roundToInt().coerceIn(1, longSide)
+        val secondOffset = longSide - tileLong
+        val offsets = intArrayOf(0, secondOffset).distinct()
+        val found = ArrayList<RectD>()
+
+        for (offset in offsets) {
+            val tile = if (horizontalSplit) {
+                Bitmap.createBitmap(preview, offset, 0, tileLong, preview.height)
+            } else {
+                Bitmap.createBitmap(preview, 0, offset, preview.width, tileLong)
+            }
+            try {
+                val boxes = detector.detect(tile, TILE_RECOVERY_CONFIDENCE)
+                for (box in boxes) {
+                    val mapped = if (horizontalSplit) {
+                        RectD(box.left + offset, box.top, box.right + offset, box.bottom)
+                    } else {
+                        RectD(box.left, box.top + offset, box.right, box.bottom + offset)
+                    }
+                    if (isUsefulRecoveryBox(mapped, preview)) found += mapped
+                }
+            } finally {
+                if (!tile.isRecycled) tile.recycle()
+            }
+        }
+        return deduplicate(found)
+    }
+
+    private fun isUsefulRecoveryBox(box: RectD, preview: Bitmap): Boolean {
+        if (box.width < 8.0 || box.height < 8.0) return false
+        val imageArea = preview.width.toDouble() * preview.height.toDouble()
+        return box.area / imageArea.coerceAtLeast(1.0) >= MIN_RECOVERY_AREA_FRACTION
+    }
+
+    private fun deduplicate(input: List<RectD>): List<RectD> {
+        if (input.size <= 1) return input
+        val sorted = input.sortedByDescending { it.area }
+        val keep = ArrayList<RectD>()
+        for (candidate in sorted) {
+            if (keep.none { overlapIoU(it, candidate) >= 0.58 }) keep += candidate
+        }
+        return keep
+    }
+
+    private fun overlapIoU(a: RectD, b: RectD): Double {
+        val left = max(a.left, b.left)
+        val top = max(a.top, b.top)
+        val right = min(a.right, b.right)
+        val bottom = min(a.bottom, b.bottom)
+        if (right <= left || bottom <= top) return 0.0
+        val intersection = (right - left) * (bottom - top)
+        val union = a.area + b.area - intersection
+        return if (union <= 0.0) 0.0 else intersection / union
     }
 
     private fun encodeConfigured(
@@ -234,4 +315,10 @@ class PhotoProcessor(
 
     private fun isFull(r: PixelRect, w: Int, h: Int) =
         r.left == 0 && r.top == 0 && r.right == w && r.bottom == h
+
+    companion object {
+        private const val RECOVERY_CONFIDENCE = 0.13f
+        private const val TILE_RECOVERY_CONFIDENCE = 0.11f
+        private const val MIN_RECOVERY_AREA_FRACTION = 0.006
+    }
 }
