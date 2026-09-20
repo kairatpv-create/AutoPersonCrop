@@ -14,6 +14,7 @@ import kz.autopersoncrop.core.CropPlanner
 import kz.autopersoncrop.core.ImageSize
 import kz.autopersoncrop.core.PixelRect
 import kz.autopersoncrop.core.RectD
+import kz.autopersoncrop.core.WrestlingSubjectSelector
 import kz.autopersoncrop.io.ImageFrameLoader
 import kz.autopersoncrop.io.PhotoFrame
 import kz.autopersoncrop.io.SourcePhoto
@@ -73,9 +74,11 @@ class PhotoProcessor(
         val fullBoxes = previewBoxes.map { b ->
             RectD(b.left * sx, b.top * sy, b.right * sx, b.bottom * sy)
         }
+        val imageSize = ImageSize(frame.uprightWidth, frame.uprightHeight)
+        val wrestlingSubjects = WrestlingSubjectSelector.select(imageSize, fullBoxes)
         val plan = CropPlanner.plan(
-            image = ImageSize(frame.uprightWidth, frame.uprightHeight),
-            people = fullBoxes,
+            image = imageSize,
+            people = wrestlingSubjects,
             screenWidth = screenWidth,
             screenHeight = screenHeight,
             marginFraction = 0.05,
