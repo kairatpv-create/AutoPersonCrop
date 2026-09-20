@@ -123,7 +123,9 @@ class BatchProcessingService : Service() {
                 for (photo in photos) {
                     val uriKey = photo.uri.toString()
                     val prior = statusMap[uriKey] ?: BatchDatabase.PENDING
-                    if (prior == BatchDatabase.DONE || prior == BatchDatabase.NO_PEOPLE || prior == BatchDatabase.EXISTING) continue
+                    // NO_PEOPLE is intentionally retried: newer recovery detection may now find a
+                    // wrestler that an older build missed. DONE and EXISTING stay untouched.
+                    if (prior == BatchDatabase.DONE || prior == BatchDatabase.EXISTING) continue
 
                     if (stopRequested.get()) {
                         finishState(
@@ -158,7 +160,7 @@ class BatchProcessingService : Service() {
                             processor = processor,
                             photo = photo,
                             outDir = outDir,
-                            overwriteFromStart = forceReprocess || prior == BatchDatabase.ERROR || prior == BatchDatabase.PROCESSING,
+                            overwriteFromStart = forceReprocess || prior == BatchDatabase.NO_PEOPLE || prior == BatchDatabase.ERROR || prior == BatchDatabase.PROCESSING,
                         )
                         val newStatus = when (result) {
                             ProcessResult.Cropped, ProcessResult.CopiedFull -> BatchDatabase.DONE
