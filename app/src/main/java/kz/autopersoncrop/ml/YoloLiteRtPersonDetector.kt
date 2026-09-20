@@ -152,13 +152,15 @@ class YoloLiteRtPersonDetector(
         error("Неизвестный выход YOLO: $count float")
     }
 
-    override fun detect(bitmap: Bitmap): List<RectD> {
+    override fun detect(bitmap: Bitmap): List<RectD> = detect(bitmap, confidence)
+
+    override fun detect(bitmap: Bitmap, minConfidence: Float): List<RectD> {
         val prep = letterboxIntoReusableBitmap(bitmap)
         fillInputFloatBuffer()
         inputBuffers[0].writeFloat(inputFloatBuffer)
         compiled.run(inputBuffers, outputBuffers)
         val out = outputBuffers[0].readFloat()
-        return nms(decode(out, prep)).map { it.rect }
+        return nms(decode(out, prep, minConfidence.coerceIn(0.01f, 0.95f))).map { it.rect }
     }
 
     private data class Candidate(val rect: RectD, val score: Float)
@@ -207,7 +209,7 @@ class YoloLiteRtPersonDetector(
         }
     }
 
-    private fun decode(out: FloatArray, p: Prep): List<Candidate> {
+    private fun decode(out: FloatArray, p: Prep, threshold: Float): List<Candidate> {
         if (outputShape.size == 3 && outputShape[2] == 6) {
             val rows = outputShape[1]
             return buildList {
@@ -215,7 +217,7 @@ class YoloLiteRtPersonDetector(
                     val o = i * 6
                     val conf = out[o + 4]
                     val cls = out[o + 5].toInt()
-                    if (cls != 0 || conf < confidence) continue
+                    if (cls != 0 || conf < threshold) continue
                     mapXyxy(out[o], out[o + 1], out[o + 2], out[o + 3], p)?.let {
                         add(Candidate(it, conf))
                     }
@@ -237,7 +239,7 @@ class YoloLiteRtPersonDetector(
         val list = ArrayList<Candidate>()
         for (i in 0 until anchors) {
             val conf = v(4, i)
-            if (conf < confidence) continue
+            if (conf < threshold) continue
             val cx = v(0, i)
             val cy = v(1, i)
             val w = v(2, i)
