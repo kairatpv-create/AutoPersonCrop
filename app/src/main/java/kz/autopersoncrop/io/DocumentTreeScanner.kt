@@ -79,15 +79,15 @@ class DocumentTreeScanner(private val context: Context) {
             }
         }
 
-        // SAF providers are free to return children in any order. Process explicitly in source
-        // chronology so files written to CROP keep a stable, predictable sequence in galleries.
+        // SAF providers may return files in arbitrary order. For numbered sports sequences the file
+        // name is authoritative: 1, 2, 3 ... 10, 11 must stay in that exact natural order. We do
+        // not rename anything; lastModified is only a final tie-breaker for identical names.
         photos.sortWith { a, b ->
-            val dir = a.relativeDir.compareTo(b.relativeDir, ignoreCase = true)
+            val dir = naturalCompare(a.relativeDir, b.relativeDir)
             if (dir != 0) return@sortWith dir
-            if (a.lastModified > 0L && b.lastModified > 0L && a.lastModified != b.lastModified) {
-                return@sortWith a.lastModified.compareTo(b.lastModified)
-            }
-            naturalCompare(a.name, b.name)
+            val name = naturalCompare(a.name, b.name)
+            if (name != 0) return@sortWith name
+            a.lastModified.compareTo(b.lastModified)
         }
 
         return output to photos
