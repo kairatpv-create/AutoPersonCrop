@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RectF
 import android.util.Log
@@ -19,7 +20,15 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
-/** Offline YOLO detector using Google LiteRT 2.x CompiledModel API. */
+/**
+ * Offline YOLO person detector using Google LiteRT 2.x CompiledModel API.
+ *
+ * Combat-sport photos need more recall than ordinary portraits: wrestlers can be horizontal,
+ * upside-down relative to the detector, strongly occluded or almost completely overlapping.
+ * The normal full-frame inference stays the fast path. Only when it returns fewer than two useful
+ * people do we add progressively stronger recovery passes (so normal photos do not slow down):
+ * softer full-frame -> centered zoom -> +/-90 degree views -> overlapping strips.
+ */
 class YoloLiteRtPersonDetector(
     private val context: Context,
     assetName: String = "person_detector.tflite",
@@ -155,12 +164,178 @@ class YoloLiteRtPersonDetector(
     override fun detect(bitmap: Bitmap): List<RectD> = detect(bitmap, confidence)
 
     override fun detect(bitmap: Bitmap, minConfidence: Float): List<RectD> {
-        val prep = letterboxIntoReusableBitmap(bitmap)
-        fillInputFloatBuffer()
-        inputBuffers[0].writeFloat(inputFloatBuffer)
-        compiled.run(inputBuffers, outputBuffers)
-        val out = outputBuffers[0].readFloat()
-        return nms(decode(out, prep, minConfidence.coerceIn(0.01f, 0.95f))).map { it.rect }
+        val threshold = minConfidence.coerceIn(0.01f, 0.95f)
+        val base = distinctDetections(detectOnceWithRetry(bitmap, threshold))
+
+        // Explicit low-confidence calls come from PhotoProcessor's own recovery tiles. Do not make
+        // those recurse into another recovery tree.
+        if (threshold < ROBUST_TRIGGER_CONFIDENCE || base.size >= 2) return base
+
+        val all = ArrayList<RectD>(base)
+
+        // 1) Same image, lower person threshold. This catches motion blur / partial occlusion.
+        all += usefulDetections(detectOnceWithRetry(bitmap, FULL_RECOVERY_CONFIDENCE), bitmap)
+        distinctDetections(all).takeIf { it.size >= 2 }?.let { return it }
+
+        // 2) Centered zoom. Sports action is normally near the centre; zooming increases the number
+        // of real athlete pixels seen by the fixed 640x640 model without lowering source quality.
+        all += detectCenteredZoom(bitmap)
+        distinctDetections(all).takeIf { it.size >= 2 }?.let { return it }
+
+        // 3) Lying wrestlers are a known weak case for generic person detectors. Try both quarter
+        // turns, because one makes a horizontal body upright while the other avoids upside-down bias.
+        all += detectRotated(bitmap, 90)
+        distinctDetections(all).takeIf { it.size >= 2 }?.let { return it }
+        all += detectRotated(bitmap, -90)
+        distinctDetections(all).takeIf { it.size >= 2 }?.let { return it }
+
+        // 4) Last resort: three overlapping strips along the long image axis. This makes small or
+        // partially occluded athletes larger to the model, while preserving substantial overlap so
+        // a pair crossing a tile boundary can still be seen together.
+        all += detectOverlappingStrips(bitmap)
+        return distinctDetections(all)
+    }
+
+    private fun detectOnceWithRetry(bitmap: Bitmap, threshold: Float): List<RectD> {
+        var last: Throwable? = null
+        repeat(INFERENCE_ATTEMPTS) { attempt ->
+            try {
+                val prep = letterboxIntoReusableBitmap(bitmap)
+                fillInputFloatBuffer()
+                inputBuffers[0].writeFloat(inputFloatBuffer)
+                compiled.run(inputBuffers, outputBuffers)
+                val out = outputBuffers[0].readFloat()
+                return nms(decode(out, prep, threshold.coerceIn(0.01f, 0.95f))).map { it.rect }
+            } catch (t: Throwable) {
+                last = t
+                if (attempt + 1 < INFERENCE_ATTEMPTS) {
+                    Log.w(TAG, "Повтор LiteRT после ошибки: ${t.message}")
+                    Thread.sleep(25)
+                }
+            }
+        }
+        throw last ?: IllegalStateException("Неизвестная ошибка LiteRT")
+    }
+
+    private fun detectCenteredZoom(src: Bitmap): List<RectD> {
+        if (src.width < 360 || src.height < 360) return emptyList()
+        val cropW = (src.width * CENTER_ZOOM_FRACTION).roundToInt().coerceIn(1, src.width)
+        val cropH = (src.height * CENTER_ZOOM_FRACTION).roundToInt().coerceIn(1, src.height)
+        val left = (src.width - cropW) / 2
+        val top = (src.height - cropH) / 2
+        val crop = Bitmap.createBitmap(src, left, top, cropW, cropH)
+        return try {
+            detectOnceWithRetry(crop, ZOOM_RECOVERY_CONFIDENCE)
+                .map { RectD(it.left + left, it.top + top, it.right + left, it.bottom + top) }
+                .let { usefulDetections(it, src) }
+        } finally {
+            if (crop !== src && !crop.isRecycled) crop.recycle()
+        }
+    }
+
+    private fun detectRotated(src: Bitmap, degrees: Int): List<RectD> {
+        val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
+        val rotated = Bitmap.createBitmap(src, 0, 0, src.width, src.height, matrix, true)
+        return try {
+            val boxes = detectOnceWithRetry(rotated, ROTATED_RECOVERY_CONFIDENCE)
+            val mapped = boxes.mapNotNull { b ->
+                val r = when (degrees) {
+                    90 -> RectD(
+                        b.top,
+                        src.height - b.right,
+                        b.bottom,
+                        src.height - b.left,
+                    )
+                    -90 -> RectD(
+                        src.width - b.bottom,
+                        b.left,
+                        src.width - b.top,
+                        b.right,
+                    )
+                    else -> return@mapNotNull null
+                }
+                clampRect(r, src.width, src.height)
+            }
+            usefulDetections(mapped, src)
+        } finally {
+            if (rotated !== src && !rotated.isRecycled) rotated.recycle()
+        }
+    }
+
+    private fun detectOverlappingStrips(src: Bitmap): List<RectD> {
+        val horizontal = src.width >= src.height
+        val longSide = if (horizontal) src.width else src.height
+        if (longSide < 480) return emptyList()
+
+        val tileLong = (longSide * STRIP_FRACTION).roundToInt().coerceIn(1, longSide)
+        val end = longSide - tileLong
+        val offsets = intArrayOf(0, end / 2, end).distinct()
+        val found = ArrayList<RectD>()
+
+        for (offset in offsets) {
+            val tile = if (horizontal) {
+                Bitmap.createBitmap(src, offset, 0, tileLong, src.height)
+            } else {
+                Bitmap.createBitmap(src, 0, offset, src.width, tileLong)
+            }
+            try {
+                val boxes = detectOnceWithRetry(tile, STRIP_RECOVERY_CONFIDENCE)
+                for (b in boxes) {
+                    val mapped = if (horizontal) {
+                        RectD(b.left + offset, b.top, b.right + offset, b.bottom)
+                    } else {
+                        RectD(b.left, b.top + offset, b.right, b.bottom + offset)
+                    }
+                    clampRect(mapped, src.width, src.height)?.let { found += it }
+                }
+            } finally {
+                if (tile !== src && !tile.isRecycled) tile.recycle()
+            }
+            if (distinctDetections(found).size >= 2) break
+        }
+        return usefulDetections(found, src)
+    }
+
+    private fun usefulDetections(input: List<RectD>, src: Bitmap): List<RectD> {
+        val imageArea = src.width.toDouble() * src.height.toDouble()
+        return input.filter { box ->
+            box.width >= 6.0 && box.height >= 6.0 &&
+                box.area / imageArea.coerceAtLeast(1.0) >= MIN_RECOVERY_AREA_FRACTION
+        }
+    }
+
+    /**
+     * Merge only near-identical cross-pass boxes. Wrestling partners can overlap strongly, so a
+     * conventional IoU=0.5/0.6 dedupe would incorrectly erase the second athlete.
+     */
+    private fun distinctDetections(input: List<RectD>): List<RectD> {
+        if (input.size <= 1) return input
+        val keep = ArrayList<RectD>()
+        for (candidate in input.sortedByDescending { it.area }) {
+            if (keep.none { isNearIdentical(it, candidate) }) keep += candidate
+        }
+        return keep.take(MAX_RECOVERY_BOXES)
+    }
+
+    private fun isNearIdentical(a: RectD, b: RectD): Boolean {
+        val overlap = iou(a, b).toDouble()
+        if (overlap >= 0.94) return true
+        if (overlap < 0.84) return false
+        val areaRatio = min(a.area, b.area) / max(a.area, b.area).coerceAtLeast(1.0)
+        if (areaRatio < 0.82) return false
+        val scaleX = max(a.width, b.width).coerceAtLeast(1.0)
+        val scaleY = max(a.height, b.height).coerceAtLeast(1.0)
+        val dx = abs(a.centerX - b.centerX) / scaleX
+        val dy = abs(a.centerY - b.centerY) / scaleY
+        return dx <= 0.07 && dy <= 0.07
+    }
+
+    private fun clampRect(r: RectD, w: Int, h: Int): RectD? {
+        val l = r.left.coerceIn(0.0, w.toDouble())
+        val t = r.top.coerceIn(0.0, h.toDouble())
+        val right = r.right.coerceIn(l, w.toDouble())
+        val bottom = r.bottom.coerceIn(t, h.toDouble())
+        return if (right - l >= 2.0 && bottom - t >= 2.0) RectD(l, t, right, bottom) else null
     }
 
     private data class Candidate(val rect: RectD, val score: Float)
@@ -238,6 +413,7 @@ class YoloLiteRtPersonDetector(
 
         val list = ArrayList<Candidate>()
         for (i in 0 until anchors) {
+            // YOLOv8/YOLO11 export has class scores directly after xywh. Class 0 (person) is feature 4.
             val conf = v(4, i)
             if (conf < threshold) continue
             val cx = v(0, i)
@@ -267,12 +443,13 @@ class YoloLiteRtPersonDetector(
     private fun nms(input: List<Candidate>): List<Candidate> {
         val sorted = input.sortedByDescending { it.score }.toMutableList()
         val keep = ArrayList<Candidate>()
+        val effectiveIou = max(iouThreshold, WRESTLING_NMS_IOU)
         while (sorted.isNotEmpty()) {
             val best = sorted.removeAt(0)
             keep += best
             val it = sorted.iterator()
             while (it.hasNext()) {
-                if (iou(best.rect, it.next().rect) > iouThreshold) it.remove()
+                if (iou(best.rect, it.next().rect) > effectiveIou) it.remove()
             }
         }
         return keep
@@ -307,5 +484,18 @@ class YoloLiteRtPersonDetector(
         runCatching { modelBitmap.recycle() }
     }
 
-    companion object { private const val TAG = "AutoPersonCropML" }
+    companion object {
+        private const val TAG = "AutoPersonCropML"
+        private const val ROBUST_TRIGGER_CONFIDENCE = 0.15f
+        private const val FULL_RECOVERY_CONFIDENCE = 0.105f
+        private const val ZOOM_RECOVERY_CONFIDENCE = 0.095f
+        private const val ROTATED_RECOVERY_CONFIDENCE = 0.090f
+        private const val STRIP_RECOVERY_CONFIDENCE = 0.080f
+        private const val MIN_RECOVERY_AREA_FRACTION = 0.0025
+        private const val CENTER_ZOOM_FRACTION = 0.76
+        private const val STRIP_FRACTION = 0.62
+        private const val WRESTLING_NMS_IOU = 0.85f
+        private const val MAX_RECOVERY_BOXES = 10
+        private const val INFERENCE_ATTEMPTS = 2
+    }
 }
