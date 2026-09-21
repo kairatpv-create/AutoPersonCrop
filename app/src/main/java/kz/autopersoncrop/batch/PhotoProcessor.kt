@@ -10,12 +10,10 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import androidx.exifinterface.media.ExifInterface
-import kz.autopersoncrop.core.CropPlanner
 import kz.autopersoncrop.core.ImageSize
 import kz.autopersoncrop.core.PixelRect
 import kz.autopersoncrop.core.RectD
-import kz.autopersoncrop.core.SampleGuidedCropAdjuster
-import kz.autopersoncrop.core.SceneCropProfile
+import kz.autopersoncrop.core.WrestlingCropPlanner
 import kz.autopersoncrop.core.WrestlingSubjectSelector
 import kz.autopersoncrop.io.ImageFrameLoader
 import kz.autopersoncrop.io.PhotoFrame
@@ -39,10 +37,9 @@ class PhotoProcessor(
     private val context: Context,
     private val detector: PersonDetector,
     private val transformer: LosslessJpegTransformer,
-    private val screenWidth: Int,
-    private val screenHeight: Int,
+    @Suppress("UNUSED_PARAMETER") screenWidth: Int,
+    @Suppress("UNUSED_PARAMETER") screenHeight: Int,
     private val outputSettings: OutputSettings,
-    private val sceneProfiles: Map<String, SceneCropProfile> = emptyMap(),
 ) {
     private val loader = ImageFrameLoader(context)
 
@@ -80,25 +77,11 @@ class PhotoProcessor(
         }
         val imageSize = ImageSize(frame.uprightWidth, frame.uprightHeight)
         val wrestlingSubjects = WrestlingSubjectSelector.select(imageSize, fullBoxes)
-        val plan = CropPlanner.plan(
-            image = imageSize,
-            people = wrestlingSubjects,
-            screenWidth = screenWidth,
-            screenHeight = screenHeight,
-            marginFraction = 0.05,
-        )
 
-        val guidedRect = resolveProfile(photo.relativeDir)?.let { profile ->
-            SampleGuidedCropAdjuster.adjust(
-                image = imageSize,
-                subjects = wrestlingSubjects,
-                base = plan.rect,
-                profile = profile,
-            )
-        } ?: plan.rect
-
+        // Important: selected wrestlers are final. The crop stage never selects people again.
+        val uprightCrop = WrestlingCropPlanner.plan(imageSize, wrestlingSubjects)
         val raw = ExifCropMapper.uprightToRaw(
-            guidedRect, frame.rawWidth, frame.rawHeight, frame.exifOrientation
+            uprightCrop, frame.rawWidth, frame.rawHeight, frame.exifOrientation
         )
 
         if (outputSettings.strictLossless) {
@@ -115,28 +98,40 @@ class PhotoProcessor(
     }
 
     /**
-     * Normal path stays conservative. Recovery is only added when needed, preserving the existing
-     * fast path while helping combat-sport frames with motion, occlusion and unusual body angles.
+     * First use the detector's normal combat-sport path. If that set does not form a plausible
+     * pair, add a softer pass and three overlapping tiles. This keeps easy photos fast while giving
+     * difficult standing/lying/stacked scenes another chance before declaring one/no person.
      */
     private fun detectPeopleWithRecovery(preview: Bitmap): List<RectD> {
-        detector.detect(preview).takeIf { it.isNotEmpty() }?.let { return it }
+        val image = ImageSize(preview.width, preview.height)
+        val normal = deduplicate(detector.detect(preview))
+        if (normal.isNotEmpty()) {
+            val selected = runCatching { WrestlingSubjectSelector.select(image, normal) }.getOrDefault(emptyList())
+            if (selected.size >= 2) return normal
+        }
 
-        detector.detect(preview, RECOVERY_CONFIDENCE)
+        val combined = ArrayList<RectD>(normal)
+        combined += detector.detect(preview, RECOVERY_CONFIDENCE)
             .filter { isUsefulRecoveryBox(it, preview) }
-            .takeIf { it.isNotEmpty() }
-            ?.let { return deduplicate(it) }
 
-        return detectInOverlappingTiles(preview)
+        val afterSoft = deduplicate(combined)
+        if (afterSoft.isNotEmpty()) {
+            val selected = runCatching { WrestlingSubjectSelector.select(image, afterSoft) }.getOrDefault(emptyList())
+            if (selected.size >= 2) return afterSoft
+        }
+
+        combined += detectInOverlappingTiles(preview)
+        return deduplicate(combined)
     }
 
     private fun detectInOverlappingTiles(preview: Bitmap): List<RectD> {
         val horizontalSplit = preview.width >= preview.height
         val longSide = if (horizontalSplit) preview.width else preview.height
-        if (longSide < 520) return emptyList()
+        if (longSide < 480) return emptyList()
 
-        val tileLong = (longSide * 0.64).roundToInt().coerceIn(1, longSide)
-        val secondOffset = longSide - tileLong
-        val offsets = intArrayOf(0, secondOffset).distinct()
+        val tileLong = (longSide * 0.72).roundToInt().coerceIn(1, longSide)
+        val end = longSide - tileLong
+        val offsets = intArrayOf(0, end / 2, end).distinct()
         val found = ArrayList<RectD>()
 
         for (offset in offsets) {
@@ -163,19 +158,30 @@ class PhotoProcessor(
     }
 
     private fun isUsefulRecoveryBox(box: RectD, preview: Bitmap): Boolean {
-        if (box.width < 8.0 || box.height < 8.0) return false
+        if (box.width < 6.0 || box.height < 6.0) return false
         val imageArea = preview.width.toDouble() * preview.height.toDouble()
         return box.area / imageArea.coerceAtLeast(1.0) >= MIN_RECOVERY_AREA_FRACTION
     }
 
+    /** Preserve strongly overlapping wrestlers; remove only very similar cross-pass duplicates. */
     private fun deduplicate(input: List<RectD>): List<RectD> {
         if (input.size <= 1) return input
         val sorted = input.sortedByDescending { it.area }
         val keep = ArrayList<RectD>()
         for (candidate in sorted) {
-            if (keep.none { overlapIoU(it, candidate) >= 0.58 }) keep += candidate
+            if (keep.none { nearDuplicate(it, candidate) }) keep += candidate
         }
-        return keep
+        return keep.take(MAX_CANDIDATES)
+    }
+
+    private fun nearDuplicate(a: RectD, b: RectD): Boolean {
+        val iou = overlapIoU(a, b)
+        if (iou < 0.86) return false
+        val areaRatio = min(a.area, b.area) / max(a.area, b.area).coerceAtLeast(1.0)
+        if (areaRatio < 0.78) return false
+        val dx = kotlin.math.abs(a.centerX - b.centerX) / max(a.width, b.width).coerceAtLeast(1.0)
+        val dy = kotlin.math.abs(a.centerY - b.centerY) / max(a.height, b.height).coerceAtLeast(1.0)
+        return dx <= 0.10 && dy <= 0.10
     }
 
     private fun overlapIoU(a: RectD, b: RectD): Double {
@@ -187,17 +193,6 @@ class PhotoProcessor(
         val intersection = (right - left) * (bottom - top)
         val union = a.area + b.area - intersection
         return if (union <= 0.0) 0.0 else intersection / union
-    }
-
-    private fun resolveProfile(relativeDir: String): SceneCropProfile? {
-        if (sceneProfiles.isEmpty()) return null
-        var key = relativeDir.trim('/')
-        while (true) {
-            sceneProfiles[key]?.let { return it }
-            if (key.isBlank()) break
-            key = key.substringBeforeLast('/', "")
-        }
-        return sceneProfiles[""]
     }
 
     private fun encodeConfigured(
@@ -247,7 +242,6 @@ class PhotoProcessor(
                 output.flush()
             }
             finalBitmap.recycle()
-
             copyCommonExif(photo, out)
         } catch (t: Throwable) {
             runCatching { out.delete() }
@@ -336,8 +330,9 @@ class PhotoProcessor(
         r.left == 0 && r.top == 0 && r.right == w && r.bottom == h
 
     companion object {
-        private const val RECOVERY_CONFIDENCE = 0.13f
-        private const val TILE_RECOVERY_CONFIDENCE = 0.11f
-        private const val MIN_RECOVERY_AREA_FRACTION = 0.006
+        private const val RECOVERY_CONFIDENCE = 0.105f
+        private const val TILE_RECOVERY_CONFIDENCE = 0.090f
+        private const val MIN_RECOVERY_AREA_FRACTION = 0.0035
+        private const val MAX_CANDIDATES = 12
     }
 }
