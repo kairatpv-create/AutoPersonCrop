@@ -10,6 +10,10 @@ import kotlin.math.sqrt
  * The selector is intentionally specialised for combat-sport photography. It favours the largest
  * central participant and one physically linked partner, while rejecting small edge/background
  * people and near-duplicate boxes produced by multi-pass recovery detection.
+ *
+ * If a linked pair contains exactly one fully visible person and one person already clipped by the
+ * source-image boundary, the fully visible person becomes the only crop subject. A body part that
+ * never existed inside the source photo must not force the final composition wider.
  */
 object WrestlingSubjectSelector {
     fun select(image: ImageSize, people: List<RectD>): List<RectD> {
@@ -92,7 +96,28 @@ object WrestlingSubjectSelector {
             ?.takeIf { it.score >= 0.20 }
             ?.box
 
-        return if (partner != null) listOf(anchor, partner) else listOf(anchor)
+        if (partner == null) return listOf(anchor)
+
+        // User rule: when one member of the selected pair is already cut by the source boundary and
+        // the other is complete, compose solely around the complete person. The incomplete person is
+        // not protected by the crop and is allowed to fall partly or fully outside the result.
+        val anchorFull = isFullyVisible(image, anchor)
+        val partnerFull = isFullyVisible(image, partner)
+        if (anchorFull xor partnerFull) {
+            return listOf(if (anchorFull) anchor else partner)
+        }
+
+        return listOf(anchor, partner)
+    }
+
+    /** True when the detector box has a small real-image margin on every side. */
+    fun isFullyVisible(image: ImageSize, r: RectD): Boolean {
+        val edgeX = max(3.0, image.width * FULL_VISIBILITY_EDGE_FRACTION)
+        val edgeY = max(3.0, image.height * FULL_VISIBILITY_EDGE_FRACTION)
+        return r.left > edgeX &&
+            r.right < image.width - edgeX &&
+            r.top > edgeY &&
+            r.bottom < image.height - edgeY
     }
 
     private fun isLikelyDuplicate(a: RectD, b: RectD): Boolean {
@@ -160,4 +185,6 @@ object WrestlingSubjectSelector {
         val b = bottom.coerceIn(t, image.height.toDouble())
         return RectD(l, t, r, b)
     }
+
+    private const val FULL_VISIBILITY_EDGE_FRACTION = 0.008
 }
