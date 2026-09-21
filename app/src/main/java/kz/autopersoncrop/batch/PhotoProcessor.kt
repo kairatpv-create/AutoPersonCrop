@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.BitmapRegionDecoder
+import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Rect
 import android.net.Uri
@@ -22,6 +23,7 @@ import kz.autopersoncrop.jpeg.ExifCropMapper
 import kz.autopersoncrop.jpeg.LosslessJpegTransformer
 import kz.autopersoncrop.ml.PersonDetector
 import kz.autopersoncrop.settings.OutputSettings
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -33,6 +35,16 @@ sealed class ProcessResult {
     data object AlreadyExists : ProcessResult()
 }
 
+/**
+ * One/two-person wrestling crop processor.
+ *
+ * 0.6.8 adds short-term sequence memory. Burst photos from the same bout often differ only by a
+ * few milliseconds, but a generic person detector can still miss one frame. If the current frame
+ * is visually very close to the immediately preceding successfully detected frame, its previous
+ * subject geometry is used as a guarded fallback instead of copying the current photo unprocessed.
+ * The memory is reset on folder/scene changes or visually different frames, so it never becomes a
+ * fixed scene template.
+ */
 class PhotoProcessor(
     private val context: Context,
     private val detector: PersonDetector,
@@ -42,6 +54,17 @@ class PhotoProcessor(
     private val outputSettings: OutputSettings,
 ) {
     private val loader = ImageFrameLoader(context)
+
+    private data class SequenceReference(
+        val relativeDir: String,
+        val uprightWidth: Int,
+        val uprightHeight: Int,
+        val signature: IntArray,
+        val normalizedSubjects: List<RectD>,
+    )
+
+    private var sequenceReference: SequenceReference? = null
+    private var sequenceFallbackStreak = 0
 
     fun process(
         photo: SourcePhoto,
@@ -59,43 +82,225 @@ class PhotoProcessor(
         val frame = loader.load(photo.uri)
         val previewWidth = frame.preview.width
         val previewHeight = frame.preview.height
+
+        if (sequenceReference?.relativeDir != photo.relativeDir) {
+            sequenceReference = null
+            sequenceFallbackStreak = 0
+        }
+
+        val signature = frameSignature(frame.preview)
         val previewBoxes = try {
             detectPeopleWithRecovery(frame.preview)
         } finally {
             if (!frame.preview.isRecycled) frame.preview.recycle()
         }
 
-        if (previewBoxes.isEmpty()) {
-            copyExact(photo, outputDir)
-            return ProcessResult.NoPeopleCopied
-        }
-
+        val imageSize = ImageSize(frame.uprightWidth, frame.uprightHeight)
         val sx = frame.uprightWidth.toDouble() / previewWidth.coerceAtLeast(1)
         val sy = frame.uprightHeight.toDouble() / previewHeight.coerceAtLeast(1)
-        val fullBoxes = previewBoxes.map { b ->
-            RectD(b.left * sx, b.top * sy, b.right * sx, b.bottom * sy)
-        }
-        val imageSize = ImageSize(frame.uprightWidth, frame.uprightHeight)
-        val wrestlingSubjects = WrestlingSubjectSelector.select(imageSize, fullBoxes)
 
-        // Important: selected wrestlers are final. The crop stage never selects people again.
-        val uprightCrop = WrestlingCropPlanner.plan(imageSize, wrestlingSubjects)
+        var detectedSubjects: List<RectD>? = null
+        var usedSequenceFallback = false
+
+        val subjectsForCrop: List<RectD> = if (previewBoxes.isNotEmpty()) {
+            val fullBoxes = previewBoxes.map { b ->
+                RectD(b.left * sx, b.top * sy, b.right * sx, b.bottom * sy)
+            }
+            val selected = WrestlingSubjectSelector.select(imageSize, fullBoxes)
+            detectedSubjects = selected
+
+            // When only one wrestler is detected but the immediately preceding very similar frame
+            // confidently contained two, preserve the previous pair area as a safety envelope.
+            val assisted = if (selected.size == 1) {
+                sequenceAssistForPartialDetection(photo, frame, signature, selected)
+            } else null
+
+            if (assisted != null) {
+                usedSequenceFallback = true
+                assisted
+            } else {
+                selected
+            }
+        } else {
+            val carried = sequenceFallbackForMiss(photo, frame, signature)
+            if (carried == null) {
+                sequenceReference = null
+                sequenceFallbackStreak = 0
+                copyExact(photo, outputDir)
+                return ProcessResult.NoPeopleCopied
+            }
+            usedSequenceFallback = true
+            carried
+        }
+
+        // Selected wrestler geometry is final. The crop stage never selects people again.
+        val uprightCrop = WrestlingCropPlanner.plan(imageSize, subjectsForCrop)
         val raw = ExifCropMapper.uprightToRaw(
             uprightCrop, frame.rawWidth, frame.rawHeight, frame.exifOrientation
         )
 
-        if (outputSettings.strictLossless) {
+        val result = if (outputSettings.strictLossless) {
             if (isFull(raw, frame.rawWidth, frame.rawHeight)) {
                 copyExact(photo, outputDir)
-                return ProcessResult.CopiedFull
+                ProcessResult.CopiedFull
+            } else {
+                transformer.crop(photo.uri, outputDir, photo.name, raw)
+                ProcessResult.Cropped
             }
-            transformer.crop(photo.uri, outputDir, photo.name, raw)
-            return ProcessResult.Cropped
+        } else {
+            encodeConfigured(photo, outputDir, raw, frame)
+            if (isFull(raw, frame.rawWidth, frame.rawHeight)) ProcessResult.CopiedFull else ProcessResult.Cropped
         }
 
-        encodeConfigured(photo, outputDir, raw, frame)
-        return if (isFull(raw, frame.rawWidth, frame.rawHeight)) ProcessResult.CopiedFull else ProcessResult.Cropped
+        if (!usedSequenceFallback && !detectedSubjects.isNullOrEmpty()) {
+            rememberSequenceReference(photo, frame, signature, detectedSubjects!!)
+            sequenceFallbackStreak = 0
+        } else if (usedSequenceFallback) {
+            sequenceFallbackStreak++
+        }
+
+        return result
     }
+
+    private fun rememberSequenceReference(
+        photo: SourcePhoto,
+        frame: PhotoFrame,
+        signature: IntArray,
+        subjects: List<RectD>,
+    ) {
+        val w = frame.uprightWidth.toDouble().coerceAtLeast(1.0)
+        val h = frame.uprightHeight.toDouble().coerceAtLeast(1.0)
+        sequenceReference = SequenceReference(
+            relativeDir = photo.relativeDir,
+            uprightWidth = frame.uprightWidth,
+            uprightHeight = frame.uprightHeight,
+            signature = signature,
+            normalizedSubjects = subjects.map { r ->
+                RectD(
+                    r.left / w,
+                    r.top / h,
+                    r.right / w,
+                    r.bottom / h,
+                )
+            },
+        )
+    }
+
+    private fun sequenceFallbackForMiss(
+        photo: SourcePhoto,
+        frame: PhotoFrame,
+        signature: IntArray,
+    ): List<RectD>? {
+        val ref = sequenceReference ?: return null
+        if (!canUseSequenceReference(ref, photo, frame, signature)) return null
+        if (sequenceFallbackStreak >= MAX_CONSECUTIVE_SEQUENCE_FALLBACKS) return null
+
+        val mapped = denormalize(ref.normalizedSubjects, frame.uprightWidth, frame.uprightHeight)
+        if (mapped.isEmpty()) return null
+        return listOf(expandedUnion(mapped, frame.uprightWidth, frame.uprightHeight, 0.14))
+    }
+
+    private fun sequenceAssistForPartialDetection(
+        photo: SourcePhoto,
+        frame: PhotoFrame,
+        signature: IntArray,
+        current: List<RectD>,
+    ): List<RectD>? {
+        val ref = sequenceReference ?: return null
+        if (ref.normalizedSubjects.size < 2) return null
+        if (!canUseSequenceReference(ref, photo, frame, signature)) return null
+        if (sequenceFallbackStreak >= MAX_CONSECUTIVE_SEQUENCE_FALLBACKS) return null
+
+        val previous = denormalize(ref.normalizedSubjects, frame.uprightWidth, frame.uprightHeight)
+        if (previous.isEmpty()) return null
+        return listOf(expandedUnion(previous + current, frame.uprightWidth, frame.uprightHeight, 0.10))
+    }
+
+    private fun canUseSequenceReference(
+        ref: SequenceReference,
+        photo: SourcePhoto,
+        frame: PhotoFrame,
+        signature: IntArray,
+    ): Boolean {
+        if (ref.relativeDir != photo.relativeDir) return false
+        if (ref.uprightWidth != frame.uprightWidth || ref.uprightHeight != frame.uprightHeight) return false
+        if (!signaturesSimilar(ref.signature, signature)) {
+            sequenceReference = null
+            sequenceFallbackStreak = 0
+            return false
+        }
+        return true
+    }
+
+    /** Small exposure-tolerant visual fingerprint for adjacent burst frames. */
+    private fun frameSignature(bitmap: Bitmap): IntArray {
+        val grid = SIGNATURE_GRID
+        val values = IntArray(grid * grid)
+        var index = 0
+        for (gy in 0 until grid) {
+            val y = (((gy + 0.5) * bitmap.height) / grid).toInt().coerceIn(0, bitmap.height - 1)
+            for (gx in 0 until grid) {
+                val x = (((gx + 0.5) * bitmap.width) / grid).toInt().coerceIn(0, bitmap.width - 1)
+                val c = bitmap.getPixel(x, y)
+                values[index++] = (Color.red(c) * 77 + Color.green(c) * 150 + Color.blue(c) * 29) shr 8
+            }
+        }
+        return values
+    }
+
+    private fun signaturesSimilar(a: IntArray, b: IntArray): Boolean {
+        if (a.size != b.size || a.isEmpty()) return false
+        val meanA = a.average()
+        val meanB = b.average()
+        if (abs(meanA - meanB) > MAX_BRIGHTNESS_SHIFT) return false
+
+        var weightedDiff = 0.0
+        var totalWeight = 0.0
+        var strongOutliers = 0
+        val grid = SIGNATURE_GRID
+        for (i in a.indices) {
+            val x = i % grid
+            val y = i / grid
+            val central = x in (grid / 4) until (grid - grid / 4) && y in (grid / 4) until (grid - grid / 4)
+            val weight = if (central) 2.0 else 1.0
+            val centeredDiff = abs((a[i] - meanA) - (b[i] - meanB))
+            weightedDiff += centeredDiff * weight
+            totalWeight += weight
+            if (centeredDiff > SIGNATURE_OUTLIER_DIFF) strongOutliers++
+        }
+        val meanDiff = weightedDiff / totalWeight.coerceAtLeast(1.0)
+        return meanDiff <= MAX_SIGNATURE_MEAN_DIFF && strongOutliers <= a.size / 4
+    }
+
+    private fun denormalize(normalized: List<RectD>, width: Int, height: Int): List<RectD> {
+        return normalized.map { r ->
+            RectD(
+                r.left * width,
+                r.top * height,
+                r.right * width,
+                r.bottom * height,
+            ).clampTo(width, height)
+        }.filter { it.width >= 2.0 && it.height >= 2.0 }
+    }
+
+    private fun expandedUnion(rects: List<RectD>, width: Int, height: Int, fraction: Double): RectD {
+        val u = RectD(
+            rects.minOf { it.left },
+            rects.minOf { it.top },
+            rects.maxOf { it.right },
+            rects.maxOf { it.bottom },
+        )
+        val mx = max(u.width * fraction, width * 0.018)
+        val my = max(u.height * fraction, height * 0.018)
+        return RectD(u.left - mx, u.top - my, u.right + mx, u.bottom + my).clampTo(width, height)
+    }
+
+    private fun RectD.clampTo(width: Int, height: Int): RectD = RectD(
+        left.coerceIn(0.0, width.toDouble()),
+        top.coerceIn(0.0, height.toDouble()),
+        right.coerceIn(0.0, width.toDouble()),
+        bottom.coerceIn(0.0, height.toDouble()),
+    )
 
     /**
      * First use the detector's normal combat-sport path. If that set does not form a plausible
@@ -179,8 +384,8 @@ class PhotoProcessor(
         if (iou < 0.86) return false
         val areaRatio = min(a.area, b.area) / max(a.area, b.area).coerceAtLeast(1.0)
         if (areaRatio < 0.78) return false
-        val dx = kotlin.math.abs(a.centerX - b.centerX) / max(a.width, b.width).coerceAtLeast(1.0)
-        val dy = kotlin.math.abs(a.centerY - b.centerY) / max(a.height, b.height).coerceAtLeast(1.0)
+        val dx = abs(a.centerX - b.centerX) / max(a.width, b.width).coerceAtLeast(1.0)
+        val dy = abs(a.centerY - b.centerY) / max(a.height, b.height).coerceAtLeast(1.0)
         return dx <= 0.10 && dy <= 0.10
     }
 
@@ -334,5 +539,11 @@ class PhotoProcessor(
         private const val TILE_RECOVERY_CONFIDENCE = 0.090f
         private const val MIN_RECOVERY_AREA_FRACTION = 0.0035
         private const val MAX_CANDIDATES = 12
+
+        private const val SIGNATURE_GRID = 16
+        private const val MAX_BRIGHTNESS_SHIFT = 42.0
+        private const val MAX_SIGNATURE_MEAN_DIFF = 20.0
+        private const val SIGNATURE_OUTLIER_DIFF = 48.0
+        private const val MAX_CONSECUTIVE_SEQUENCE_FALLBACKS = 2
     }
 }
