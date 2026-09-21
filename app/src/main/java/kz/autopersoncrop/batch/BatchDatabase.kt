@@ -111,6 +111,32 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
         return result
     }
 
+    /** Ordered rows for the user-visible photo status list. */
+    fun items(folder: String): List<QueueItem> {
+        if (folder.isBlank()) return emptyList()
+        val result = ArrayList<QueueItem>()
+        readableDatabase.query(
+            "queue",
+            arrayOf("name", "rel", "status", "message", "sort_index"),
+            "folder=?",
+            arrayOf(folder),
+            null,
+            null,
+            "sort_index ASC",
+        ).use { c ->
+            while (c.moveToNext()) {
+                result += QueueItem(
+                    name = c.getString(0),
+                    relativeDir = c.getString(1),
+                    status = c.getInt(2),
+                    message = c.getString(3).orEmpty(),
+                    sortIndex = c.getInt(4),
+                )
+            }
+        }
+        return result
+    }
+
     fun mark(folder: String, uri: String, status: Int, message: String = "") {
         val v = ContentValues().apply {
             put("status", status)
@@ -138,6 +164,14 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
             processing = counts[PROCESSING],
         )
     }
+
+    data class QueueItem(
+        val name: String,
+        val relativeDir: String,
+        val status: Int,
+        val message: String,
+        val sortIndex: Int,
+    )
 
     data class Counts(
         val pending: Int,
