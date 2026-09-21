@@ -8,13 +8,20 @@ import kotlin.math.min
 /**
  * Geometry-only crop planner for wrestling photos.
  *
+ * The source image is never rotated here. We only choose the crop frame orientation:
+ * - one clearly standing person -> portrait 2:3;
+ * - two clearly standing, non-overlapping people -> portrait 2:3;
+ * - one lying/non-upright person -> landscape 3:2;
+ * - two people where at least one is non-upright, or the pair strongly overlaps -> landscape 3:2.
+ *
  * The subjects passed here have already been selected by WrestlingSubjectSelector. This planner
- * never re-selects people. It only removes empty space around the one/two principal wrestlers,
- * preserves the whole selected subject area, and chooses the tighter valid 2:3 or 3:2 frame.
+ * never re-selects people and never switches to the opposite aspect just because it is tighter.
  */
 object WrestlingCropPlanner {
     private const val PORTRAIT_ASPECT = 2.0 / 3.0
     private const val LANDSCAPE_ASPECT = 3.0 / 2.0
+    private const val STANDING_HEIGHT_TO_WIDTH = 1.10
+    private const val WRESTLING_OVERLAP_OF_SMALLER = 0.12
     private const val EPS = 1e-6
 
     fun plan(image: ImageSize, subjects: List<RectD>): PixelRect {
@@ -28,11 +35,9 @@ object WrestlingCropPlanner {
             .filter { it <= requestedMargin + EPS }
             .distinct()
 
-        val portrait = firstFitting(image, subject, SubjectLayout.PORTRAIT, PORTRAIT_ASPECT, margins, requestedMargin)
-        val landscape = firstFitting(image, subject, SubjectLayout.LANDSCAPE, LANDSCAPE_ASPECT, margins, requestedMargin)
-
-        val winner = choose(subject, subjects, portrait, landscape) ?: return full(image)
-        return winner.rect
+        val layout = chooseRequiredLayout(subjects)
+        val aspect = if (layout == SubjectLayout.PORTRAIT) PORTRAIT_ASPECT else LANDSCAPE_ASPECT
+        return firstFitting(image, subject, layout, aspect, margins, requestedMargin)?.rect ?: full(image)
     }
 
     private data class Candidate(
@@ -42,6 +47,36 @@ object WrestlingCropPlanner {
         val margin: Double,
         val requestedMargin: Double,
     )
+
+    private fun chooseRequiredLayout(subjects: List<RectD>): SubjectLayout {
+        if (subjects.size == 1) {
+            return if (isStanding(subjects.first())) SubjectLayout.PORTRAIT else SubjectLayout.LANDSCAPE
+        }
+
+        val a = subjects[0]
+        val b = subjects[1]
+        val bothStanding = isStanding(a) && isStanding(b)
+        val stronglyOverlapping = overlapOfSmaller(a, b) >= WRESTLING_OVERLAP_OF_SMALLER
+
+        return if (bothStanding && !stronglyOverlapping) {
+            SubjectLayout.PORTRAIT
+        } else {
+            SubjectLayout.LANDSCAPE
+        }
+    }
+
+    private fun isStanding(subject: RectD): Boolean =
+        subject.height >= subject.width * STANDING_HEIGHT_TO_WIDTH
+
+    private fun overlapOfSmaller(a: RectD, b: RectD): Double {
+        val left = max(a.left, b.left)
+        val top = max(a.top, b.top)
+        val right = min(a.right, b.right)
+        val bottom = min(a.bottom, b.bottom)
+        if (right <= left || bottom <= top) return 0.0
+        val intersection = (right - left) * (bottom - top)
+        return intersection / min(a.area, b.area).coerceAtLeast(1.0)
+    }
 
     private fun firstFitting(
         image: ImageSize,
@@ -63,46 +98,6 @@ object WrestlingCropPlanner {
             )
         }
         return null
-    }
-
-    private fun choose(
-        subject: RectD,
-        subjects: List<RectD>,
-        portrait: Candidate?,
-        landscape: Candidate?,
-    ): Candidate? {
-        if (portrait == null) return landscape
-        if (landscape == null) return portrait
-
-        val ratio = subject.width / subject.height.coerceAtLeast(1.0)
-        if (ratio >= 1.22 && landscape.margin + EPS >= portrait.margin) return landscape
-        if (ratio <= 0.82 && portrait.margin + EPS >= landscape.margin) return portrait
-
-        val portraitScore = score(subject, subjects, portrait)
-        val landscapeScore = score(subject, subjects, landscape)
-        return if (portraitScore <= landscapeScore) portrait else landscape
-    }
-
-    private fun score(subject: RectD, subjects: List<RectD>, c: Candidate): Double {
-        val subjectArea = subject.area.coerceAtLeast(1.0)
-        var score = c.cropArea / subjectArea
-        score += (c.requestedMargin - c.margin).coerceAtLeast(0.0) * 7.0
-
-        val groupRatio = subject.width / subject.height.coerceAtLeast(1.0)
-        if (groupRatio > 1.10 && c.layout == SubjectLayout.PORTRAIT) score += 0.25
-        if (groupRatio < 0.90 && c.layout == SubjectLayout.LANDSCAPE) score += 0.25
-
-        if (subjects.size >= 2) {
-            val xSpan = subjects.maxOf { it.centerX } - subjects.minOf { it.centerX }
-            val ySpan = subjects.maxOf { it.centerY } - subjects.minOf { it.centerY }
-            if (xSpan > ySpan * 1.15 && c.layout == SubjectLayout.PORTRAIT) score += 0.18
-            if (ySpan > xSpan * 1.15 && c.layout == SubjectLayout.LANDSCAPE) score += 0.14
-        } else {
-            val body = subjects.first()
-            if (body.width > body.height * 1.15 && c.layout == SubjectLayout.PORTRAIT) score += 0.20
-            if (body.height > body.width * 1.15 && c.layout == SubjectLayout.LANDSCAPE) score += 0.16
-        }
-        return score
     }
 
     private fun expand(subject: RectD, image: ImageSize, margin: Double): RectD {
@@ -128,8 +123,6 @@ object WrestlingCropPlanner {
         if (width / height < aspect) width = height * aspect else height = width / aspect
         if (width > image.width + EPS || height > image.height + EPS) return null
 
-        // Choose a frame position near the subject centre, while mathematically guaranteeing that
-        // the complete required area remains inside the frame after shifting at image edges.
         val maxImageLeft = image.width - width
         val maxImageTop = image.height - height
         val minLeft = max(0.0, required.right - width)
