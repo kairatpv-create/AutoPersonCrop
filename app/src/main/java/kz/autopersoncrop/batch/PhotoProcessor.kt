@@ -27,6 +27,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 sealed class ProcessResult {
     data object Cropped : ProcessResult()
@@ -36,14 +37,12 @@ sealed class ProcessResult {
 }
 
 /**
- * One/two-person wrestling crop processor.
+ * Wrestling-oriented one/two-person processor.
  *
- * 0.6.8 adds short-term sequence memory. Burst photos from the same bout often differ only by a
- * few milliseconds, but a generic person detector can still miss one frame. If the current frame
- * is visually very close to the immediately preceding successfully detected frame, its previous
- * subject geometry is used as a guarded fallback instead of copying the current photo unprocessed.
- * The memory is reset on folder/scene changes or visually different frames, so it never becomes a
- * fixed scene template.
+ * 0.6.9 strengthens burst recovery and adds conservative automatic orientation correction.
+ * Several recent successful frames are retained so one unstable YOLO result does not break a
+ * sequence. Scene similarity deliberately weights the stable outer background more than the fast
+ * moving wrestling action in the centre.
  */
 class PhotoProcessor(
     private val context: Context,
@@ -63,8 +62,31 @@ class PhotoProcessor(
         val normalizedSubjects: List<RectD>,
     )
 
-    private var sequenceReference: SequenceReference? = null
+    private data class OrientationScan(
+        val degrees: Int,
+        val signature: IntArray,
+        val evidence: Double,
+        val selectedCount: Int,
+        val sequenceDistance: Double?,
+    ) {
+        val combinedScore: Double
+            get() = evidence + when {
+                sequenceDistance == null -> 0.0
+                sequenceDistance <= STRONG_SEQUENCE_DISTANCE -> 4.5 * (1.0 - sequenceDistance / STRONG_SEQUENCE_DISTANCE).coerceAtLeast(0.0) + 2.0
+                sequenceDistance <= MAX_SEQUENCE_DISTANCE -> 2.0 * (1.0 - sequenceDistance / MAX_SEQUENCE_DISTANCE).coerceAtLeast(0.0)
+                else -> 0.0
+            }
+    }
+
+    private data class OrientationChoice(
+        val degrees: Int,
+        val preview: Bitmap,
+        val signature: IntArray,
+    )
+
+    private val sequenceReferences = ArrayList<SequenceReference>()
     private var sequenceFallbackStreak = 0
+    private var activeRelativeDir: String? = null
 
     fun process(
         photo: SourcePhoto,
@@ -80,25 +102,30 @@ class PhotoProcessor(
         }
 
         val frame = loader.load(photo.uri)
-        val previewWidth = frame.preview.width
-        val previewHeight = frame.preview.height
-
-        if (sequenceReference?.relativeDir != photo.relativeDir) {
-            sequenceReference = null
+        if (activeRelativeDir != photo.relativeDir) {
+            activeRelativeDir = photo.relativeDir
+            sequenceReferences.clear()
             sequenceFallbackStreak = 0
         }
 
-        val signature = frameSignature(frame.preview)
+        val choice = chooseOrientation(photo, frame)
+        val workingPreview = choice.preview
+        val correctionDegrees = choice.degrees
+        val previewWidth = workingPreview.width
+        val previewHeight = workingPreview.height
+        val correctedFullWidth = if (correctionDegrees == 90 || correctionDegrees == 270) frame.uprightHeight else frame.uprightWidth
+        val correctedFullHeight = if (correctionDegrees == 90 || correctionDegrees == 270) frame.uprightWidth else frame.uprightHeight
+        val imageSize = ImageSize(correctedFullWidth, correctedFullHeight)
+
         val previewBoxes = try {
-            detectPeopleWithRecovery(frame.preview)
+            detectPeopleWithRecovery(workingPreview)
         } finally {
+            if (workingPreview !== frame.preview && !workingPreview.isRecycled) workingPreview.recycle()
             if (!frame.preview.isRecycled) frame.preview.recycle()
         }
 
-        val imageSize = ImageSize(frame.uprightWidth, frame.uprightHeight)
-        val sx = frame.uprightWidth.toDouble() / previewWidth.coerceAtLeast(1)
-        val sy = frame.uprightHeight.toDouble() / previewHeight.coerceAtLeast(1)
-
+        val sx = correctedFullWidth.toDouble() / previewWidth.coerceAtLeast(1)
+        val sy = correctedFullHeight.toDouble() / previewHeight.coerceAtLeast(1)
         var detectedSubjects: List<RectD>? = null
         var usedSequenceFallback = false
 
@@ -109,10 +136,15 @@ class PhotoProcessor(
             val selected = WrestlingSubjectSelector.select(imageSize, fullBoxes)
             detectedSubjects = selected
 
-            // When only one wrestler is detected but the immediately preceding very similar frame
-            // confidently contained two, preserve the previous pair area as a safety envelope.
-            val assisted = if (selected.size == 1) {
-                sequenceAssistForPartialDetection(photo, frame, signature, selected)
+            // When one detected person is complete and another box is already clipped by the source
+            // boundary, the single-person choice is intentional. Never reintroduce the clipped person
+            // from sequence memory.
+            val intentionalFullPersonFocus = selected.size == 1 &&
+                WrestlingSubjectSelector.isFullyVisible(imageSize, selected.first()) &&
+                fullBoxes.any { !WrestlingSubjectSelector.isFullyVisible(imageSize, it) }
+
+            val assisted = if (selected.size == 1 && !intentionalFullPersonFocus) {
+                sequenceAssistForPartialDetection(photo, imageSize, choice.signature, selected)
             } else null
 
             if (assisted != null) {
@@ -122,9 +154,8 @@ class PhotoProcessor(
                 selected
             }
         } else {
-            val carried = sequenceFallbackForMiss(photo, frame, signature)
+            val carried = sequenceFallbackForMiss(photo, imageSize, choice.signature)
             if (carried == null) {
-                sequenceReference = null
                 sequenceFallbackStreak = 0
                 copyExact(photo, outputDir)
                 return ProcessResult.NoPeopleCopied
@@ -133,27 +164,47 @@ class PhotoProcessor(
             carried
         }
 
-        // Selected wrestler geometry is final. The crop stage never selects people again.
-        val uprightCrop = WrestlingCropPlanner.plan(imageSize, subjectsForCrop)
+        // Selected wrestler geometry is final. The crop stage never re-selects people.
+        val correctedCrop = WrestlingCropPlanner.plan(imageSize, subjectsForCrop)
+        val baseUprightCrop = correctedToBaseUpright(
+            correctedCrop,
+            frame.uprightWidth,
+            frame.uprightHeight,
+            correctionDegrees,
+        )
         val raw = ExifCropMapper.uprightToRaw(
-            uprightCrop, frame.rawWidth, frame.rawHeight, frame.exifOrientation
+            baseUprightCrop,
+            frame.rawWidth,
+            frame.rawHeight,
+            frame.exifOrientation,
         )
 
         val result = if (outputSettings.strictLossless) {
-            if (isFull(raw, frame.rawWidth, frame.rawHeight)) {
+            if (correctionDegrees == 0 && isFull(raw, frame.rawWidth, frame.rawHeight)) {
                 copyExact(photo, outputDir)
                 ProcessResult.CopiedFull
             } else {
-                transformer.crop(photo.uri, outputDir, photo.name, raw)
-                ProcessResult.Cropped
+                val outUri = transformer.crop(photo.uri, outputDir, photo.name, raw)
+                if (correctionDegrees != 0) {
+                    setOutputOrientation(
+                        outUri,
+                        composeExifOrientation(frame.exifOrientation, correctionDegrees),
+                    )
+                }
+                if (isFull(raw, frame.rawWidth, frame.rawHeight)) ProcessResult.CopiedFull else ProcessResult.Cropped
             }
         } else {
-            encodeConfigured(photo, outputDir, raw, frame)
+            encodeConfigured(photo, outputDir, raw, frame, correctionDegrees)
             if (isFull(raw, frame.rawWidth, frame.rawHeight)) ProcessResult.CopiedFull else ProcessResult.Cropped
         }
 
         if (!usedSequenceFallback && !detectedSubjects.isNullOrEmpty()) {
-            rememberSequenceReference(photo, frame, signature, detectedSubjects!!)
+            rememberSequenceReference(
+                photo = photo,
+                image = imageSize,
+                signature = choice.signature,
+                subjects = detectedSubjects!!,
+            )
             sequenceFallbackStreak = 0
         } else if (usedSequenceFallback) {
             sequenceFallbackStreak++
@@ -162,77 +213,179 @@ class PhotoProcessor(
         return result
     }
 
+    /**
+     * Choose between 0/90/180/270 degrees. Sequence agreement is the strongest signal for burst
+     * photography. Without a strong sequence match, a rotation is accepted only when the person
+     * detector gives materially better evidence than the current orientation.
+     */
+    private fun chooseOrientation(photo: SourcePhoto, frame: PhotoFrame): OrientationChoice {
+        val source = frame.preview
+        if (!isRotationOnlyExif(frame.exifOrientation)) {
+            return OrientationChoice(0, source, frameSignature(source))
+        }
+
+        val scans = ArrayList<OrientationScan>(4)
+        for (degrees in intArrayOf(0, 90, 180, 270)) {
+            val candidate = if (degrees == 0) source else rotateBitmap(source, degrees)
+            try {
+                val signature = frameSignature(candidate)
+                val boxes = runCatching {
+                    deduplicate(detector.detect(candidate, ORIENTATION_SCAN_CONFIDENCE))
+                }.getOrDefault(emptyList())
+                val size = ImageSize(candidate.width, candidate.height)
+                val selected = if (boxes.isNotEmpty()) {
+                    runCatching { WrestlingSubjectSelector.select(size, boxes) }.getOrDefault(emptyList())
+                } else emptyList()
+                val evidence = orientationEvidence(size, boxes, selected)
+                val sequenceDistance = bestSequenceDistance(photo.relativeDir, signature)
+                scans += OrientationScan(degrees, signature, evidence, selected.size, sequenceDistance)
+            } finally {
+                if (candidate !== source && !candidate.isRecycled) candidate.recycle()
+            }
+        }
+
+        val base = scans.first { it.degrees == 0 }
+        val best = scans.maxByOrNull { it.combinedScore } ?: base
+        val strongSequenceRotation = best.degrees != 0 &&
+            best.sequenceDistance != null && best.sequenceDistance <= STRONG_SEQUENCE_DISTANCE &&
+            (base.sequenceDistance == null || best.sequenceDistance + ORIENTATION_SEQUENCE_ADVANTAGE < base.sequenceDistance)
+        val strongDetectorRotation = best.degrees != 0 && (
+            (best.selectedCount > base.selectedCount && best.evidence >= base.evidence + 0.35) ||
+                best.evidence >= base.evidence + ORIENTATION_EVIDENCE_ADVANTAGE
+            )
+
+        val chosen = if (strongSequenceRotation || strongDetectorRotation) best else base
+        val chosenPreview = if (chosen.degrees == 0) source else rotateBitmap(source, chosen.degrees)
+        return OrientationChoice(chosen.degrees, chosenPreview, chosen.signature)
+    }
+
+    private fun orientationEvidence(image: ImageSize, boxes: List<RectD>, selected: List<RectD>): Double {
+        if (selected.isEmpty()) return 0.0
+        val imageArea = image.width.toDouble() * image.height.toDouble()
+        val union = RectD(
+            selected.minOf { it.left },
+            selected.minOf { it.top },
+            selected.maxOf { it.right },
+            selected.maxOf { it.bottom },
+        )
+        val usefulArea = (union.area / imageArea.coerceAtLeast(1.0)).coerceIn(0.0, 1.0)
+        val full = selected.count { WrestlingSubjectSelector.isFullyVisible(image, it) }
+        var score = if (selected.size >= 2) 4.0 else 1.8
+        score += sqrt(usefulArea) * 2.2
+        score += full * 0.45
+        score += boxes.size.coerceAtMost(4) * 0.08
+        return score
+    }
+
     private fun rememberSequenceReference(
         photo: SourcePhoto,
-        frame: PhotoFrame,
+        image: ImageSize,
         signature: IntArray,
         subjects: List<RectD>,
     ) {
-        val w = frame.uprightWidth.toDouble().coerceAtLeast(1.0)
-        val h = frame.uprightHeight.toDouble().coerceAtLeast(1.0)
-        sequenceReference = SequenceReference(
+        val w = image.width.toDouble().coerceAtLeast(1.0)
+        val h = image.height.toDouble().coerceAtLeast(1.0)
+        val ref = SequenceReference(
             relativeDir = photo.relativeDir,
-            uprightWidth = frame.uprightWidth,
-            uprightHeight = frame.uprightHeight,
-            signature = signature,
+            uprightWidth = image.width,
+            uprightHeight = image.height,
+            signature = signature.copyOf(),
             normalizedSubjects = subjects.map { r ->
-                RectD(
-                    r.left / w,
-                    r.top / h,
-                    r.right / w,
-                    r.bottom / h,
-                )
+                RectD(r.left / w, r.top / h, r.right / w, r.bottom / h)
             },
         )
+        sequenceReferences.add(0, ref)
+        while (sequenceReferences.size > MAX_SEQUENCE_REFERENCES) {
+            sequenceReferences.removeAt(sequenceReferences.lastIndex)
+        }
     }
 
     private fun sequenceFallbackForMiss(
         photo: SourcePhoto,
-        frame: PhotoFrame,
+        image: ImageSize,
         signature: IntArray,
     ): List<RectD>? {
-        val ref = sequenceReference ?: return null
-        if (!canUseSequenceReference(ref, photo, frame, signature)) return null
         if (sequenceFallbackStreak >= MAX_CONSECUTIVE_SEQUENCE_FALLBACKS) return null
-
-        val mapped = denormalize(ref.normalizedSubjects, frame.uprightWidth, frame.uprightHeight)
+        val refs = matchingSequenceReferences(photo.relativeDir, image, signature).take(2)
+        if (refs.isEmpty()) return null
+        val mapped = refs.flatMap { denormalize(it.first.normalizedSubjects, image.width, image.height) }
         if (mapped.isEmpty()) return null
-        return listOf(expandedUnion(mapped, frame.uprightWidth, frame.uprightHeight, 0.14))
+        return listOf(expandedUnion(mapped, image.width, image.height, 0.20))
     }
 
     private fun sequenceAssistForPartialDetection(
         photo: SourcePhoto,
-        frame: PhotoFrame,
+        image: ImageSize,
         signature: IntArray,
         current: List<RectD>,
     ): List<RectD>? {
-        val ref = sequenceReference ?: return null
-        if (ref.normalizedSubjects.size < 2) return null
-        if (!canUseSequenceReference(ref, photo, frame, signature)) return null
         if (sequenceFallbackStreak >= MAX_CONSECUTIVE_SEQUENCE_FALLBACKS) return null
-
-        val previous = denormalize(ref.normalizedSubjects, frame.uprightWidth, frame.uprightHeight)
+        val refs = matchingSequenceReferences(photo.relativeDir, image, signature)
+            .filter { it.first.normalizedSubjects.size >= 2 }
+            .take(2)
+        if (refs.isEmpty()) return null
+        val previous = refs.flatMap { denormalize(it.first.normalizedSubjects, image.width, image.height) }
         if (previous.isEmpty()) return null
-        return listOf(expandedUnion(previous + current, frame.uprightWidth, frame.uprightHeight, 0.10))
+        return listOf(expandedUnion(previous + current, image.width, image.height, 0.14))
     }
 
-    private fun canUseSequenceReference(
-        ref: SequenceReference,
-        photo: SourcePhoto,
-        frame: PhotoFrame,
+    private fun matchingSequenceReferences(
+        relativeDir: String,
+        image: ImageSize,
         signature: IntArray,
-    ): Boolean {
-        if (ref.relativeDir != photo.relativeDir) return false
-        if (ref.uprightWidth != frame.uprightWidth || ref.uprightHeight != frame.uprightHeight) return false
-        if (!signaturesSimilar(ref.signature, signature)) {
-            sequenceReference = null
-            sequenceFallbackStreak = 0
-            return false
+    ): List<Pair<SequenceReference, Double>> = sequenceReferences.asSequence()
+        .filter {
+            it.relativeDir == relativeDir &&
+                it.uprightWidth == image.width &&
+                it.uprightHeight == image.height
         }
-        return true
+        .map { it to signatureDistance(it.signature, signature) }
+        .filter { it.second <= MAX_SEQUENCE_DISTANCE }
+        .sortedBy { it.second }
+        .toList()
+
+    private fun bestSequenceDistance(relativeDir: String, signature: IntArray): Double? =
+        sequenceReferences.asSequence()
+            .filter { it.relativeDir == relativeDir }
+            .map { signatureDistance(it.signature, signature) }
+            .minOrNull()
+
+    /**
+     * Exposure-tolerant scene distance. Outer/background cells have more weight than the centre,
+     * because in wrestling bursts the athletes can move sharply while the hall/mat/background stays
+     * nearly unchanged. This is intentionally the opposite of 0.6.8.
+     */
+    private fun signatureDistance(a: IntArray, b: IntArray): Double {
+        if (a.size != b.size || a.isEmpty()) return Double.POSITIVE_INFINITY
+        val meanA = a.average()
+        val meanB = b.average()
+        val brightnessShift = abs(meanA - meanB)
+        if (brightnessShift > MAX_BRIGHTNESS_SHIFT) return Double.POSITIVE_INFINITY
+
+        var weightedDiff = 0.0
+        var totalWeight = 0.0
+        var outerOutliers = 0
+        var outerCount = 0
+        val grid = SIGNATURE_GRID
+        for (i in a.indices) {
+            val x = i % grid
+            val y = i / grid
+            val central = x in (grid / 4) until (grid - grid / 4) &&
+                y in (grid / 4) until (grid - grid / 4)
+            val weight = if (central) 0.38 else 1.0
+            val centeredDiff = abs((a[i] - meanA) - (b[i] - meanB))
+            weightedDiff += centeredDiff * weight
+            totalWeight += weight
+            if (!central) {
+                outerCount++
+                if (centeredDiff > SIGNATURE_OUTLIER_DIFF) outerOutliers++
+            }
+        }
+        val meanDiff = weightedDiff / totalWeight.coerceAtLeast(1.0)
+        val outlierFraction = outerOutliers.toDouble() / outerCount.coerceAtLeast(1)
+        return meanDiff + outlierFraction * 18.0 + brightnessShift * 0.06
     }
 
-    /** Small exposure-tolerant visual fingerprint for adjacent burst frames. */
     private fun frameSignature(bitmap: Bitmap): IntArray {
         val grid = SIGNATURE_GRID
         val values = IntArray(grid * grid)
@@ -248,32 +401,8 @@ class PhotoProcessor(
         return values
     }
 
-    private fun signaturesSimilar(a: IntArray, b: IntArray): Boolean {
-        if (a.size != b.size || a.isEmpty()) return false
-        val meanA = a.average()
-        val meanB = b.average()
-        if (abs(meanA - meanB) > MAX_BRIGHTNESS_SHIFT) return false
-
-        var weightedDiff = 0.0
-        var totalWeight = 0.0
-        var strongOutliers = 0
-        val grid = SIGNATURE_GRID
-        for (i in a.indices) {
-            val x = i % grid
-            val y = i / grid
-            val central = x in (grid / 4) until (grid - grid / 4) && y in (grid / 4) until (grid - grid / 4)
-            val weight = if (central) 2.0 else 1.0
-            val centeredDiff = abs((a[i] - meanA) - (b[i] - meanB))
-            weightedDiff += centeredDiff * weight
-            totalWeight += weight
-            if (centeredDiff > SIGNATURE_OUTLIER_DIFF) strongOutliers++
-        }
-        val meanDiff = weightedDiff / totalWeight.coerceAtLeast(1.0)
-        return meanDiff <= MAX_SIGNATURE_MEAN_DIFF && strongOutliers <= a.size / 4
-    }
-
-    private fun denormalize(normalized: List<RectD>, width: Int, height: Int): List<RectD> {
-        return normalized.map { r ->
+    private fun denormalize(normalized: List<RectD>, width: Int, height: Int): List<RectD> =
+        normalized.map { r ->
             RectD(
                 r.left * width,
                 r.top * height,
@@ -281,7 +410,6 @@ class PhotoProcessor(
                 r.bottom * height,
             ).clampTo(width, height)
         }.filter { it.width >= 2.0 && it.height >= 2.0 }
-    }
 
     private fun expandedUnion(rects: List<RectD>, width: Int, height: Int, fraction: Double): RectD {
         val u = RectD(
@@ -290,8 +418,8 @@ class PhotoProcessor(
             rects.maxOf { it.right },
             rects.maxOf { it.bottom },
         )
-        val mx = max(u.width * fraction, width * 0.018)
-        val my = max(u.height * fraction, height * 0.018)
+        val mx = max(u.width * fraction, width * 0.020)
+        val my = max(u.height * fraction, height * 0.020)
         return RectD(u.left - mx, u.top - my, u.right + mx, u.bottom + my).clampTo(width, height)
     }
 
@@ -303,9 +431,9 @@ class PhotoProcessor(
     )
 
     /**
-     * First use the detector's normal combat-sport path. If that set does not form a plausible
-     * pair, add a softer pass and three overlapping tiles. This keeps easy photos fast while giving
-     * difficult standing/lying/stacked scenes another chance before declaring one/no person.
+     * Normal detector + softer whole-frame pass + overlapping tiles. The detector itself also has
+     * wrestling-specific recovery views. A zero result therefore means several independent passes
+     * have failed before sequence recovery is considered.
      */
     private fun detectPeopleWithRecovery(preview: Bitmap): List<RectD> {
         val image = ImageSize(preview.width, preview.height)
@@ -332,9 +460,9 @@ class PhotoProcessor(
     private fun detectInOverlappingTiles(preview: Bitmap): List<RectD> {
         val horizontalSplit = preview.width >= preview.height
         val longSide = if (horizontalSplit) preview.width else preview.height
-        if (longSide < 480) return emptyList()
+        if (longSide < 420) return emptyList()
 
-        val tileLong = (longSide * 0.72).roundToInt().coerceIn(1, longSide)
+        val tileLong = (longSide * 0.74).roundToInt().coerceIn(1, longSide)
         val end = longSide - tileLong
         val offsets = intArrayOf(0, end / 2, end).distinct()
         val found = ArrayList<RectD>()
@@ -363,7 +491,7 @@ class PhotoProcessor(
     }
 
     private fun isUsefulRecoveryBox(box: RectD, preview: Bitmap): Boolean {
-        if (box.width < 6.0 || box.height < 6.0) return false
+        if (box.width < 5.0 || box.height < 5.0) return false
         val imageArea = preview.width.toDouble() * preview.height.toDouble()
         return box.area / imageArea.coerceAtLeast(1.0) >= MIN_RECOVERY_AREA_FRACTION
     }
@@ -400,11 +528,86 @@ class PhotoProcessor(
         return if (union <= 0.0) 0.0 else intersection / union
     }
 
+    private fun correctedToBaseUpright(
+        rect: PixelRect,
+        baseWidth: Int,
+        baseHeight: Int,
+        degrees: Int,
+    ): PixelRect {
+        val mapped = when (degrees) {
+            90 -> PixelRect(
+                rect.top,
+                baseHeight - rect.right,
+                rect.bottom,
+                baseHeight - rect.left,
+            )
+            180 -> PixelRect(
+                baseWidth - rect.right,
+                baseHeight - rect.bottom,
+                baseWidth - rect.left,
+                baseHeight - rect.top,
+            )
+            270 -> PixelRect(
+                baseWidth - rect.bottom,
+                rect.left,
+                baseWidth - rect.top,
+                rect.right,
+            )
+            else -> rect
+        }
+        return PixelRect(
+            mapped.left.coerceIn(0, baseWidth - 1),
+            mapped.top.coerceIn(0, baseHeight - 1),
+            mapped.right.coerceIn(1, baseWidth),
+            mapped.bottom.coerceIn(1, baseHeight),
+        )
+    }
+
+    private fun rotateBitmap(source: Bitmap, degrees: Int): Bitmap {
+        if (degrees % 360 == 0) return source
+        val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
+        return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
+    }
+
+    private fun isRotationOnlyExif(orientation: Int): Boolean = orientation == ExifInterface.ORIENTATION_NORMAL ||
+        orientation == ExifInterface.ORIENTATION_UNDEFINED ||
+        orientation == ExifInterface.ORIENTATION_ROTATE_90 ||
+        orientation == ExifInterface.ORIENTATION_ROTATE_180 ||
+        orientation == ExifInterface.ORIENTATION_ROTATE_270
+
+    private fun composeExifOrientation(base: Int, correctionDegrees: Int): Int {
+        val baseDegrees = when (base) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270
+            else -> 0
+        }
+        return when ((baseDegrees + correctionDegrees) % 360) {
+            90 -> ExifInterface.ORIENTATION_ROTATE_90
+            180 -> ExifInterface.ORIENTATION_ROTATE_180
+            270 -> ExifInterface.ORIENTATION_ROTATE_270
+            else -> ExifInterface.ORIENTATION_NORMAL
+        }
+    }
+
+    private fun setOutputOrientation(uri: Uri, orientation: Int) {
+        runCatching {
+            context.contentResolver.openFileDescriptor(uri, "rw").use { pfd ->
+                requireNotNull(pfd)
+                ExifInterface(pfd.fileDescriptor).apply {
+                    setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
+                    saveAttributes()
+                }
+            }
+        }
+    }
+
     private fun encodeConfigured(
         photo: SourcePhoto,
         outputDir: DocumentFile,
         raw: PixelRect,
         frame: PhotoFrame,
+        correctionDegrees: Int,
     ) {
         val out = outputDir.createFile("image/jpeg", photo.name)
             ?: error("Не удалось создать ${photo.name}")
@@ -435,9 +638,11 @@ class PhotoProcessor(
 
             val upright = applyExif(decoded, frame.exifOrientation)
             if (upright !== decoded) decoded.recycle()
+            val corrected = if (correctionDegrees == 0) upright else rotateBitmap(upright, correctionDegrees)
+            if (corrected !== upright) upright.recycle()
 
-            val finalBitmap = resizeIfNeeded(upright, maxSide)
-            if (finalBitmap !== upright) upright.recycle()
+            val finalBitmap = resizeIfNeeded(corrected, maxSide)
+            if (finalBitmap !== corrected) corrected.recycle()
 
             context.contentResolver.openOutputStream(out.uri, "w").use { output ->
                 requireNotNull(output)
@@ -535,15 +740,21 @@ class PhotoProcessor(
         r.left == 0 && r.top == 0 && r.right == w && r.bottom == h
 
     companion object {
-        private const val RECOVERY_CONFIDENCE = 0.105f
-        private const val TILE_RECOVERY_CONFIDENCE = 0.090f
-        private const val MIN_RECOVERY_AREA_FRACTION = 0.0035
-        private const val MAX_CANDIDATES = 12
+        private const val RECOVERY_CONFIDENCE = 0.095f
+        private const val TILE_RECOVERY_CONFIDENCE = 0.080f
+        private const val ORIENTATION_SCAN_CONFIDENCE = 0.115f
+        private const val MIN_RECOVERY_AREA_FRACTION = 0.0025
+        private const val MAX_CANDIDATES = 14
 
         private const val SIGNATURE_GRID = 16
-        private const val MAX_BRIGHTNESS_SHIFT = 42.0
-        private const val MAX_SIGNATURE_MEAN_DIFF = 20.0
-        private const val SIGNATURE_OUTLIER_DIFF = 48.0
-        private const val MAX_CONSECUTIVE_SEQUENCE_FALLBACKS = 2
+        private const val MAX_BRIGHTNESS_SHIFT = 55.0
+        private const val SIGNATURE_OUTLIER_DIFF = 54.0
+        private const val MAX_SEQUENCE_DISTANCE = 29.0
+        private const val STRONG_SEQUENCE_DISTANCE = 15.0
+        private const val MAX_SEQUENCE_REFERENCES = 4
+        private const val MAX_CONSECUTIVE_SEQUENCE_FALLBACKS = 5
+
+        private const val ORIENTATION_EVIDENCE_ADVANTAGE = 1.35
+        private const val ORIENTATION_SEQUENCE_ADVANTAGE = 4.0
     }
 }
