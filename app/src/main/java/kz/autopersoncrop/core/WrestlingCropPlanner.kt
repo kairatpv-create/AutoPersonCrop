@@ -8,20 +8,21 @@ import kotlin.math.min
 /**
  * Geometry-only crop planner for wrestling photos.
  *
- * The source image is never rotated here. We only choose the crop frame orientation:
- * - one clearly standing person -> portrait 2:3;
- * - two clearly standing, non-overlapping people -> portrait 2:3;
- * - one lying/non-upright person -> landscape 3:2;
- * - two people where at least one is non-upright, or the pair strongly overlaps -> landscape 3:2.
+ * The source image is never rotated. Only the crop frame is portrait 2:3 or landscape 3:2.
+ * Rules for 0.6.11:
+ * - one standing/upright person -> portrait;
+ * - two standing/upright people, including a standing wrestling clinch -> portrait;
+ * - one lying/horizontal person -> landscape;
+ * - two lying people or a ground-wrestling pair -> landscape.
  *
- * The subjects passed here have already been selected by WrestlingSubjectSelector. This planner
- * never re-selects people and never switches to the opposite aspect just because it is tighter.
+ * Landscape composition is driven by the pair's left/right bounds first; top/bottom are then fitted
+ * naturally to 3:2. Portrait composition is driven by the vertical bounds first; side edges are then
+ * fitted naturally to 2:3. Selected subjects are never intentionally cut by this planner.
  */
 object WrestlingCropPlanner {
     private const val PORTRAIT_ASPECT = 2.0 / 3.0
     private const val LANDSCAPE_ASPECT = 3.0 / 2.0
-    private const val STANDING_HEIGHT_TO_WIDTH = 1.10
-    private const val WRESTLING_OVERLAP_OF_SMALLER = 0.12
+    private const val UPRIGHT_HEIGHT_TO_WIDTH = 1.08
     private const val EPS = 1e-6
 
     fun plan(image: ImageSize, subjects: List<RectD>): PixelRect {
@@ -30,80 +31,78 @@ object WrestlingCropPlanner {
         val subject = union(subjects).clampTo(image)
         if (subject.width < 2.0 || subject.height < 2.0) return full(image)
 
-        val requestedMargin = if (subjects.size >= 2) 0.075 else 0.060
-        val margins = listOf(requestedMargin, 0.055, 0.040, 0.025, 0.010, 0.0)
-            .filter { it <= requestedMargin + EPS }
-            .distinct()
-
-        val layout = chooseRequiredLayout(subjects)
-        val aspect = if (layout == SubjectLayout.PORTRAIT) PORTRAIT_ASPECT else LANDSCAPE_ASPECT
-        return firstFitting(image, subject, layout, aspect, margins, requestedMargin)?.rect ?: full(image)
+        return when (chooseRequiredLayout(subjects)) {
+            SubjectLayout.PORTRAIT -> portraitFrame(image, subject, subjects.size)
+            SubjectLayout.LANDSCAPE -> landscapeFrame(image, subject, subjects.size)
+        }
     }
 
-    private data class Candidate(
-        val rect: PixelRect,
-        val layout: SubjectLayout,
-        val cropArea: Double,
-        val margin: Double,
-        val requestedMargin: Double,
-    )
-
+    /**
+     * A standing wrestling clinch remains portrait even when the two detector boxes overlap heavily.
+     * Overlap by itself no longer forces landscape. Ground action becomes landscape because at least
+     * one principal body is no longer clearly upright.
+     */
     private fun chooseRequiredLayout(subjects: List<RectD>): SubjectLayout {
         if (subjects.size == 1) {
-            return if (isStanding(subjects.first())) SubjectLayout.PORTRAIT else SubjectLayout.LANDSCAPE
+            return if (isUpright(subjects.first())) SubjectLayout.PORTRAIT else SubjectLayout.LANDSCAPE
         }
 
-        val a = subjects[0]
-        val b = subjects[1]
-        val bothStanding = isStanding(a) && isStanding(b)
-        val stronglyOverlapping = overlapOfSmaller(a, b) >= WRESTLING_OVERLAP_OF_SMALLER
-
-        return if (bothStanding && !stronglyOverlapping) {
-            SubjectLayout.PORTRAIT
-        } else {
-            SubjectLayout.LANDSCAPE
-        }
+        val principal = subjects.take(2)
+        return if (principal.all(::isUpright)) SubjectLayout.PORTRAIT else SubjectLayout.LANDSCAPE
     }
 
-    private fun isStanding(subject: RectD): Boolean =
-        subject.height >= subject.width * STANDING_HEIGHT_TO_WIDTH
+    private fun isUpright(subject: RectD): Boolean =
+        subject.height >= subject.width * UPRIGHT_HEIGHT_TO_WIDTH
 
-    private fun overlapOfSmaller(a: RectD, b: RectD): Double {
-        val left = max(a.left, b.left)
-        val top = max(a.top, b.top)
-        val right = min(a.right, b.right)
-        val bottom = min(a.bottom, b.bottom)
-        if (right <= left || bottom <= top) return 0.0
-        val intersection = (right - left) * (bottom - top)
-        return intersection / min(a.area, b.area).coerceAtLeast(1.0)
-    }
-
-    private fun firstFitting(
-        image: ImageSize,
-        subject: RectD,
-        layout: SubjectLayout,
-        aspect: Double,
-        margins: List<Double>,
-        requestedMargin: Double,
-    ): Candidate? {
-        for (margin in margins) {
-            val required = expand(subject, image, margin)
-            val placed = placeFrame(image, required, subject, aspect) ?: continue
-            return Candidate(
-                rect = placed,
-                layout = layout,
-                cropArea = placed.width.toDouble() * placed.height.toDouble(),
-                margin = margin,
-                requestedMargin = requestedMargin,
+    /**
+     * Portrait: preserve sensible head/feet breathing room first. Width is derived afterwards from
+     * the fixed 2:3 aspect. This is used for one/two standing people and standing wrestling.
+     */
+    private fun portraitFrame(image: ImageSize, subject: RectD, count: Int): PixelRect {
+        val primaryMargin = if (count >= 2) 0.065 else 0.060
+        val attempts = listOf(primaryMargin, 0.050, 0.035, 0.020, 0.010, 0.0).distinct()
+        for (margin in attempts) {
+            val sideMargin = min(0.025, margin)
+            val required = expandDirectional(
+                subject = subject,
+                image = image,
+                horizontalMargin = sideMargin,
+                verticalMargin = margin,
             )
+            placePortrait(image, required, subject)?.let { return it }
         }
-        return null
+        return full(image)
     }
 
-    private fun expand(subject: RectD, image: ImageSize, margin: Double): RectD {
-        // Slightly larger vertical guard protects heads/feet; the detector box may be tight during motion.
-        val mx = max(subject.width * margin, image.width * 0.006)
-        val my = max(subject.height * (margin + 0.010), image.height * 0.006)
+    /**
+     * Landscape: left/right bounds of the lying/ground-wrestling action are the primary constraint.
+     * Top/bottom use a smaller safety margin and are positioned afterwards to make a natural 3:2
+     * sports frame without unnecessary empty space.
+     */
+    private fun landscapeFrame(image: ImageSize, subject: RectD, count: Int): PixelRect {
+        val primaryMargin = if (count >= 2) 0.060 else 0.055
+        val attempts = listOf(primaryMargin, 0.050, 0.035, 0.020, 0.010, 0.0).distinct()
+        for (margin in attempts) {
+            val verticalMargin = min(0.025, margin)
+            val required = expandDirectional(
+                subject = subject,
+                image = image,
+                horizontalMargin = margin,
+                verticalMargin = verticalMargin,
+            )
+            placeLandscape(image, required, subject)?.let { return it }
+        }
+        return full(image)
+    }
+
+    private fun expandDirectional(
+        subject: RectD,
+        image: ImageSize,
+        horizontalMargin: Double,
+        verticalMargin: Double,
+    ): RectD {
+        val mx = max(subject.width * horizontalMargin, image.width * 0.004)
+        val my = max(subject.height * verticalMargin, image.height * 0.004)
         return RectD(
             subject.left - mx,
             subject.top - my,
@@ -112,15 +111,36 @@ object WrestlingCropPlanner {
         ).clampTo(image)
     }
 
+    private fun placeLandscape(image: ImageSize, required: RectD, subject: RectD): PixelRect? {
+        // Start from left/right action bounds. Increase only if the required vertical extent needs it.
+        var width = required.width
+        var height = width / LANDSCAPE_ASPECT
+        if (height < required.height) {
+            height = required.height
+            width = height * LANDSCAPE_ASPECT
+        }
+        return placeFrame(image, required, subject, width, height, verticalBias = -0.03)
+    }
+
+    private fun placePortrait(image: ImageSize, required: RectD, subject: RectD): PixelRect? {
+        // Start from top/bottom action bounds. Increase only if the required horizontal extent needs it.
+        var height = required.height
+        var width = height * PORTRAIT_ASPECT
+        if (width < required.width) {
+            width = required.width
+            height = width / PORTRAIT_ASPECT
+        }
+        return placeFrame(image, required, subject, width, height, verticalBias = -0.015)
+    }
+
     private fun placeFrame(
         image: ImageSize,
         required: RectD,
         subject: RectD,
-        aspect: Double,
+        width: Double,
+        height: Double,
+        verticalBias: Double,
     ): PixelRect? {
-        var width = required.width
-        var height = required.height
-        if (width / height < aspect) width = height * aspect else height = width / aspect
         if (width > image.width + EPS || height > image.height + EPS) return null
 
         val maxImageLeft = image.width - width
@@ -132,7 +152,8 @@ object WrestlingCropPlanner {
         if (minLeft > maxLeft + EPS || minTop > maxTop + EPS) return null
 
         val preferredLeft = subject.centerX - width / 2.0
-        val preferredTop = subject.centerY - height / 2.0
+        // A tiny upward bias leaves slightly more useful space above the athletes than below them.
+        val preferredTop = subject.centerY - height / 2.0 + height * verticalBias
         val left = preferredLeft.coerceIn(minLeft, maxLeft)
         val top = preferredTop.coerceIn(minTop, maxTop)
         val right = left + width
