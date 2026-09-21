@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.Typeface
@@ -16,6 +17,10 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.DocumentsContract
 import android.provider.Settings
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -55,6 +60,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var resumeButton: Button
     private lateinit var reprocessButton: Button
     private lateinit var errorRetryButton: Button
+    private lateinit var fileListButton: Button
     private lateinit var pauseButton: Button
     private var treeUri: Uri? = null
     private var mainScreenVisible = false
@@ -283,9 +289,7 @@ class MainActivity : AppCompatActivity() {
                 .setTitle("Переработать ошибки?")
                 .setMessage("Будут повторно обработаны только файлы со статусом ошибки: ${state.errors}. Удачные фотографии не затрагиваются.")
                 .setNegativeButton("Отмена", null)
-                .setPositiveButton("Переработать ошибки") { _, _ ->
-                    startBatchFor(uri, retryErrorsOnly = true)
-                }
+                .setPositiveButton("Переработать ошибки") { _, _ -> startBatchFor(uri, retryErrorsOnly = true) }
         )
     }
 
@@ -295,9 +299,7 @@ class MainActivity : AppCompatActivity() {
         retryErrorsOnly: Boolean = false,
     ) {
         val bounds = if (Build.VERSION.SDK_INT >= 30) windowManager.maximumWindowMetrics.bounds
-        else @Suppress("DEPRECATION") Rect(
-            0, 0, resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels
-        )
+        else @Suppress("DEPRECATION") Rect(0, 0, resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
         BatchProcessingService.command(
             this,
             BatchProcessingService.CMD_START,
@@ -313,6 +315,78 @@ class MainActivity : AppCompatActivity() {
         val state = BatchStateStore(this).read()
         val command = if (state.paused) BatchProcessingService.CMD_RESUME else BatchProcessingService.CMD_PAUSE
         BatchProcessingService.command(this, command)
+    }
+
+    private fun showPhotoList() {
+        val state = BatchStateStore(this).read()
+        val folder = state.folderUri.ifBlank { treeUri?.toString().orEmpty() }
+        if (folder.isBlank()) return toast("Сначала выберите папку")
+
+        val items = runCatching { BatchDatabase(this).use { it.items(folder) } }.getOrDefault(emptyList())
+        if (items.isEmpty()) return toast("Список появится после сканирования папки")
+
+        val body = TextView(this).apply {
+            textSize = 14f
+            setPadding(dp(16), dp(10), dp(16), dp(16))
+            setTextIsSelectable(true)
+        }
+        val text = SpannableStringBuilder()
+        text.append("✓ обработано   ⚠ не обработано   ✕ ошибка\n… обработка   ○ ожидает   ↪ уже существовало\n\n")
+
+        val errorColor = Color.rgb(211, 47, 47)
+        val warningColor = Color.rgb(230, 126, 34)
+        val processingColor = themeColor(android.R.attr.colorAccent, Color.rgb(33, 150, 243))
+
+        items.forEach { item ->
+            val start = text.length
+            val marker = when (item.status) {
+                BatchDatabase.DONE -> "✓"
+                BatchDatabase.NO_PEOPLE -> "⚠"
+                BatchDatabase.ERROR -> "✕"
+                BatchDatabase.EXISTING -> "↪"
+                BatchDatabase.PROCESSING -> "…"
+                else -> "○"
+            }
+            val path = if (item.relativeDir.isBlank()) item.name else "${item.relativeDir}/${item.name}"
+            val label = when (item.status) {
+                BatchDatabase.NO_PEOPLE -> "  — не обработано"
+                BatchDatabase.ERROR -> "  — ошибка"
+                BatchDatabase.PROCESSING -> "  — обработка"
+                BatchDatabase.PENDING -> "  — ожидает"
+                else -> ""
+            }
+            text.append("$marker $path$label")
+            if (item.status == BatchDatabase.ERROR && item.message.isNotBlank()) {
+                text.append("\n    ${item.message.take(180)}")
+            }
+            text.append('\n')
+            val end = text.length
+            when (item.status) {
+                BatchDatabase.ERROR -> {
+                    text.setSpan(ForegroundColorSpan(errorColor), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    text.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                BatchDatabase.NO_PEOPLE -> {
+                    text.setSpan(ForegroundColorSpan(warningColor), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    text.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                BatchDatabase.PROCESSING -> text.setSpan(
+                    ForegroundColorSpan(processingColor), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+        }
+        body.text = text
+
+        val scroll = ScrollView(this).apply {
+            isFillViewport = false
+            addView(body)
+        }
+        showDialog(
+            AlertDialog.Builder(this)
+                .setTitle("Список фотографий • ${items.size}")
+                .setView(scroll)
+                .setPositiveButton("Закрыть", null)
+        )
     }
 
     private fun showSettings() {
@@ -472,6 +546,7 @@ class MainActivity : AppCompatActivity() {
             addView(progress, LinearLayout.LayoutParams(-1, -2)); addView(stateText, LinearLayout.LayoutParams(-1, -2))
         }
 
+        fileListButton = appButton("Список фотографий").apply { setOnClickListener { showPhotoList() } }
         startButton = appButton("Обработать всё").apply { setOnClickListener { startBatch() } }
         resumeButton = appButton("▶ Возобновить").apply { visibility = View.GONE; setOnClickListener { resumeBatch() } }
         errorRetryButton = appButton("↻ Переработать ошибки").apply { visibility = View.GONE; setOnClickListener { confirmRetryErrors() } }
@@ -494,8 +569,8 @@ class MainActivity : AppCompatActivity() {
         fun add(view: View, bottom: Int = 8) {
             root.addView(view, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(bottom) })
         }
-        add(header, 10); add(folderText, 2); add(choose, 8); add(settingsRow, 9); add(progressPanel, 9)
-        add(startButton, 5); add(resumeButton, 5); add(errorRetryButton, 5); add(reprocessButton, 5)
+        add(header, 10); add(folderText, 2); add(choose, 8); add(settingsRow, 9); add(progressPanel, 7)
+        add(fileListButton, 9); add(startButton, 5); add(resumeButton, 5); add(errorRetryButton, 5); add(reprocessButton, 5)
         add(actionRow, 6); add(note, 5); add(about, 0)
         setSafeScrollableContent(root)
     }
@@ -509,6 +584,7 @@ class MainActivity : AppCompatActivity() {
         }
         startButton.isEnabled = treeUri != null
         reprocessButton.isEnabled = treeUri != null
+        fileListButton.isEnabled = treeUri != null
     }
 
     private fun displayFolderName(uri: Uri): String = runCatching {
@@ -552,6 +628,15 @@ class MainActivity : AppCompatActivity() {
         errorRetryButton.visibility = if (state.errors > 0) View.VISIBLE else View.GONE
         errorRetryButton.text = if (state.errors > 0) "↻ Переработать ошибки (${state.errors})" else "↻ Переработать ошибки"
         errorRetryButton.isEnabled = !state.running && state.errors > 0
+
+        val problems = state.noPeople + state.errors
+        fileListButton.text = when {
+            state.total <= 0 -> "Список фотографий"
+            problems > 0 -> "Список фотографий • проблем: $problems"
+            else -> "Список фотографий • ${state.total}"
+        }
+        fileListButton.isEnabled = state.folderUri.isNotBlank() || treeUri != null
+
         startButton.isEnabled = !state.running && treeUri != null
         reprocessButton.isEnabled = !state.running && treeUri != null
         pauseButton.text = if (state.paused) "Продолжить" else "Пауза"
