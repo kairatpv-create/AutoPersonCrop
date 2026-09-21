@@ -14,12 +14,18 @@ data class SourcePhoto(
     val lastModified: Long = 0L,
 )
 
+data class ScanResult(
+    val outputRoot: DocumentFile,
+    val photos: List<SourcePhoto>,
+    val samplesByScene: Map<String, List<SourcePhoto>>,
+)
+
 class DocumentTreeScanner(private val context: Context) {
     private val accepted = setOf("image/jpeg", "image/jpg")
     private val outputDirCache = HashMap<String, DocumentFile>()
     private val outputFilesCache = HashMap<String, Map<String, Uri>>()
 
-    fun scan(treeUri: Uri): Pair<DocumentFile, List<SourcePhoto>> {
+    fun scan(treeUri: Uri): ScanResult {
         val root = DocumentFile.fromTreeUri(context, treeUri)
             ?: error("Не удалось открыть выбранную папку")
         require(root.canRead()) { "Нет доступа на чтение папки" }
@@ -34,8 +40,9 @@ class DocumentTreeScanner(private val context: Context) {
 
         val rootId = DocumentsContract.getTreeDocumentId(treeUri)
         val photos = ArrayList<SourcePhoto>(1024)
+        val samplesByScene = LinkedHashMap<String, MutableList<SourcePhoto>>()
         val queue = ArrayDeque<DirNode>()
-        queue.add(DirNode(rootId, ""))
+        queue.add(DirNode(rootId, "", null))
 
         val projection = arrayOf(
             DocumentsContract.Document.COLUMN_DOCUMENT_ID,
@@ -59,38 +66,57 @@ class DocumentTreeScanner(private val context: Context) {
                     val mime = cursor.getString(mimeCol)?.lowercase().orEmpty()
 
                     if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
-                        if (name.equals(OUTPUT_DIR, ignoreCase = true)) continue
-                        val childRel = if (node.relative.isBlank()) name else "${node.relative}/$name"
-                        queue.add(DirNode(docId, childRel))
+                        if (node.sampleScene == null && name.equals(OUTPUT_DIR, ignoreCase = true)) continue
+
+                        if (node.sampleScene == null && name.equals(SAMPLE_DIR, ignoreCase = true)) {
+                            // Files inside ОБРАЗЕЦ belong to the parent scene and are never added
+                            // to the normal processing queue or mirrored to CROP.
+                            queue.add(DirNode(docId, node.relative, node.relative))
+                        } else if (node.sampleScene != null) {
+                            // Allow optional subfolders inside ОБРАЗЕЦ, still tied to one scene.
+                            queue.add(DirNode(docId, node.relative, node.sampleScene))
+                        } else {
+                            val childRel = if (node.relative.isBlank()) name else "${node.relative}/$name"
+                            queue.add(DirNode(docId, childRel, null))
+                        }
                         continue
                     }
 
                     val lower = name.lowercase()
                     if (mime !in accepted && !lower.endsWith(".jpg") && !lower.endsWith(".jpeg")) continue
                     val modified = if (modifiedCol >= 0 && !cursor.isNull(modifiedCol)) cursor.getLong(modifiedCol) else 0L
-                    photos += SourcePhoto(
+                    val photo = SourcePhoto(
                         uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId),
                         name = name,
                         mime = mime.ifBlank { "image/jpeg" },
                         relativeDir = node.relative,
                         lastModified = modified,
                     )
+
+                    if (node.sampleScene != null) {
+                        samplesByScene.getOrPut(node.sampleScene) { ArrayList() }.add(photo)
+                    } else {
+                        photos += photo
+                    }
                 }
             }
         }
 
-        // SAF providers may return files in arbitrary order. For numbered sports sequences the file
-        // name is authoritative: 1, 2, 3 ... 10, 11 must stay in that exact natural order. We do
-        // not rename anything; lastModified is only a final tie-breaker for identical names.
-        photos.sortWith { a, b ->
+        val comparator = Comparator<SourcePhoto> { a, b ->
             val dir = naturalCompare(a.relativeDir, b.relativeDir)
-            if (dir != 0) return@sortWith dir
+            if (dir != 0) return@Comparator dir
             val name = naturalCompare(a.name, b.name)
-            if (name != 0) return@sortWith name
+            if (name != 0) return@Comparator name
             a.lastModified.compareTo(b.lastModified)
         }
+        photos.sortWith(comparator)
+        samplesByScene.values.forEach { it.sortWith(comparator) }
 
-        return output to photos
+        return ScanResult(
+            outputRoot = output,
+            photos = photos,
+            samplesByScene = samplesByScene.mapValues { it.value.toList() },
+        )
     }
 
     fun ensureOutputDir(rootOutput: DocumentFile, relativeDir: String): DocumentFile {
@@ -173,7 +199,14 @@ class DocumentTreeScanner(private val context: Context) {
     private fun cacheKey(rootOutput: DocumentFile, relative: String) =
         "${rootOutput.uri}|$relative"
 
-    private data class DirNode(val documentId: String, val relative: String)
+    private data class DirNode(
+        val documentId: String,
+        val relative: String,
+        val sampleScene: String?,
+    )
 
-    companion object { const val OUTPUT_DIR = "CROP" }
+    companion object {
+        const val OUTPUT_DIR = "CROP"
+        const val SAMPLE_DIR = "ОБРАЗЕЦ"
+    }
 }

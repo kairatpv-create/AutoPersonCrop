@@ -14,6 +14,8 @@ import kz.autopersoncrop.core.CropPlanner
 import kz.autopersoncrop.core.ImageSize
 import kz.autopersoncrop.core.PixelRect
 import kz.autopersoncrop.core.RectD
+import kz.autopersoncrop.core.SampleGuidedCropAdjuster
+import kz.autopersoncrop.core.SceneCropProfile
 import kz.autopersoncrop.core.WrestlingSubjectSelector
 import kz.autopersoncrop.io.ImageFrameLoader
 import kz.autopersoncrop.io.PhotoFrame
@@ -40,6 +42,7 @@ class PhotoProcessor(
     private val screenWidth: Int,
     private val screenHeight: Int,
     private val outputSettings: OutputSettings,
+    private val sceneProfiles: Map<String, SceneCropProfile> = emptyMap(),
 ) {
     private val loader = ImageFrameLoader(context)
 
@@ -84,8 +87,18 @@ class PhotoProcessor(
             screenHeight = screenHeight,
             marginFraction = 0.05,
         )
+
+        val guidedRect = resolveProfile(photo.relativeDir)?.let { profile ->
+            SampleGuidedCropAdjuster.adjust(
+                image = imageSize,
+                subjects = wrestlingSubjects,
+                base = plan.rect,
+                profile = profile,
+            )
+        } ?: plan.rect
+
         val raw = ExifCropMapper.uprightToRaw(
-            plan.rect, frame.rawWidth, frame.rawHeight, frame.exifOrientation
+            guidedRect, frame.rawWidth, frame.rawHeight, frame.exifOrientation
         )
 
         if (outputSettings.strictLossless) {
@@ -102,9 +115,8 @@ class PhotoProcessor(
     }
 
     /**
-     * Normal photos keep the exact 0.6.2 path. Recovery is used only if normal YOLO detection
-     * returns no people at all. This helps combat-sport frames where motion, occlusion or an unusual
-     * horizontal/stacked pose lowers confidence without making every photo more permissive.
+     * Normal path stays conservative. Recovery is only added when needed, preserving the existing
+     * fast path while helping combat-sport frames with motion, occlusion and unusual body angles.
      */
     private fun detectPeopleWithRecovery(preview: Bitmap): List<RectD> {
         detector.detect(preview).takeIf { it.isNotEmpty() }?.let { return it }
@@ -117,10 +129,6 @@ class PhotoProcessor(
         return detectInOverlappingTiles(preview)
     }
 
-    /**
-     * If a full-frame recovery still misses everybody, enlarge the sporting action by running the
-     * same offline model over two overlapping halves. The boxes are mapped back to preview space.
-     */
     private fun detectInOverlappingTiles(preview: Bitmap): List<RectD> {
         val horizontalSplit = preview.width >= preview.height
         val longSide = if (horizontalSplit) preview.width else preview.height
@@ -179,6 +187,17 @@ class PhotoProcessor(
         val intersection = (right - left) * (bottom - top)
         val union = a.area + b.area - intersection
         return if (union <= 0.0) 0.0 else intersection / union
+    }
+
+    private fun resolveProfile(relativeDir: String): SceneCropProfile? {
+        if (sceneProfiles.isEmpty()) return null
+        var key = relativeDir.trim('/')
+        while (true) {
+            sceneProfiles[key]?.let { return it }
+            if (key.isBlank()) break
+            key = key.substringBeforeLast('/', "")
+        }
+        return sceneProfiles[""]
     }
 
     private fun encodeConfigured(

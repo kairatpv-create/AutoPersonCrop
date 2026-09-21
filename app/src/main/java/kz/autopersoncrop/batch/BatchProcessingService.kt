@@ -10,6 +10,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
 import kz.autopersoncrop.R
+import kz.autopersoncrop.core.SampleSceneAnalyzer
 import kz.autopersoncrop.io.DocumentTreeScanner
 import kz.autopersoncrop.jpeg.LosslessJpegTransformer
 import kz.autopersoncrop.ml.YoloLiteRtPersonDetector
@@ -83,7 +84,11 @@ class BatchProcessingService : Service() {
 
         try {
             val scanner = DocumentTreeScanner(this)
-            val (cropRoot, photos) = scanner.scan(treeUri)
+            val scan = scanner.scan(treeUri)
+            val cropRoot = scan.outputRoot
+            val photos = scan.photos
+            val sampleCount = scan.samplesByScene.values.sumOf { it.size }
+
             db.sync(folderKey, photos)
             if (forceReprocess) db.resetFolder(folderKey)
 
@@ -106,7 +111,19 @@ class BatchProcessingService : Service() {
                 confidence = 0.18f,
                 iouThreshold = 0.65f,
             ).use { detector ->
-                state = state.copy(message = "Обработка • ${detector.accelerator} • ${outputSettings.quality.label}")
+                val sceneProfiles = if (sampleCount > 0) {
+                    state = state.copy(message = "Анализ ОБРАЗЕЦ • $sampleCount фото")
+                    store.write(state)
+                    publish(state, force = true)
+                    runCatching {
+                        SampleSceneAnalyzer(this, detector).analyze(scan.samplesByScene)
+                    }.getOrDefault(emptyMap())
+                } else {
+                    emptyMap()
+                }
+
+                val sampleLabel = if (sceneProfiles.isNotEmpty()) " • ОБРАЗЕЦ ${sceneProfiles.size}" else ""
+                state = state.copy(message = "Обработка • ${detector.accelerator} • ${outputSettings.quality.label}$sampleLabel")
                 store.write(state)
                 publish(state, force = true)
 
@@ -118,13 +135,15 @@ class BatchProcessingService : Service() {
                     screenW,
                     screenH,
                     outputSettings,
+                    sceneProfiles = sceneProfiles,
                 )
 
                 for (photo in photos) {
                     val uriKey = photo.uri.toString()
                     val prior = statusMap[uriKey] ?: BatchDatabase.PENDING
                     // NO_PEOPLE is intentionally retried: newer recovery detection may now find a
-                    // wrestler that an older build missed. DONE and EXISTING stay untouched.
+                    // wrestler that an older build missed. DONE and EXISTING stay untouched unless
+                    // the user explicitly chooses «Переработать заново».
                     if (prior == BatchDatabase.DONE || prior == BatchDatabase.EXISTING) continue
 
                     if (stopRequested.get()) {
@@ -145,7 +164,7 @@ class BatchProcessingService : Service() {
                     state = state.copy(
                         currentName = photo.name,
                         paused = false,
-                        message = "Обработка в фоне • ${detector.accelerator}",
+                        message = "Обработка в фоне • ${detector.accelerator}$sampleLabel",
                     )
                     store.write(state)
                     publish(state)
@@ -176,9 +195,6 @@ class BatchProcessingService : Service() {
                         state = state.transitionCount(prior, BatchDatabase.ERROR)
                     }
 
-                    // Do not GROUP BY the entire SQLite queue after every photo. The durable row
-                    // status is still written for every file; only the UI counters are maintained
-                    // locally and reconciled with SQLite at stop/final/error boundaries.
                     store.write(state)
                     publish(state)
                 }
