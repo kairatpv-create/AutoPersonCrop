@@ -10,8 +10,8 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
 import kz.autopersoncrop.R
-import kz.autopersoncrop.core.SampleSceneAnalyzer
 import kz.autopersoncrop.io.DocumentTreeScanner
+import kz.autopersoncrop.io.SourcePhoto
 import kz.autopersoncrop.jpeg.LosslessJpegTransformer
 import kz.autopersoncrop.ml.YoloLiteRtPersonDetector
 import kz.autopersoncrop.settings.OutputSettingsStore
@@ -46,12 +46,13 @@ class BatchProcessingService : Service() {
                 val sh = intent.getIntExtra(EXTRA_SCREEN_H, 2400)
                 val forceRequested = intent.getBooleanExtra(EXTRA_FORCE_REPROCESS, false)
                 val forceReprocess = forceRequested && (flags and START_FLAG_REDELIVERY == 0)
+                val errorsOnly = intent.getBooleanExtra(EXTRA_ERRORS_ONLY, false)
                 startForegroundCompat(notification("Подготовка…", 0, 0))
                 if (running.compareAndSet(false, true)) {
                     stopRequested.set(false)
                     paused.set(false)
                     acquireWakeLock()
-                    executor.execute { runBatch(Uri.parse(tree), sw, sh, forceReprocess) }
+                    executor.execute { runBatch(Uri.parse(tree), sw, sh, forceReprocess, errorsOnly) }
                 }
             }
             CMD_PAUSE -> {
@@ -72,12 +73,22 @@ class BatchProcessingService : Service() {
         return START_REDELIVER_INTENT
     }
 
-    private fun runBatch(treeUri: Uri, screenW: Int, screenH: Int, forceReprocess: Boolean) {
+    private fun runBatch(
+        treeUri: Uri,
+        screenW: Int,
+        screenH: Int,
+        forceReprocess: Boolean,
+        errorsOnly: Boolean,
+    ) {
         val folderKey = treeUri.toString()
         var state = BatchState(
             folderUri = folderKey,
             running = true,
-            message = if (forceReprocess) "Подготовка повторной обработки…" else "Сканирование папки…",
+            message = when {
+                errorsOnly -> "Подготовка переработки ошибок…"
+                forceReprocess -> "Подготовка повторной обработки…"
+                else -> "Сканирование папки…"
+            },
         )
         store.write(state, sync = true)
         publish(state, force = true)
@@ -87,15 +98,20 @@ class BatchProcessingService : Service() {
             val scan = scanner.scan(treeUri)
             val cropRoot = scan.outputRoot
             val photos = scan.photos
-            val sampleCount = scan.samplesByScene.values.sumOf { it.size }
 
             db.sync(folderKey, photos)
             if (forceReprocess) db.resetFolder(folderKey)
 
             val statusMap = db.statuses(folderKey)
-            state = state.withCounts(db.counts(folderKey)).copy(
+            val initialCounts = db.counts(folderKey)
+            val errorTargetCount = initialCounts.errors
+            state = state.withCounts(initialCounts).copy(
                 total = photos.size,
-                message = if (forceReprocess) "Повторная обработка ${photos.size} JPEG" else "Найдено ${photos.size} JPEG",
+                message = when {
+                    errorsOnly -> "Ошибок для переработки: $errorTargetCount"
+                    forceReprocess -> "Повторная обработка ${photos.size} JPEG"
+                    else -> "Найдено ${photos.size} JPEG"
+                },
             )
             store.write(state)
             publish(state, force = true)
@@ -104,26 +120,24 @@ class BatchProcessingService : Service() {
                 finishState(state.copy(running = false, message = "JPEG-файлы не найдены"))
                 return
             }
+            if (errorsOnly && errorTargetCount == 0) {
+                finishState(state.copy(running = false, message = "Ошибок для переработки нет"))
+                return
+            }
 
             val outputSettings = OutputSettingsStore(this).read()
             YoloLiteRtPersonDetector(
                 this,
                 confidence = 0.18f,
-                iouThreshold = 0.65f,
+                iouThreshold = 0.70f,
             ).use { detector ->
-                val sceneProfiles = if (sampleCount > 0) {
-                    state = state.copy(message = "Анализ ОБРАЗЕЦ • $sampleCount фото")
-                    store.write(state)
-                    publish(state, force = true)
-                    runCatching {
-                        SampleSceneAnalyzer(this, detector).analyze(scan.samplesByScene)
-                    }.getOrDefault(emptyMap())
-                } else {
-                    emptyMap()
-                }
-
-                val sampleLabel = if (sceneProfiles.isNotEmpty()) " • ОБРАЗЕЦ ${sceneProfiles.size}" else ""
-                state = state.copy(message = "Обработка • ${detector.accelerator} • ${outputSettings.quality.label}$sampleLabel")
+                state = state.copy(
+                    message = if (errorsOnly) {
+                        "Переработка ошибок • ${detector.accelerator}"
+                    } else {
+                        "Обработка • ${detector.accelerator} • ${outputSettings.quality.label}"
+                    }
+                )
                 store.write(state)
                 publish(state, force = true)
 
@@ -135,16 +149,17 @@ class BatchProcessingService : Service() {
                     screenW,
                     screenH,
                     outputSettings,
-                    sceneProfiles = sceneProfiles,
                 )
 
                 for (photo in photos) {
                     val uriKey = photo.uri.toString()
                     val prior = statusMap[uriKey] ?: BatchDatabase.PENDING
-                    // NO_PEOPLE is intentionally retried: newer recovery detection may now find a
-                    // wrestler that an older build missed. DONE and EXISTING stay untouched unless
-                    // the user explicitly chooses «Переработать заново».
-                    if (prior == BatchDatabase.DONE || prior == BatchDatabase.EXISTING) continue
+
+                    if (errorsOnly) {
+                        if (prior != BatchDatabase.ERROR) continue
+                    } else if (prior == BatchDatabase.DONE || prior == BatchDatabase.EXISTING) {
+                        continue
+                    }
 
                     if (stopRequested.get()) {
                         finishState(
@@ -152,7 +167,7 @@ class BatchProcessingService : Service() {
                                 running = false,
                                 paused = false,
                                 currentName = "",
-                                message = "Остановлено. Нажмите «Возобновить» — готовые файлы будут пропущены.",
+                                message = "Остановлено. Нажмите «Возобновить» для продолжения.",
                             )
                         )
                         return
@@ -164,7 +179,11 @@ class BatchProcessingService : Service() {
                     state = state.copy(
                         currentName = photo.name,
                         paused = false,
-                        message = "Обработка в фоне • ${detector.accelerator}$sampleLabel",
+                        message = if (errorsOnly) {
+                            "Переработка ошибок • ${detector.accelerator}"
+                        } else {
+                            "Обработка в фоне • ${detector.accelerator}"
+                        },
                     )
                     store.write(state)
                     publish(state)
@@ -179,7 +198,8 @@ class BatchProcessingService : Service() {
                             processor = processor,
                             photo = photo,
                             outDir = outDir,
-                            overwriteFromStart = forceReprocess || prior == BatchDatabase.NO_PEOPLE || prior == BatchDatabase.ERROR || prior == BatchDatabase.PROCESSING,
+                            overwriteFromStart = forceReprocess || errorsOnly ||
+                                prior == BatchDatabase.NO_PEOPLE || prior == BatchDatabase.ERROR || prior == BatchDatabase.PROCESSING,
                         )
                         val newStatus = when (result) {
                             ProcessResult.Cropped, ProcessResult.CopiedFull -> BatchDatabase.DONE
@@ -202,10 +222,14 @@ class BatchProcessingService : Service() {
 
             val finalCounts = db.counts(folderKey)
             state = state.withCounts(finalCounts)
-            val finalMessage = when {
-                finalCounts.errors > 0 -> "Завершено. Ошибок: ${finalCounts.errors}. Нажмите «Возобновить» для повторной попытки."
-                finalCounts.pending + finalCounts.processing > 0 -> "Есть необработанные файлы. Нажмите «Возобновить»."
-                else -> "Готово"
+            val finalMessage = if (errorsOnly) {
+                if (finalCounts.errors == 0) "Ошибки переработаны" else "Осталось ошибок: ${finalCounts.errors}"
+            } else {
+                when {
+                    finalCounts.errors > 0 -> "Завершено. Ошибок: ${finalCounts.errors}. Можно переработать только ошибки."
+                    finalCounts.pending + finalCounts.processing > 0 -> "Есть необработанные файлы. Нажмите «Возобновить»."
+                    else -> "Готово"
+                }
             }
             finishState(state.copy(running = false, paused = false, currentName = "", message = finalMessage))
         } catch (t: Throwable) {
@@ -227,7 +251,7 @@ class BatchProcessingService : Service() {
     private fun processWithRetry(
         scanner: DocumentTreeScanner,
         processor: PhotoProcessor,
-        photo: kz.autopersoncrop.io.SourcePhoto,
+        photo: SourcePhoto,
         outDir: androidx.documentfile.provider.DocumentFile,
         overwriteFromStart: Boolean,
     ): ProcessResult {
@@ -246,7 +270,7 @@ class BatchProcessingService : Service() {
                 last = t
                 if (attempt < MAX_ATTEMPTS) {
                     scanner.invalidateOutputIndex(outDir)
-                    Thread.sleep(120)
+                    Thread.sleep(180L * attempt)
                 }
             }
         }
@@ -294,7 +318,6 @@ class BatchProcessingService : Service() {
         val now = SystemClock.elapsedRealtime()
         if (!force && now - lastPublishAt < PUBLISH_INTERVAL_MS) return
         lastPublishAt = now
-
         val done = s.completed + s.noPeople + s.skipped
         val n = notification(
             if (s.paused) "Пауза" else s.message.ifBlank { "Обработка…" }, done, s.total
@@ -354,7 +377,7 @@ class BatchProcessingService : Service() {
             running = false,
             paused = false,
             currentName = "",
-            message = "Системный лимит Android для mediaProcessing достигнут. Прогресс сохранён — откройте приложение и нажмите «Возобновить».",
+            message = "Системный лимит Android достигнут. Прогресс сохранён — нажмите «Возобновить».",
         )
         store.write(s, sync = true)
         publish(s, force = true)
@@ -412,9 +435,10 @@ class BatchProcessingService : Service() {
         private const val EXTRA_SCREEN_W = "screen_w"
         private const val EXTRA_SCREEN_H = "screen_h"
         private const val EXTRA_FORCE_REPROCESS = "force_reprocess"
+        private const val EXTRA_ERRORS_ONLY = "errors_only"
         private const val CHANNEL_ID = "processing"
         private const val NOTIFICATION_ID = 77
-        private const val MAX_ATTEMPTS = 2
+        private const val MAX_ATTEMPTS = 3
         private const val PUBLISH_INTERVAL_MS = 900L
 
         fun command(
@@ -424,12 +448,14 @@ class BatchProcessingService : Service() {
             screenW: Int = 0,
             screenH: Int = 0,
             forceReprocess: Boolean = false,
+            retryErrorsOnly: Boolean = false,
         ) {
             val i = Intent(context, BatchProcessingService::class.java).setAction(action)
             if (treeUri != null) i.putExtra(EXTRA_TREE_URI, treeUri)
             if (screenW > 0) i.putExtra(EXTRA_SCREEN_W, screenW)
             if (screenH > 0) i.putExtra(EXTRA_SCREEN_H, screenH)
             if (forceReprocess) i.putExtra(EXTRA_FORCE_REPROCESS, true)
+            if (retryErrorsOnly) i.putExtra(EXTRA_ERRORS_ONLY, true)
             if (action == CMD_START) context.startForegroundService(i) else context.startService(i)
         }
     }
