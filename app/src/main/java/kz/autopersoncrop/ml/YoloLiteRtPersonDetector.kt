@@ -161,34 +161,37 @@ class YoloLiteRtPersonDetector(
         error("Неизвестный выход YOLO: $count float")
     }
 
-    override fun detect(bitmap: Bitmap): List<RectD> =
-        distinctDetections(detectOnceWithRetry(bitmap, confidence))
+    override fun detect(bitmap: Bitmap): List<RectD> = detect(bitmap, confidence)
 
     override fun detect(bitmap: Bitmap, minConfidence: Float): List<RectD> {
         val threshold = minConfidence.coerceIn(0.01f, 0.95f)
-        return distinctDetections(detectOnceWithRetry(bitmap, threshold))
-    }
+        val base = distinctDetections(detectOnceWithRetry(bitmap, threshold))
 
-    /**
-     * Expensive recovery path. PhotoProcessor calls this only when the fast pass and
-     * sequence memory disagree, or when a genuinely difficult first frame needs it.
-     */
-    fun detectRobust(bitmap: Bitmap): List<RectD> {
-        val base = distinctDetections(detectOnceWithRetry(bitmap, confidence))
-        if (base.size >= 2) return base
+        // Explicit low-confidence calls come from PhotoProcessor's own recovery tiles. Do not make
+        // those recurse into another recovery tree.
+        if (threshold < ROBUST_TRIGGER_CONFIDENCE || base.size >= 2) return base
 
         val all = ArrayList<RectD>(base)
+
+        // 1) Same image, lower person threshold. This catches motion blur / partial occlusion.
         all += usefulDetections(detectOnceWithRetry(bitmap, FULL_RECOVERY_CONFIDENCE), bitmap)
         distinctDetections(all).takeIf { it.size >= 2 }?.let { return it }
 
+        // 2) Centered zoom. Sports action is normally near the centre; zooming increases the number
+        // of real athlete pixels seen by the fixed 640x640 model without lowering source quality.
         all += detectCenteredZoom(bitmap)
         distinctDetections(all).takeIf { it.size >= 2 }?.let { return it }
 
+        // 3) Lying wrestlers are a known weak case for generic person detectors. Try both quarter
+        // turns, because one makes a horizontal body upright while the other avoids upside-down bias.
         all += detectRotated(bitmap, 90)
         distinctDetections(all).takeIf { it.size >= 2 }?.let { return it }
         all += detectRotated(bitmap, -90)
         distinctDetections(all).takeIf { it.size >= 2 }?.let { return it }
 
+        // 4) Last resort: three overlapping strips along the long image axis. This makes small or
+        // partially occluded athletes larger to the model, while preserving substantial overlap so
+        // a pair crossing a tile boundary can still be seen together.
         all += detectOverlappingStrips(bitmap)
         return distinctDetections(all)
     }

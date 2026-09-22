@@ -11,7 +11,6 @@ import android.os.PowerManager
 import android.os.SystemClock
 import kz.autopersoncrop.R
 import kz.autopersoncrop.io.DocumentTreeScanner
-import kz.autopersoncrop.io.PhotoStorageManager
 import kz.autopersoncrop.io.SourcePhoto
 import kz.autopersoncrop.jpeg.LosslessJpegTransformer
 import kz.autopersoncrop.ml.YoloLiteRtPersonDetector
@@ -98,7 +97,6 @@ class BatchProcessingService : Service() {
             val scanner = DocumentTreeScanner(this)
             val scan = scanner.scan(treeUri)
             val cropRoot = scan.outputRoot
-            val storage = PhotoStorageManager(this, cropRoot)
             val photos = scan.photos
 
             db.sync(folderKey, photos)
@@ -200,34 +198,19 @@ class BatchProcessingService : Service() {
                             processor = processor,
                             photo = photo,
                             outDir = outDir,
-                            overwriteFromStart = true,
+                            overwriteFromStart = forceReprocess || errorsOnly ||
+                                prior == BatchDatabase.NO_PEOPLE || prior == BatchDatabase.ERROR || prior == BatchDatabase.PROCESSING,
                         )
                         val newStatus = when (result) {
-                            ProcessResult.Cropped, ProcessResult.CopiedFull, ProcessResult.AlreadyExists -> {
-                                storage.replaceOriginalWithProcessed(photo, outDir)
-                                BatchDatabase.DONE
-                            }
-                            ProcessResult.NoPeopleCopied -> {
-                                storage.moveUnprocessed(photo, outDir)
-                                BatchDatabase.NO_PEOPLE
-                            }
+                            ProcessResult.Cropped, ProcessResult.CopiedFull -> BatchDatabase.DONE
+                            ProcessResult.NoPeopleCopied -> BatchDatabase.NO_PEOPLE
+                            ProcessResult.AlreadyExists -> BatchDatabase.EXISTING
                         }
                         db.mark(folderKey, uriKey, newStatus)
                         statusMap[uriKey] = newStatus
                         state = state.transitionCount(prior, newStatus)
                     } catch (t: Throwable) {
-                        val moveError = runCatching { storage.moveUnprocessed(photo, outDir) }.exceptionOrNull()
-                        val message = buildString {
-                            append(t.message ?: t.javaClass.simpleName)
-                            if (moveError == null) {
-                                append(" • перенесено в CROP/")
-                                append(PhotoStorageManager.UNPROCESSED_DIR)
-                            } else {
-                                append(" • не удалось перенести: ")
-                                append(moveError.message ?: moveError.javaClass.simpleName)
-                            }
-                        }
-                        db.mark(folderKey, uriKey, BatchDatabase.ERROR, message)
+                        db.mark(folderKey, uriKey, BatchDatabase.ERROR, t.message ?: t.javaClass.simpleName)
                         statusMap[uriKey] = BatchDatabase.ERROR
                         state = state.transitionCount(prior, BatchDatabase.ERROR)
                     }
@@ -243,9 +226,8 @@ class BatchProcessingService : Service() {
                 if (finalCounts.errors == 0) "Ошибки переработаны" else "Осталось ошибок: ${finalCounts.errors}"
             } else {
                 when {
-                    finalCounts.errors > 0 -> "Готово. Ошибок: ${finalCounts.errors}; файлы вынесены для ручной проверки."
+                    finalCounts.errors > 0 -> "Завершено. Ошибок: ${finalCounts.errors}. Можно переработать только ошибки."
                     finalCounts.pending + finalCounts.processing > 0 -> "Есть необработанные файлы. Нажмите «Возобновить»."
-                    finalCounts.noPeople > 0 -> "Готово. Необработанные: ${finalCounts.noPeople} — вынесены для ручной проверки."
                     else -> "Готово"
                 }
             }

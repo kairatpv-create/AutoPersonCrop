@@ -23,7 +23,6 @@ import kz.autopersoncrop.io.SourcePhoto
 import kz.autopersoncrop.jpeg.ExifCropMapper
 import kz.autopersoncrop.jpeg.LosslessJpegTransformer
 import kz.autopersoncrop.ml.PersonDetector
-import kz.autopersoncrop.ml.YoloLiteRtPersonDetector
 import kz.autopersoncrop.settings.OutputSettings
 import kotlin.math.abs
 import kotlin.math.ln
@@ -494,41 +493,24 @@ class PhotoProcessor(
 
     private fun detectPeopleWithRecovery(preview: Bitmap, expectedSubjects: List<RectD>?): List<RectD> {
         val image = ImageSize(preview.width, preview.height)
-        val primary = deduplicate(detector.detect(preview))
-
-        fun matchesHistory(candidates: List<RectD>): Boolean {
-            if (expectedSubjects.isNullOrEmpty()) return false
-            val match = bestDetectionSet(candidates, expectedSubjects, image) ?: return false
-            return match.score <= TILE_TRIGGER_TRACK_DISTANCE
-        }
-
-        // Normal series frame: one inference is enough when it agrees with recent frames.
-        if (!expectedSubjects.isNullOrEmpty() && matchesHistory(primary)) return primary
-        if (expectedSubjects.isNullOrEmpty() && primary.size >= 2) return primary
-
-        // Cheap second chance: one lower-confidence full-frame inference.
-        val combined = ArrayList<RectD>(primary)
+        val combined = ArrayList<RectD>()
+        combined += detector.detect(preview)
         combined += detector.detect(preview, RECOVERY_CONFIDENCE)
             .filter { isUsefulRecoveryBox(it, preview) }
         var recovered = deduplicate(combined)
-
-        if (!expectedSubjects.isNullOrEmpty() && matchesHistory(recovered)) return recovered
-        if (expectedSubjects.isNullOrEmpty()) {
-            if (recovered.size >= 2) return recovered
-            if (recovered.size == 1) {
-                val selected = runCatching { WrestlingSubjectSelector.select(image, recovered) }
-                    .getOrDefault(recovered)
-                val portraitSingle = selected.size == 1 &&
-                    WrestlingCropPlanner.classifyLayout(selected) == SubjectLayout.PORTRAIT &&
-                    WrestlingSubjectSelector.isFullyVisible(image, selected.first())
-                if (portraitSingle) return recovered
-            }
+        val needTiles = if (expectedSubjects != null && expectedSubjects.isNotEmpty()) {
+            val match = bestDetectionSet(recovered, expectedSubjects, image)
+            match == null || match.score > TILE_TRIGGER_TRACK_DISTANCE
+        } else {
+            val selected = if (recovered.isNotEmpty()) {
+                runCatching { WrestlingSubjectSelector.select(image, recovered) }.getOrDefault(emptyList())
+            } else emptyList()
+            selected.size < 2
         }
-
-        // Expensive zoom/rotation/strip recovery is now exceptional rather than per-frame.
-        val robust = (detector as? YoloLiteRtPersonDetector)?.detectRobust(preview).orEmpty()
-        combined += robust
-        recovered = deduplicate(combined)
+        if (needTiles) {
+            combined += detectInOverlappingTiles(preview)
+            recovered = deduplicate(combined)
+        }
         return recovered
     }
 

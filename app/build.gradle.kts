@@ -11,8 +11,8 @@ android {
         applicationId = "kz.autopersoncrop"
         minSdk = 26
         targetSdk = 36
-        versionCode = 34
-        versionName = "0.6.15"
+        versionCode = 35
+        versionName = "0.6.16"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
