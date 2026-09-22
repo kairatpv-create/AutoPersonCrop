@@ -7,13 +7,10 @@ import kotlin.math.sqrt
 /**
  * Selects one or two people that most likely form the wrestling action.
  *
- * The selector is intentionally specialised for combat-sport photography. It favours the largest
- * central participant and one physically linked partner, while rejecting small edge/background
- * people and near-duplicate boxes produced by multi-pass recovery detection.
- *
- * If a linked pair contains exactly one fully visible person and one person already clipped by the
- * source-image boundary, the fully visible person becomes the only crop subject. A body part that
- * never existed inside the source photo must not force the final composition wider.
+ * A source-clipped standing person is discarded before ordinary scoring when a physically linked,
+ * fully visible lower-positioned partner is available. This implements the project rule that a body
+ * part missing from the original photo must never pull the final crop back toward the incomplete
+ * person, including through sequence memory.
  */
 object WrestlingSubjectSelector {
     fun select(image: ImageSize, people: List<RectD>): List<RectD> {
@@ -24,6 +21,8 @@ object WrestlingSubjectSelector {
             .filter { it.width >= 3.0 && it.height >= 3.0 && it.area >= 9.0 }
         if (valid.isEmpty()) return listOf(people.first().clampTo(image))
         if (valid.size == 1) return valid
+
+        chooseCompletePartnerForClippedStanding(image, valid)?.let { return listOf(it) }
 
         val maxArea = valid.maxOf { it.area }.coerceAtLeast(1.0)
         val imageCx = image.width / 2.0
@@ -62,7 +61,7 @@ object WrestlingSubjectSelector {
                 .filter { it !== r }
                 .map { relation(r, it) }
                 .maxOrNull() ?: 0.0
-            return relativeArea * 0.54 + centrality(r) * 0.20 + bestInteraction * 0.26 - edgePenalty(r)
+            return relativeArea * 0.46 + centrality(r) * 0.27 + bestInteraction * 0.27 - edgePenalty(r)
         }
 
         val anchor = valid.maxByOrNull(::anchorScore) ?: valid.first()
@@ -98,9 +97,6 @@ object WrestlingSubjectSelector {
 
         if (partner == null) return listOf(anchor)
 
-        // User rule: when one member of the selected pair is already cut by the source boundary and
-        // the other is complete, compose solely around the complete person. The incomplete person is
-        // not protected by the crop and is allowed to fall partly or fully outside the result.
         val anchorFull = isFullyVisible(image, anchor)
         val partnerFull = isFullyVisible(image, partner)
         if (anchorFull xor partnerFull) {
@@ -110,7 +106,6 @@ object WrestlingSubjectSelector {
         return listOf(anchor, partner)
     }
 
-    /** True when the detector box has a small real-image margin on every side. */
     fun isFullyVisible(image: ImageSize, r: RectD): Boolean {
         val edgeX = max(3.0, image.width * FULL_VISIBILITY_EDGE_FRACTION)
         val edgeY = max(3.0, image.height * FULL_VISIBILITY_EDGE_FRACTION)
@@ -118,6 +113,45 @@ object WrestlingSubjectSelector {
             r.right < image.width - edgeX &&
             r.top > edgeY &&
             r.bottom < image.height - edgeY
+    }
+
+    private fun chooseCompletePartnerForClippedStanding(image: ImageSize, valid: List<RectD>): RectD? {
+        val clippedStanding = valid.filter {
+            !isFullyVisible(image, it) && it.height >= it.width * 1.05
+        }
+        if (clippedStanding.isEmpty()) return null
+
+        val complete = valid.filter { isFullyVisible(image, it) }
+        if (complete.isEmpty()) return null
+
+        data class Choice(val box: RectD, val score: Double)
+        var best: Choice? = null
+        for (clipped in clippedStanding) {
+            for (candidate in complete) {
+                val overlap = overlapFractionOfSmaller(clipped, candidate)
+                val gap = normalizedGap(clipped, candidate, image)
+                val linked = overlap >= 0.015 || gap <= 0.105
+                if (!linked) continue
+
+                val lowerOrCompact =
+                    candidate.height <= clipped.height * 0.88 ||
+                    candidate.centerY >= clipped.centerY + image.height * 0.025
+                if (!lowerOrCompact) continue
+
+                val relativeArea = candidate.area / clipped.area.coerceAtLeast(1.0)
+                if (relativeArea < 0.10) continue
+
+                val cx = image.width / 2.0
+                val cy = image.height / 2.0
+                val dx = (candidate.centerX - cx) / image.width.coerceAtLeast(1).toDouble()
+                val dy = (candidate.centerY - cy) / image.height.coerceAtLeast(1).toDouble()
+                val central = (1.0 - sqrt(dx * dx + dy * dy) * 1.7).coerceIn(0.0, 1.0)
+                val score = overlap * 0.45 + (1.0 - gap / 0.105).coerceIn(0.0, 1.0) * 0.30 +
+                    central * 0.15 + min(1.0, relativeArea) * 0.10
+                if (best == null || score > best!!.score) best = Choice(candidate, score)
+            }
+        }
+        return best?.box
     }
 
     private fun isLikelyDuplicate(a: RectD, b: RectD): Boolean {
