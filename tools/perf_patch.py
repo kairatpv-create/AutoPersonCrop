@@ -1,0 +1,104 @@
+from pathlib import Path
+
+yolo_path = Path('app/src/main/java/kz/autopersoncrop/ml/YoloLiteRtPersonDetector.kt')
+yolo = yolo_path.read_text()
+start_marker = '    override fun detect(bitmap: Bitmap): List<RectD> = detect(bitmap, confidence)\n\n    override fun detect(bitmap: Bitmap, minConfidence: Float): List<RectD> {'
+end_marker = '\n    private fun detectOnceWithRetry(bitmap: Bitmap, threshold: Float): List<RectD> {'
+start = yolo.index(start_marker)
+end = yolo.index(end_marker, start)
+replacement = '''    override fun detect(bitmap: Bitmap): List<RectD> =
+        distinctDetections(detectOnceWithRetry(bitmap, confidence))
+
+    override fun detect(bitmap: Bitmap, minConfidence: Float): List<RectD> {
+        val threshold = minConfidence.coerceIn(0.01f, 0.95f)
+        return distinctDetections(detectOnceWithRetry(bitmap, threshold))
+    }
+
+    /**
+     * Expensive recovery path. PhotoProcessor calls this only when the fast pass and
+     * sequence memory disagree, or when a genuinely difficult first frame needs it.
+     */
+    fun detectRobust(bitmap: Bitmap): List<RectD> {
+        val base = distinctDetections(detectOnceWithRetry(bitmap, confidence))
+        if (base.size >= 2) return base
+
+        val all = ArrayList<RectD>(base)
+        all += usefulDetections(detectOnceWithRetry(bitmap, FULL_RECOVERY_CONFIDENCE), bitmap)
+        distinctDetections(all).takeIf { it.size >= 2 }?.let { return it }
+
+        all += detectCenteredZoom(bitmap)
+        distinctDetections(all).takeIf { it.size >= 2 }?.let { return it }
+
+        all += detectRotated(bitmap, 90)
+        distinctDetections(all).takeIf { it.size >= 2 }?.let { return it }
+        all += detectRotated(bitmap, -90)
+        distinctDetections(all).takeIf { it.size >= 2 }?.let { return it }
+
+        all += detectOverlappingStrips(bitmap)
+        return distinctDetections(all)
+    }
+'''
+yolo = yolo[:start] + replacement + yolo[end:]
+yolo_path.write_text(yolo)
+
+processor_path = Path('app/src/main/java/kz/autopersoncrop/batch/PhotoProcessor.kt')
+processor = processor_path.read_text()
+import_marker = 'import kz.autopersoncrop.ml.PersonDetector\n'
+if 'import kz.autopersoncrop.ml.YoloLiteRtPersonDetector\n' not in processor:
+    processor = processor.replace(import_marker, import_marker + 'import kz.autopersoncrop.ml.YoloLiteRtPersonDetector\n')
+
+start_marker = '    private fun detectPeopleWithRecovery(preview: Bitmap, expectedSubjects: List<RectD>?): List<RectD> {'
+end_marker = '\n    private fun detectInOverlappingTiles(preview: Bitmap): List<RectD> {'
+start = processor.index(start_marker)
+end = processor.index(end_marker, start)
+replacement = '''    private fun detectPeopleWithRecovery(preview: Bitmap, expectedSubjects: List<RectD>?): List<RectD> {
+        val image = ImageSize(preview.width, preview.height)
+        val primary = deduplicate(detector.detect(preview))
+
+        fun matchesHistory(candidates: List<RectD>): Boolean {
+            if (expectedSubjects.isNullOrEmpty()) return false
+            val match = bestDetectionSet(candidates, expectedSubjects, image) ?: return false
+            return match.score <= TILE_TRIGGER_TRACK_DISTANCE
+        }
+
+        // Normal series frame: one inference is enough when it agrees with recent frames.
+        if (!expectedSubjects.isNullOrEmpty() && matchesHistory(primary)) return primary
+        if (expectedSubjects.isNullOrEmpty() && primary.size >= 2) return primary
+
+        // Cheap second chance: one lower-confidence full-frame inference.
+        val combined = ArrayList<RectD>(primary)
+        combined += detector.detect(preview, RECOVERY_CONFIDENCE)
+            .filter { isUsefulRecoveryBox(it, preview) }
+        var recovered = deduplicate(combined)
+
+        if (!expectedSubjects.isNullOrEmpty() && matchesHistory(recovered)) return recovered
+        if (expectedSubjects.isNullOrEmpty()) {
+            if (recovered.size >= 2) return recovered
+            if (recovered.size == 1) {
+                val selected = runCatching { WrestlingSubjectSelector.select(image, recovered) }
+                    .getOrDefault(recovered)
+                val portraitSingle = selected.size == 1 &&
+                    WrestlingCropPlanner.classifyLayout(selected) == SubjectLayout.PORTRAIT &&
+                    WrestlingSubjectSelector.isFullyVisible(image, selected.first())
+                if (portraitSingle) return recovered
+            }
+        }
+
+        // Expensive zoom/rotation/strip recovery is now exceptional rather than per-frame.
+        val robust = (detector as? YoloLiteRtPersonDetector)?.detectRobust(preview).orEmpty()
+        combined += robust
+        recovered = deduplicate(combined)
+        return recovered
+    }
+'''
+processor = processor[:start] + replacement + processor[end:]
+processor_path.write_text(processor)
+
+gradle_path = Path('app/build.gradle.kts')
+gradle = gradle_path.read_text()
+gradle = gradle.replace('versionCode = 33', 'versionCode = 34')
+gradle = gradle.replace('versionName = "0.6.14"', 'versionName = "0.6.15"')
+gradle_path.write_text(gradle)
+
+Path('.github/workflows/one-shot-performance-patch.yml').unlink(missing_ok=True)
+Path('tools/perf_patch.py').unlink(missing_ok=True)
