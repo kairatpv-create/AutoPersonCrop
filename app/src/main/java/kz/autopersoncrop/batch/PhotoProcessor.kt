@@ -14,6 +14,7 @@ import androidx.exifinterface.media.ExifInterface
 import kz.autopersoncrop.core.ImageSize
 import kz.autopersoncrop.core.PixelRect
 import kz.autopersoncrop.core.RectD
+import kz.autopersoncrop.core.SubjectLayout
 import kz.autopersoncrop.core.WrestlingCropPlanner
 import kz.autopersoncrop.core.WrestlingSubjectSelector
 import kz.autopersoncrop.io.ImageFrameLoader
@@ -24,9 +25,11 @@ import kz.autopersoncrop.jpeg.LosslessJpegTransformer
 import kz.autopersoncrop.ml.PersonDetector
 import kz.autopersoncrop.settings.OutputSettings
 import kotlin.math.abs
+import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 sealed class ProcessResult {
     data object Cropped : ProcessResult()
@@ -35,14 +38,6 @@ sealed class ProcessResult {
     data object AlreadyExists : ProcessResult()
 }
 
-/**
- * Wrestling-oriented one/two-person processor.
- *
- * 0.6.10 removes automatic 0/90/180/270 image correction. Detection and crop planning always work
- * in the photo's normal EXIF-displayed orientation. Several recent successful frames are retained
- * so one unstable YOLO result does not break a sequence. Scene similarity deliberately weights the
- * stable outer background more than the fast moving wrestling action in the centre.
- */
 class PhotoProcessor(
     private val context: Context,
     private val detector: PersonDetector,
@@ -59,7 +54,10 @@ class PhotoProcessor(
         val uprightHeight: Int,
         val signature: IntArray,
         val normalizedSubjects: List<RectD>,
+        val layout: SubjectLayout,
     )
+
+    private data class SetMatch(val subjects: List<RectD>, val score: Double)
 
     private val sequenceReferences = ArrayList<SequenceReference>()
     private var sequenceFallbackStreak = 0
@@ -85,16 +83,24 @@ class PhotoProcessor(
             sequenceFallbackStreak = 0
         }
 
-        // Never auto-rotate the photo. ImageFrameLoader only applies the source EXIF orientation so
-        // detection sees the same upright view as the user sees in the gallery.
         val workingPreview = frame.preview
         val signature = frameSignature(workingPreview)
         val previewWidth = workingPreview.width
         val previewHeight = workingPreview.height
         val imageSize = ImageSize(frame.uprightWidth, frame.uprightHeight)
+        val history = matchingSequenceReferences(photo.relativeDir, imageSize, signature)
+        val expectedFull = consensusSubjects(history, imageSize)
+        val expectedPreview = expectedFull?.map { r ->
+            RectD(
+                r.left * previewWidth / imageSize.width.toDouble(),
+                r.top * previewHeight / imageSize.height.toDouble(),
+                r.right * previewWidth / imageSize.width.toDouble(),
+                r.bottom * previewHeight / imageSize.height.toDouble(),
+            )
+        }
 
         val previewBoxes = try {
-            detectPeopleWithRecovery(workingPreview)
+            detectPeopleWithRecovery(workingPreview, expectedPreview)
         } finally {
             if (!frame.preview.isRecycled) frame.preview.recycle()
         }
@@ -108,28 +114,51 @@ class PhotoProcessor(
             val fullBoxes = previewBoxes.map { b ->
                 RectD(b.left * sx, b.top * sy, b.right * sx, b.bottom * sy)
             }
-            val selected = WrestlingSubjectSelector.select(imageSize, fullBoxes)
-            detectedSubjects = selected
+            val genericSelected = WrestlingSubjectSelector.select(imageSize, fullBoxes)
+            val intentionalFullPersonFocus = genericSelected.size == 1 &&
+                WrestlingSubjectSelector.isFullyVisible(imageSize, genericSelected.first()) &&
+                fullBoxes.any { box ->
+                    !WrestlingSubjectSelector.isFullyVisible(imageSize, box) &&
+                        normalizedGap(genericSelected.first(), box, imageSize) <= 0.13
+                }
 
-            // When one detected person is complete and another box is already clipped by the source
-            // boundary, the single-person choice is intentional. Never reintroduce the clipped person
-            // from sequence memory.
-            val intentionalFullPersonFocus = selected.size == 1 &&
-                WrestlingSubjectSelector.isFullyVisible(imageSize, selected.first()) &&
-                fullBoxes.any { !WrestlingSubjectSelector.isFullyVisible(imageSize, it) }
-
-            val assisted = if (selected.size == 1 && !intentionalFullPersonFocus) {
-                sequenceAssistForPartialDetection(photo, imageSize, signature, selected)
+            val guided = if (!intentionalFullPersonFocus) {
+                sequenceGuidedSelection(imageSize, fullBoxes, genericSelected, history)
             } else null
+            val selectedCurrent = guided ?: genericSelected
+            detectedSubjects = selectedCurrent
 
-            if (assisted != null) {
-                usedSequenceFallback = true
-                assisted
+            if (intentionalFullPersonFocus) {
+                selectedCurrent
             } else {
-                selected
+                val assisted = if (selectedCurrent.size == 1) {
+                    sequenceAssistForPartialDetection(imageSize, history, selectedCurrent)
+                } else null
+
+                if (assisted != null) {
+                    usedSequenceFallback = true
+                    assisted
+                } else {
+                    val expected = consensusSubjects(history, imageSize)
+                    val currentDistance = if (expected != null) {
+                        setDistance(selectedCurrent, expected, imageSize)
+                    } else Double.POSITIVE_INFINITY
+                    val carried = if (
+                        expected != null &&
+                        history.size >= 2 &&
+                        currentDistance > OUTLIER_CURRENT_DISTANCE
+                    ) {
+                        sequenceFallbackForMiss(imageSize, history)
+                    } else null
+
+                    if (carried != null) {
+                        usedSequenceFallback = true
+                        carried
+                    } else selectedCurrent
+                }
             }
         } else {
-            val carried = sequenceFallbackForMiss(photo, imageSize, signature)
+            val carried = sequenceFallbackForMiss(imageSize, history)
             if (carried == null) {
                 sequenceFallbackStreak = 0
                 copyExact(photo, outputDir)
@@ -139,9 +168,20 @@ class PhotoProcessor(
             carried
         }
 
-        // Selected wrestler geometry is final. The crop stage never re-selects people and never
-        // rotates the image.
-        val uprightCrop = WrestlingCropPlanner.plan(imageSize, subjectsForCrop)
+        val currentLayout = WrestlingCropPlanner.classifyLayout(subjectsForCrop)
+        val rememberedLayout = consensusLayout(history)
+        val preferredLayout = if (
+            rememberedLayout != null &&
+            rememberedLayout != currentLayout &&
+            !WrestlingCropPlanner.hasStrongLayoutEvidence(subjectsForCrop, currentLayout)
+        ) rememberedLayout else null
+        val effectiveLayout = preferredLayout ?: currentLayout
+
+        val uprightCrop = WrestlingCropPlanner.plan(
+            image = imageSize,
+            subjects = subjectsForCrop,
+            preferredLayout = preferredLayout,
+        )
         val raw = ExifCropMapper.uprightToRaw(
             uprightCrop,
             frame.rawWidth,
@@ -168,12 +208,12 @@ class PhotoProcessor(
                 image = imageSize,
                 signature = signature,
                 subjects = detectedSubjects!!,
+                layout = effectiveLayout,
             )
             sequenceFallbackStreak = 0
         } else if (usedSequenceFallback) {
             sequenceFallbackStreak++
         }
-
         return result
     }
 
@@ -182,6 +222,7 @@ class PhotoProcessor(
         image: ImageSize,
         signature: IntArray,
         subjects: List<RectD>,
+        layout: SubjectLayout,
     ) {
         val w = image.width.toDouble().coerceAtLeast(1.0)
         val h = image.height.toDouble().coerceAtLeast(1.0)
@@ -193,6 +234,7 @@ class PhotoProcessor(
             normalizedSubjects = subjects.map { r ->
                 RectD(r.left / w, r.top / h, r.right / w, r.bottom / h)
             },
+            layout = layout,
         )
         sequenceReferences.add(0, ref)
         while (sequenceReferences.size > MAX_SEQUENCE_REFERENCES) {
@@ -200,53 +242,154 @@ class PhotoProcessor(
         }
     }
 
-    private fun sequenceFallbackForMiss(
-        photo: SourcePhoto,
+    private fun sequenceGuidedSelection(
         image: ImageSize,
-        signature: IntArray,
+        fullBoxes: List<RectD>,
+        generic: List<RectD>,
+        history: List<Pair<SequenceReference, Double>>,
     ): List<RectD>? {
-        if (sequenceFallbackStreak >= MAX_CONSECUTIVE_SEQUENCE_FALLBACKS) return null
-        val ref = matchingSequenceReferences(photo.relativeDir, image, signature).firstOrNull()?.first ?: return null
-        val mapped = denormalize(ref.normalizedSubjects, image.width, image.height)
-        if (mapped.isEmpty()) return null
+        val expected = consensusSubjects(history, image) ?: return null
+        val best = bestDetectionSet(fullBoxes, expected, image) ?: return null
+        val threshold = if (expected.size == 1) MAX_TRACK_SINGLE_DISTANCE else MAX_TRACK_PAIR_DISTANCE
+        if (best.score > threshold) return null
+        val genericScore = setDistance(generic, expected, image)
+        return if (
+            generic.size != expected.size ||
+            !genericScore.isFinite() ||
+            genericScore > best.score + TRACK_OVERRIDE_ADVANTAGE
+        ) best.subjects else null
+    }
 
-        // Keep one/two-person structure from the confirmed neighbour. Collapsing two people into one
-        // wide union made two standing people look like a lying subject and forced landscape crops.
-        return mapped.map { expandRect(it, image.width, image.height, 0.16) }
+    private fun sequenceFallbackForMiss(
+        image: ImageSize,
+        history: List<Pair<SequenceReference, Double>>,
+    ): List<RectD>? {
+        if (history.isEmpty()) return null
+        if (sequenceFallbackStreak >= MAX_CONSECUTIVE_SEQUENCE_FALLBACKS) return null
+        if (history.size == 1) {
+            if (history.first().second > SINGLE_REFERENCE_MAX_DISTANCE) return null
+            if (sequenceFallbackStreak >= MAX_SINGLE_REFERENCE_FALLBACKS) return null
+        }
+        val consensus = consensusSubjects(history, image) ?: return null
+        return consensus.map { expandRect(it, image.width, image.height, 0.12) }
     }
 
     private fun sequenceAssistForPartialDetection(
-        photo: SourcePhoto,
         image: ImageSize,
-        signature: IntArray,
+        history: List<Pair<SequenceReference, Double>>,
         current: List<RectD>,
     ): List<RectD>? {
-        if (sequenceFallbackStreak >= MAX_CONSECUTIVE_SEQUENCE_FALLBACKS) return null
-        val ref = matchingSequenceReferences(photo.relativeDir, image, signature)
-            .firstOrNull { it.first.normalizedSubjects.size >= 2 }
-            ?.first ?: return null
-
-        val previous = denormalize(ref.normalizedSubjects, image.width, image.height)
-        if (previous.size < 2 || current.isEmpty()) return null
-
-        // Replace the nearest remembered subject by the fresh detection, while preserving the second
-        // remembered wrestler. This keeps the pair geometry without turning it into one broad box.
+        if (current.isEmpty()) return null
+        val expected = consensusSubjects(history, image) ?: return null
+        if (expected.size < 2) return null
         val fresh = current.first()
-        val nearestIndex = previous.indices.minByOrNull { centerDistance(previous[it], fresh, image) } ?: return null
-        val assisted = previous.toMutableList()
-        assisted[nearestIndex] = expandedUnion(
-            listOf(previous[nearestIndex], fresh),
-            image.width,
-            image.height,
-            0.08,
-        )
-        return assisted.map { expandRect(it, image.width, image.height, 0.08) }
+        val nearestIndex = expected.indices.minByOrNull { trackDistance(expected[it], fresh, image) } ?: return null
+        val nearestDistance = trackDistance(expected[nearestIndex], fresh, image)
+        if (nearestDistance > PARTIAL_ASSIST_MAX_DISTANCE) return null
+        val assisted = expected.toMutableList()
+        assisted[nearestIndex] = blendRect(expected[nearestIndex], fresh, 0.72)
+        return assisted.map { expandRect(it, image.width, image.height, 0.07) }
     }
 
-    private fun centerDistance(a: RectD, b: RectD, image: ImageSize): Double {
+    private fun blendRect(old: RectD, fresh: RectD, freshWeight: Double): RectD {
+        val fw = freshWeight.coerceIn(0.0, 1.0)
+        val ow = 1.0 - fw
+        return RectD(
+            old.left * ow + fresh.left * fw,
+            old.top * ow + fresh.top * fw,
+            old.right * ow + fresh.right * fw,
+            old.bottom * ow + fresh.bottom * fw,
+        )
+    }
+
+    private fun consensusSubjects(
+        history: List<Pair<SequenceReference, Double>>,
+        image: ImageSize,
+    ): List<RectD>? {
+        if (history.isEmpty()) return null
+        val recent = history.take(CONSENSUS_REFERENCE_LIMIT)
+        val oneCount = recent.count { it.first.normalizedSubjects.size == 1 }
+        val twoCount = recent.count { it.first.normalizedSubjects.size >= 2 }
+        val desiredCount = when {
+            twoCount > oneCount -> 2
+            oneCount > twoCount -> 1
+            recent.first().first.normalizedSubjects.size >= 2 -> 2
+            else -> 1
+        }
+        val mapped = recent.asSequence()
+            .map { it.first }
+            .filter { if (desiredCount == 2) it.normalizedSubjects.size >= 2 else it.normalizedSubjects.size == 1 }
+            .take(CONSENSUS_REFERENCE_LIMIT)
+            .map { ref ->
+                val boxes = denormalize(ref.normalizedSubjects.take(desiredCount), image.width, image.height)
+                if (desiredCount == 2) boxes.sortedBy { it.centerX } else boxes
+            }
+            .filter { it.size == desiredCount }
+            .toList()
+        if (mapped.isEmpty()) return null
+        return (0 until desiredCount).map { index ->
+            RectD(
+                median(mapped.map { it[index].left }),
+                median(mapped.map { it[index].top }),
+                median(mapped.map { it[index].right }),
+                median(mapped.map { it[index].bottom }),
+            ).clampTo(image.width, image.height)
+        }.filter { it.width >= 2.0 && it.height >= 2.0 }
+            .takeIf { it.size == desiredCount }
+    }
+
+    private fun consensusLayout(history: List<Pair<SequenceReference, Double>>): SubjectLayout? {
+        val recent = history.take(ORIENTATION_REFERENCE_LIMIT)
+        if (recent.size < 2) return null
+        val portrait = recent.count { it.first.layout == SubjectLayout.PORTRAIT }
+        val landscape = recent.size - portrait
+        val winner = if (portrait >= landscape) SubjectLayout.PORTRAIT else SubjectLayout.LANDSCAPE
+        val count = max(portrait, landscape)
+        return winner.takeIf { count >= 2 && count.toDouble() / recent.size >= 0.66 }
+    }
+
+    private fun bestDetectionSet(
+        candidates: List<RectD>,
+        expected: List<RectD>,
+        image: ImageSize,
+    ): SetMatch? {
+        val usable = candidates.filter { it.width >= 3.0 && it.height >= 3.0 && it.area >= 9.0 }
+        if (usable.isEmpty() || expected.isEmpty()) return null
+        if (expected.size == 1) {
+            val best = usable.minByOrNull { trackDistance(it, expected.first(), image) } ?: return null
+            return SetMatch(listOf(best), trackDistance(best, expected.first(), image))
+        }
+        if (usable.size < 2) return null
+        var bestMatch: SetMatch? = null
+        for (i in 0 until usable.lastIndex) {
+            for (j in i + 1 until usable.size) {
+                val a = usable[i]
+                val b = usable[j]
+                val direct = (trackDistance(a, expected[0], image) + trackDistance(b, expected[1], image)) / 2.0
+                val swapped = (trackDistance(a, expected[1], image) + trackDistance(b, expected[0], image)) / 2.0
+                val match = if (direct <= swapped) SetMatch(listOf(a, b), direct) else SetMatch(listOf(b, a), swapped)
+                if (bestMatch == null || match.score < bestMatch!!.score) bestMatch = match
+            }
+        }
+        return bestMatch
+    }
+
+    private fun setDistance(actual: List<RectD>, expected: List<RectD>, image: ImageSize): Double {
+        if (actual.size != expected.size || actual.isEmpty()) return Double.POSITIVE_INFINITY
+        if (actual.size == 1) return trackDistance(actual.first(), expected.first(), image)
+        val direct = (trackDistance(actual[0], expected[0], image) + trackDistance(actual[1], expected[1], image)) / 2.0
+        val swapped = (trackDistance(actual[0], expected[1], image) + trackDistance(actual[1], expected[0], image)) / 2.0
+        return min(direct, swapped)
+    }
+
+    private fun trackDistance(a: RectD, b: RectD, image: ImageSize): Double {
         val dx = (a.centerX - b.centerX) / image.width.coerceAtLeast(1).toDouble()
         val dy = (a.centerY - b.centerY) / image.height.coerceAtLeast(1).toDouble()
-        return dx * dx + dy * dy
+        val center = sqrt(dx * dx + dy * dy)
+        val areaRatio = (a.area.coerceAtLeast(1.0) / b.area.coerceAtLeast(1.0)).coerceIn(0.05, 20.0)
+        val aspectA = (a.width / a.height.coerceAtLeast(1.0)).coerceAtLeast(0.05)
+        val aspectB = (b.width / b.height.coerceAtLeast(1.0)).coerceAtLeast(0.05)
+        return center + abs(ln(areaRatio)) * 0.075 + abs(ln(aspectA / aspectB)) * 0.035
     }
 
     private fun matchingSequenceReferences(
@@ -261,21 +404,15 @@ class PhotoProcessor(
         }
         .map { it to signatureDistance(it.signature, signature) }
         .filter { it.second <= MAX_SEQUENCE_DISTANCE }
-        .sortedBy { it.second }
+        .take(MAX_SEQUENCE_REFERENCES)
         .toList()
 
-    /**
-     * Exposure-tolerant scene distance. Outer/background cells have more weight than the centre,
-     * because in wrestling bursts the athletes can move sharply while the hall/mat/background stays
-     * nearly unchanged.
-     */
     private fun signatureDistance(a: IntArray, b: IntArray): Double {
         if (a.size != b.size || a.isEmpty()) return Double.POSITIVE_INFINITY
         val meanA = a.average()
         val meanB = b.average()
         val brightnessShift = abs(meanA - meanB)
         if (brightnessShift > MAX_BRIGHTNESS_SHIFT) return Double.POSITIVE_INFINITY
-
         var weightedDiff = 0.0
         var totalWeight = 0.0
         var outerOutliers = 0
@@ -286,7 +423,7 @@ class PhotoProcessor(
             val y = i / grid
             val central = x in (grid / 4) until (grid - grid / 4) &&
                 y in (grid / 4) until (grid - grid / 4)
-            val weight = if (central) 0.38 else 1.0
+            val weight = if (central) 0.34 else 1.0
             val centeredDiff = abs((a[i] - meanA) - (b[i] - meanB))
             weightedDiff += centeredDiff * weight
             totalWeight += weight
@@ -315,32 +452,22 @@ class PhotoProcessor(
         return values
     }
 
+    private fun median(values: List<Double>): Double {
+        if (values.isEmpty()) return 0.0
+        val sorted = values.sorted()
+        val mid = sorted.size / 2
+        return if (sorted.size % 2 == 1) sorted[mid] else (sorted[mid - 1] + sorted[mid]) / 2.0
+    }
+
     private fun denormalize(normalized: List<RectD>, width: Int, height: Int): List<RectD> =
         normalized.map { r ->
-            RectD(
-                r.left * width,
-                r.top * height,
-                r.right * width,
-                r.bottom * height,
-            ).clampTo(width, height)
+            RectD(r.left * width, r.top * height, r.right * width, r.bottom * height).clampTo(width, height)
         }.filter { it.width >= 2.0 && it.height >= 2.0 }
 
     private fun expandRect(rect: RectD, width: Int, height: Int, fraction: Double): RectD {
         val mx = max(rect.width * fraction, width * 0.010)
         val my = max(rect.height * fraction, height * 0.010)
         return RectD(rect.left - mx, rect.top - my, rect.right + mx, rect.bottom + my).clampTo(width, height)
-    }
-
-    private fun expandedUnion(rects: List<RectD>, width: Int, height: Int, fraction: Double): RectD {
-        val u = RectD(
-            rects.minOf { it.left },
-            rects.minOf { it.top },
-            rects.maxOf { it.right },
-            rects.maxOf { it.bottom },
-        )
-        val mx = max(u.width * fraction, width * 0.020)
-        val my = max(u.height * fraction, height * 0.020)
-        return RectD(u.left - mx, u.top - my, u.right + mx, u.bottom + my).clampTo(width, height)
     }
 
     private fun RectD.clampTo(width: Int, height: Int): RectD = RectD(
@@ -350,43 +477,51 @@ class PhotoProcessor(
         bottom.coerceIn(0.0, height.toDouble()),
     )
 
-    /**
-     * Normal detector + softer whole-frame pass + overlapping tiles. The detector itself also has
-     * wrestling-specific recovery views. A zero result therefore means several independent passes
-     * have failed before sequence recovery is considered.
-     */
-    private fun detectPeopleWithRecovery(preview: Bitmap): List<RectD> {
-        val image = ImageSize(preview.width, preview.height)
-        val normal = deduplicate(detector.detect(preview))
-        if (normal.isNotEmpty()) {
-            val selected = runCatching { WrestlingSubjectSelector.select(image, normal) }.getOrDefault(emptyList())
-            if (selected.size >= 2) return normal
-        }
+    private fun normalizedGap(a: RectD, b: RectD, image: ImageSize): Double {
+        val horizontal = when {
+            a.right < b.left -> b.left - a.right
+            b.right < a.left -> a.left - b.right
+            else -> 0.0
+        } / image.width.toDouble()
+        val vertical = when {
+            a.bottom < b.top -> b.top - a.bottom
+            b.bottom < a.top -> a.top - b.bottom
+            else -> 0.0
+        } / image.height.toDouble()
+        return sqrt(horizontal * horizontal + vertical * vertical)
+    }
 
-        val combined = ArrayList<RectD>(normal)
+    private fun detectPeopleWithRecovery(preview: Bitmap, expectedSubjects: List<RectD>?): List<RectD> {
+        val image = ImageSize(preview.width, preview.height)
+        val combined = ArrayList<RectD>()
+        combined += detector.detect(preview)
         combined += detector.detect(preview, RECOVERY_CONFIDENCE)
             .filter { isUsefulRecoveryBox(it, preview) }
-
-        val afterSoft = deduplicate(combined)
-        if (afterSoft.isNotEmpty()) {
-            val selected = runCatching { WrestlingSubjectSelector.select(image, afterSoft) }.getOrDefault(emptyList())
-            if (selected.size >= 2) return afterSoft
+        var recovered = deduplicate(combined)
+        val needTiles = if (expectedSubjects != null && expectedSubjects.isNotEmpty()) {
+            val match = bestDetectionSet(recovered, expectedSubjects, image)
+            match == null || match.score > TILE_TRIGGER_TRACK_DISTANCE
+        } else {
+            val selected = if (recovered.isNotEmpty()) {
+                runCatching { WrestlingSubjectSelector.select(image, recovered) }.getOrDefault(emptyList())
+            } else emptyList()
+            selected.size < 2
         }
-
-        combined += detectInOverlappingTiles(preview)
-        return deduplicate(combined)
+        if (needTiles) {
+            combined += detectInOverlappingTiles(preview)
+            recovered = deduplicate(combined)
+        }
+        return recovered
     }
 
     private fun detectInOverlappingTiles(preview: Bitmap): List<RectD> {
         val horizontalSplit = preview.width >= preview.height
         val longSide = if (horizontalSplit) preview.width else preview.height
         if (longSide < 420) return emptyList()
-
         val tileLong = (longSide * 0.74).roundToInt().coerceIn(1, longSide)
         val end = longSide - tileLong
         val offsets = intArrayOf(0, end / 2, end).distinct()
         val found = ArrayList<RectD>()
-
         for (offset in offsets) {
             val tile = if (horizontalSplit) {
                 Bitmap.createBitmap(preview, offset, 0, tileLong, preview.height)
@@ -416,7 +551,6 @@ class PhotoProcessor(
         return box.area / imageArea.coerceAtLeast(1.0) >= MIN_RECOVERY_AREA_FRACTION
     }
 
-    /** Preserve strongly overlapping wrestlers; remove only very similar cross-pass duplicates. */
     private fun deduplicate(input: List<RectD>): List<RectD> {
         if (input.size <= 1) return input
         val sorted = input.sortedByDescending { it.area }
@@ -462,7 +596,6 @@ class PhotoProcessor(
             if (maxSide > 0) {
                 while (max(raw.width / sample, raw.height / sample) > maxSide * 2) sample *= 2
             }
-
             val decoded = context.contentResolver.openInputStream(photo.uri).use { input ->
                 requireNotNull(input)
                 val decoder = requireNotNull(BitmapRegionDecoder.newInstance(input, false)) {
@@ -480,13 +613,10 @@ class PhotoProcessor(
                     decoder.recycle()
                 }
             }
-
             val upright = applyExif(decoded, frame.exifOrientation)
             if (upright !== decoded) decoded.recycle()
-
             val finalBitmap = resizeIfNeeded(upright, maxSide)
             if (finalBitmap !== upright) upright.recycle()
-
             context.contentResolver.openOutputStream(out.uri, "w").use { output ->
                 requireNotNull(output)
                 check(finalBitmap.compress(Bitmap.CompressFormat.JPEG, outputSettings.quality.jpegQuality, output)) {
@@ -586,13 +716,22 @@ class PhotoProcessor(
         private const val RECOVERY_CONFIDENCE = 0.095f
         private const val TILE_RECOVERY_CONFIDENCE = 0.080f
         private const val MIN_RECOVERY_AREA_FRACTION = 0.0025
-        private const val MAX_CANDIDATES = 14
-
+        private const val MAX_CANDIDATES = 16
         private const val SIGNATURE_GRID = 16
         private const val MAX_BRIGHTNESS_SHIFT = 55.0
         private const val SIGNATURE_OUTLIER_DIFF = 54.0
-        private const val MAX_SEQUENCE_DISTANCE = 29.0
-        private const val MAX_SEQUENCE_REFERENCES = 4
-        private const val MAX_CONSECUTIVE_SEQUENCE_FALLBACKS = 5
+        private const val MAX_SEQUENCE_DISTANCE = 35.0
+        private const val MAX_SEQUENCE_REFERENCES = 8
+        private const val CONSENSUS_REFERENCE_LIMIT = 5
+        private const val ORIENTATION_REFERENCE_LIMIT = 5
+        private const val MAX_CONSECUTIVE_SEQUENCE_FALLBACKS = 24
+        private const val MAX_SINGLE_REFERENCE_FALLBACKS = 3
+        private const val SINGLE_REFERENCE_MAX_DISTANCE = 24.0
+        private const val MAX_TRACK_SINGLE_DISTANCE = 0.42
+        private const val MAX_TRACK_PAIR_DISTANCE = 0.50
+        private const val TRACK_OVERRIDE_ADVANTAGE = 0.09
+        private const val PARTIAL_ASSIST_MAX_DISTANCE = 0.40
+        private const val OUTLIER_CURRENT_DISTANCE = 0.46
+        private const val TILE_TRIGGER_TRACK_DISTANCE = 0.34
     }
 }
