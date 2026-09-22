@@ -11,8 +11,8 @@ android {
         applicationId = "kz.autopersoncrop"
         minSdk = 26
         targetSdk = 36
-        versionCode = 30
-        versionName = "0.6.11"
+        versionCode = 31
+        versionName = "0.6.12"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -25,19 +25,7 @@ android {
         }
     }
 
-    signingConfigs {
-        create("stableDebug") {
-            storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
-        }
-    }
-
     buildTypes {
-        getByName("debug") {
-            signingConfig = signingConfigs.getByName("stableDebug")
-        }
         getByName("release") {
             isMinifyEnabled = false
             isShrinkResources = false
