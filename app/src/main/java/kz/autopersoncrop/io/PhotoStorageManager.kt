@@ -1,16 +1,12 @@
 package kz.autopersoncrop.io
 
 import android.content.Context
-import android.net.Uri
-import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 
 /**
- * Finalizes batch output without destroying the only copy of a source photo.
- *
- * Successful crops replace the source document in-place, but the first original is
- * preserved under CROP/ОРИГИНАЛЫ AutoPersonCrop. Photos that were not processed or
- * ended with an error are moved under CROP/НЕОБРАБОТАННЫЕ AutoPersonCrop.
+ * Keeps the normal processing path fast: successful results stay in CROP while
+ * original photos remain untouched. Only unprocessed/error photos are copied
+ * into CROP/НЕОБРАБОТАННЫЕ AutoPersonCrop for manual review.
  */
 class PhotoStorageManager(
     private val context: Context,
@@ -18,80 +14,50 @@ class PhotoStorageManager(
 ) {
     private val resolver get() = context.contentResolver
 
-    fun replaceOriginalWithProcessed(photo: SourcePhoto, tempDir: DocumentFile) {
-        val temp = tempDir.findFile(photo.name)
-            ?: error("Не найден временный результат ${photo.name}")
-        require(temp.isFile) { "Временный результат ${photo.name} не является файлом" }
-        require(temp.length() > 0L) { "Временный результат ${photo.name} пуст" }
+    /**
+     * Successful PhotoProcessor output is already written to CROP. Nothing else
+     * is required here; deliberately avoid any extra copy/read/write operations.
+     */
+    fun replaceOriginalWithProcessed(
+        @Suppress("UNUSED_PARAMETER") photo: SourcePhoto,
+        @Suppress("UNUSED_PARAMETER") tempDir: DocumentFile,
+    ) = Unit
 
-        val backup = ensureOriginalBackup(photo)
-        try {
-            copyUri(temp.uri, photo.uri)
-            val replaced = DocumentFile.fromSingleUri(context, photo.uri)
-            require(replaced != null && replaced.length() > 0L) {
-                "Не удалось проверить заменённый файл ${photo.name}"
-            }
-            resolver.notifyChange(photo.uri, null)
-        } catch (t: Throwable) {
-            val restoreError = runCatching { copyUri(backup.uri, photo.uri) }.exceptionOrNull()
-            if (restoreError != null) {
-                throw IllegalStateException(
-                    "Не удалось заменить ${photo.name}; восстановление из резерва тоже не удалось: ${restoreError.message}",
-                    t,
-                )
-            }
-            throw t
-        }
-
-        // Temp is only a staging file. Failure to remove it must not turn a valid crop into an error.
-        runCatching { temp.delete() }
-    }
-
+    /**
+     * Copy an unchanged original into the manual-review folder, but never remove
+     * or modify the original in its source folder.
+     */
     fun moveUnprocessed(photo: SourcePhoto, tempDir: DocumentFile) {
-        // PhotoProcessor copies an unchanged file to temp when nobody is found. It is not needed now.
+        // No-people processing may have written an unchanged copy into the normal
+        // CROP output directory. Remove only that redundant output copy.
         runCatching { tempDir.findFile(photo.name)?.delete() }
 
         val destinationDir = ensureArchiveDir(UNPROCESSED_DIR, photo.relativeDir)
-        val destination = createUniqueFile(destinationDir, photo.name)
+        destinationDir.findFile(photo.name)?.let { existing ->
+            check(existing.delete()) { "Не удалось обновить копию ${photo.name} в папке необработанных" }
+        }
+        val destination = destinationDir.createFile("image/jpeg", photo.name)
+            ?: error("Не удалось создать копию ${photo.name} в папке необработанных")
+
         try {
             val sourceLength = DocumentFile.fromSingleUri(context, photo.uri)?.length() ?: 0L
-            copyUri(photo.uri, destination.uri)
+            resolver.openInputStream(photo.uri).use { input ->
+                resolver.openOutputStream(destination.uri, "w").use { output ->
+                    requireNotNull(input) { "Не удалось открыть исходный JPEG" }
+                    requireNotNull(output) { "Не удалось открыть JPEG для записи" }
+                    input.copyTo(output, DEFAULT_BUFFER_SIZE)
+                    output.flush()
+                }
+            }
             val copiedLength = destination.length()
-            require(copiedLength > 0L) { "Не удалось скопировать ${photo.name} в папку необработанных" }
+            require(copiedLength > 0L) { "Копия ${photo.name} в папке необработанных пуста" }
             if (sourceLength > 0L) {
                 require(copiedLength == sourceLength) {
                     "Размер копии ${photo.name} не совпадает с исходником"
                 }
             }
-            val deleted = DocumentsContract.deleteDocument(resolver, photo.uri)
-            if (!deleted) error("Не удалось убрать исходный файл ${photo.name} после безопасного копирования")
         } catch (t: Throwable) {
             runCatching { destination.delete() }
-            throw t
-        }
-    }
-
-    private fun ensureOriginalBackup(photo: SourcePhoto): DocumentFile {
-        val dir = ensureArchiveDir(ORIGINALS_DIR, photo.relativeDir)
-        val existing = dir.findFile(photo.name)?.takeIf { it.isFile && it.length() > 0L }
-        if (existing != null) return existing
-        dir.findFile(photo.name)?.let { runCatching { it.delete() } }
-
-        val out = dir.createFile("image/jpeg", photo.name)
-            ?: error("Не удалось создать резерв оригинала ${photo.name}")
-        try {
-            val sourceLength = DocumentFile.fromSingleUri(context, photo.uri)?.length() ?: 0L
-            copyUri(photo.uri, out.uri)
-            val copiedLength = out.length()
-            require(copiedLength > 0L) { "Резерв оригинала ${photo.name} пуст" }
-            if (sourceLength > 0L) {
-                require(copiedLength == sourceLength) {
-                    "Резерв оригинала ${photo.name} записан не полностью"
-                }
-            }
-            return out
-        } catch (t: Throwable) {
-            runCatching { out.delete() }
             throw t
         }
     }
@@ -108,37 +74,7 @@ class PhotoStorageManager(
         return current
     }
 
-    private fun createUniqueFile(dir: DocumentFile, originalName: String): DocumentFile {
-        if (dir.findFile(originalName) == null) {
-            return dir.createFile("image/jpeg", originalName)
-                ?: error("Не удалось создать $originalName")
-        }
-        val dot = originalName.lastIndexOf('.')
-        val base = if (dot > 0) originalName.substring(0, dot) else originalName
-        val ext = if (dot > 0) originalName.substring(dot) else ".jpg"
-        for (index in 2..9999) {
-            val candidate = "$base ($index)$ext"
-            if (dir.findFile(candidate) == null) {
-                return dir.createFile("image/jpeg", candidate)
-                    ?: error("Не удалось создать $candidate")
-            }
-        }
-        error("Слишком много файлов с именем $originalName")
-    }
-
-    private fun copyUri(source: Uri, destination: Uri) {
-        resolver.openInputStream(source).use { input ->
-            resolver.openOutputStream(destination, "w").use { output ->
-                requireNotNull(input) { "Не удалось открыть исходный JPEG" }
-                requireNotNull(output) { "Не удалось открыть JPEG для записи" }
-                input.copyTo(output, DEFAULT_BUFFER_SIZE)
-                output.flush()
-            }
-        }
-    }
-
     companion object {
-        const val ORIGINALS_DIR = "ОРИГИНАЛЫ AutoPersonCrop"
         const val UNPROCESSED_DIR = "НЕОБРАБОТАННЫЕ AutoPersonCrop"
     }
 }
