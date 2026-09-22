@@ -11,24 +11,20 @@ import kotlin.math.sqrt
  *
  * The frame follows the action instead of forcing 2:3 / 3:2. For a tall composition we protect
  * roughly 5% at the left/right and let top/bottom breathe naturally. For a wide composition we do
- * the opposite. Only soft aspect guards are used so the result cannot become an implausibly thin
- * strip or an excessively wide banner. Selected subjects are never intentionally cut.
+ * the opposite. Small or doubtful subject groups keep much more surrounding context so a detector
+ * mistake cannot become an extreme close-up of a spectator, referee or body fragment.
  */
 object WrestlingCropPlanner {
     private const val PRIMARY_MARGIN = 0.050
-    private const val FREE_MARGIN_SINGLE = 0.085
-    private const val FREE_MARGIN_PAIR = 0.100
-    private const val BALANCED_MARGIN = 0.065
-    private const val MIN_IMAGE_MARGIN = 0.010
+    private const val FREE_MARGIN_SINGLE = 0.090
+    private const val FREE_MARGIN_PAIR = 0.105
+    private const val BALANCED_MARGIN = 0.070
+    private const val MIN_IMAGE_MARGIN = 0.012
     private const val SOURCE_EDGE_FRACTION = 0.012
 
-    // Soft limits only. We expand the frame to respect them; we never squeeze or stretch pixels.
-    private const val MIN_ASPECT = 0.60
-    private const val MAX_ASPECT = 1.85
-
-    // Prevent accidental extreme zoom when one marginal detection survives.
-    private const val MIN_SINGLE_AREA_FRACTION = 0.12
-    private const val MIN_PAIR_AREA_FRACTION = 0.09
+    // Soft limits only. We expand the frame to respect them; pixels are never stretched or squeezed.
+    private const val MIN_ASPECT = 0.62
+    private const val MAX_ASPECT = 1.80
     private const val EPS = 1e-6
 
     fun plan(image: ImageSize, subjects: List<RectD>): PixelRect {
@@ -42,6 +38,8 @@ object WrestlingCropPlanner {
         val subject = union(clean).clampTo(image)
         if (subject.width < 2.0 || subject.height < 2.0) return full(image)
 
+        val imageArea = image.width.toDouble() * image.height.toDouble()
+        val subjectAreaFraction = (subject.area / imageArea.coerceAtLeast(1.0)).coerceIn(0.0, 1.0)
         val ratio = subject.width / subject.height.coerceAtLeast(1.0)
         val freeMargin = if (clean.size >= 2) FREE_MARGIN_PAIR else FREE_MARGIN_SINGLE
 
@@ -51,7 +49,7 @@ object WrestlingCropPlanner {
                 image = image,
                 leftFraction = PRIMARY_MARGIN,
                 rightFraction = PRIMARY_MARGIN,
-                topFraction = freeMargin + 0.015,
+                topFraction = freeMargin + 0.020,
                 bottomFraction = freeMargin,
             )
             ratio >= 1.22 -> expandDirectional(
@@ -67,7 +65,7 @@ object WrestlingCropPlanner {
                 image = image,
                 leftFraction = BALANCED_MARGIN,
                 rightFraction = BALANCED_MARGIN,
-                topFraction = BALANCED_MARGIN + 0.010,
+                topFraction = BALANCED_MARGIN + 0.012,
                 bottomFraction = BALANCED_MARGIN,
             )
         }
@@ -83,9 +81,15 @@ object WrestlingCropPlanner {
             targetHeight = targetWidth / MAX_ASPECT
         }
 
-        // Extremely small crops are visually fragile and amplify any detector error. Expand gently.
-        val imageArea = image.width.toDouble() * image.height.toDouble()
-        val minAreaFraction = if (clean.size >= 2) MIN_PAIR_AREA_FRACTION else MIN_SINGLE_AREA_FRACTION
+        // Context safety from the real test sets. Tiny selected groups are often background people.
+        // The smaller the protected group is, the more of the original scene we deliberately keep.
+        val minAreaFraction = when {
+            subjectAreaFraction < 0.025 -> 0.42
+            subjectAreaFraction < 0.050 -> 0.34
+            subjectAreaFraction < 0.090 -> 0.26
+            clean.size >= 2 -> 0.19
+            else -> 0.22
+        }
         val currentArea = targetWidth * targetHeight
         val wantedArea = imageArea * minAreaFraction
         if (currentArea < wantedArea && currentArea > 1.0) {
@@ -97,7 +101,6 @@ object WrestlingCropPlanner {
         targetWidth = targetWidth.coerceIn(required.width, image.width.toDouble())
         targetHeight = targetHeight.coerceIn(required.height, image.height.toDouble())
 
-        // Re-check aspect after image-bound clamping. Expansion is still the only correction.
         aspect = targetWidth / targetHeight.coerceAtLeast(1.0)
         if (aspect < MIN_ASPECT && targetWidth < image.width) {
             targetWidth = min(image.width.toDouble(), targetHeight * MIN_ASPECT)
@@ -105,9 +108,28 @@ object WrestlingCropPlanner {
             targetHeight = min(image.height.toDouble(), targetWidth / MAX_ASPECT)
         }
 
-        val verticalBias = if (ratio <= 0.82) -0.015 else 0.0
-        return placeFrame(image, required, subject, targetWidth, targetHeight, verticalBias)
-            ?: full(image)
+        // When a tiny subject is selected, bias the enlarged frame back toward the image centre.
+        // This keeps the likely wrestling action in view even if the detector briefly picks a small
+        // spectator near an edge. Strong/large subjects remain centred on themselves.
+        val centreBlend = when {
+            subjectAreaFraction < 0.025 -> 0.45
+            subjectAreaFraction < 0.050 -> 0.32
+            subjectAreaFraction < 0.090 -> 0.18
+            else -> 0.0
+        }
+        val preferredCenterX = subject.centerX * (1.0 - centreBlend) + image.width * 0.5 * centreBlend
+        val preferredCenterY = subject.centerY * (1.0 - centreBlend) + image.height * 0.5 * centreBlend
+        val verticalBias = if (ratio <= 0.82) -0.012 else 0.0
+
+        return placeFrame(
+            image = image,
+            required = required,
+            requestedWidth = targetWidth,
+            requestedHeight = targetHeight,
+            preferredCenterX = preferredCenterX,
+            preferredCenterY = preferredCenterY,
+            verticalBias = verticalBias,
+        ) ?: full(image)
     }
 
     private fun expandDirectional(
@@ -138,9 +160,10 @@ object WrestlingCropPlanner {
     private fun placeFrame(
         image: ImageSize,
         required: RectD,
-        subject: RectD,
         requestedWidth: Double,
         requestedHeight: Double,
+        preferredCenterX: Double,
+        preferredCenterY: Double,
         verticalBias: Double,
     ): PixelRect? {
         val width = requestedWidth.coerceIn(required.width, image.width.toDouble())
@@ -155,8 +178,8 @@ object WrestlingCropPlanner {
         val maxTop = min(required.top, maxImageTop)
         if (minLeft > maxLeft + EPS || minTop > maxTop + EPS) return null
 
-        val preferredLeft = subject.centerX - width / 2.0
-        val preferredTop = subject.centerY - height / 2.0 + height * verticalBias
+        val preferredLeft = preferredCenterX - width / 2.0
+        val preferredTop = preferredCenterY - height / 2.0 + height * verticalBias
         val left = preferredLeft.coerceIn(minLeft, maxLeft)
         val top = preferredTop.coerceIn(minTop, maxTop)
 
