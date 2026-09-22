@@ -18,7 +18,7 @@ jobs:
           fetch-depth: 0
 
       - name: Apply adaptive detection fast path
-        shell: python
+        shell: python {0}
         run: |
           from pathlib import Path
 
@@ -122,7 +122,6 @@ jobs:
           gradle = gradle.replace('versionName = "0.6.14"', 'versionName = "0.6.15"')
           gradle_path.write_text(gradle)
 
-          # Remove this one-shot workflow in the same commit so it cannot run again.
           Path('.github/workflows/one-shot-performance-patch.yml').unlink()
 
       - name: Commit optimized detector
