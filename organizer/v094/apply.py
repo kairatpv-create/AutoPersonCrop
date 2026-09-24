@@ -85,3 +85,7 @@ for x in ['addMoneyType="income"','addMoneyType="expense"','MoneyOverview(list,l
 assert '"app" to "Органайзер Про"' in strings and '"app" to "Organizer Pro"' in strings and '0.9.4 (37)' in strings
 assert 'SQLiteOpenHelper(context, "organizer.db", null, 8)' in db
 assert 'applicationId = "kz.kairat.organizer"' in (root/'app/build.gradle.kts').read_text()
+
+# Repair the few generic replacements above so they only affect the intended
+# main Finance screen and not the independent Project screen/dialog.
+exec((Path(__file__).resolve().parent/'fix_compile.py').read_text())
