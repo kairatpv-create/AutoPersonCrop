@@ -44,6 +44,7 @@ end=s.index('@Composable private fun VoiceNoteBlock')
 new_menu='''@Composable private fun TopColorMenu(selected:String,onSelected:(String)->Unit){
     var expanded by remember{mutableStateOf(false)}
     val colors=listOf("blue","yellow","green","orange","pink","purple","red","bright_yellow","cyan")
+    val selectedColor=noteColor(selected)
     Box{
         IconButton({expanded=true}){
             Canvas(Modifier.size(34.dp)){
@@ -51,7 +52,7 @@ new_menu='''@Composable private fun TopColorMenu(selected:String,onSelected:(Str
                     Color(0xFF202124),Color(0xFF777777),Color(0xFFD9D9D9),Color(0xFFFFFFFF),
                     Color(0xFF0057D9),Color(0xFF00A651),Color(0xFFFFD600),Color(0xFFFF2D20),
                     Color(0xFFE6007E),Color(0xFF7C4DFF),Color(0xFFFF7A00),Color(0xFF00CFE8),
-                    Color(0xFF69D2E7),Color(0xFFB8E986),Color(0xFFFF9EB5),noteColor(selected)
+                    Color(0xFF69D2E7),Color(0xFFB8E986),Color(0xFFFF9EB5),selectedColor
                 )
                 val n=4
                 val gap=1.dp.toPx()
