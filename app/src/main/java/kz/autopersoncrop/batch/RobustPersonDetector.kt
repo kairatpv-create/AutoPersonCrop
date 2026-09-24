@@ -8,19 +8,23 @@ import kz.autopersoncrop.core.WrestlingSubjectSelector
 import kz.autopersoncrop.ml.PersonDetector
 import kz.autopersoncrop.ml.YoloLiteRtPersonDetector
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /**
- * Accuracy-first wrapper for wrestling sequences.
+ * Accuracy-first detector wrapper for one/two-person wrestling and full-body action.
  *
- * A generic person detector can return two boxes and still be wrong: one may be a referee,
- * spectator, or only a torso fragment. The old fast path stopped as soon as two boxes existed.
- * This wrapper verifies the normal result with a softer pass, fuses near-identical observations of
- * the same person, and only uses rotated/tiled recovery when the foreground action is still weak.
- * It never rotates the source photo; rotations exist only inside detector recovery and are mapped
- * back to the original coordinates.
+ * The first YOLO answer is treated as a proposal, not a final truth. We verify it with a softer
+ * whole-frame pass, then re-detect each selected foreground person inside an enlarged local window.
+ * That local pass gives the model more pixels for head/hands/feet and is especially useful for
+ * horizontal or edge poses. Weak results continue through rotated views, overlapping long-axis
+ * strips, and finally a two-dimensional overlapping grid before the processor is allowed to call a
+ * frame a miss. All temporary views are mapped back to the original orientation; the source image
+ * itself is never rotated or modified.
  */
 class RobustPersonDetector(
     private val delegate: YoloLiteRtPersonDetector,
@@ -28,30 +32,114 @@ class RobustPersonDetector(
     val accelerator: String get() = delegate.accelerator
 
     override fun detect(bitmap: Bitmap): List<RectD> {
-        val all = ArrayList<RectD>()
-        all += delegate.detect(bitmap)
+        val initial = ArrayList<RectD>()
+        initial += usefulDetections(delegate.detect(bitmap), bitmap)
+        initial += usefulDetections(delegate.detect(bitmap, VERIFY_CONFIDENCE), bitmap)
 
-        // Always verify the normal result once. This catches a second wrestler or missing limbs even
-        // when the first pass already returned two unrelated/background people.
-        all += delegate.detect(bitmap, VERIFY_CONFIDENCE)
-        var fused = fuseDetections(all)
+        var fused = fuseDetections(initial)
+        if (fused.isNotEmpty()) fused = refineForegroundSubjects(bitmap, fused)
         if (!needsDeepRecovery(fused, bitmap)) return fused
 
-        // Horizontal/occluded wrestlers are often recovered when temporarily presented upright.
-        all += detectRotated(bitmap, 90)
-        all += detectRotated(bitmap, -90)
-        fused = fuseDetections(all)
+        val rotated = ArrayList<RectD>(fused)
+        rotated += detectRotated(bitmap, 90)
+        rotated += detectRotated(bitmap, -90)
+        fused = fuseDetections(rotated)
+        if (fused.isNotEmpty()) fused = refineForegroundSubjects(bitmap, fused)
         if (!needsDeepRecovery(fused, bitmap)) return fused
 
-        // Final recovery: overlapping long-axis tiles make edge and small foreground people larger
-        // to the fixed-size model. Keep all useful boxes; subject selection happens afterwards.
-        all += detectOverlappingTiles(bitmap)
-        return fuseDetections(all)
+        val stripped = ArrayList<RectD>(fused)
+        stripped += detectOverlappingStrips(bitmap)
+        fused = fuseDetections(stripped)
+        if (fused.isNotEmpty()) fused = refineForegroundSubjects(bitmap, fused)
+        if (!needsDeepRecovery(fused, bitmap)) return fused
+
+        // Last-chance recovery for frames that used to be copied completely. Six overlapping 2D
+        // windows make a small/blurred person much larger to the fixed-size model.
+        val gridded = ArrayList<RectD>(fused)
+        gridded += detectOverlappingGrid(bitmap)
+        fused = fuseDetections(gridded)
+        return if (fused.isNotEmpty()) refineForegroundSubjects(bitmap, fused) else fused
     }
 
     /** Explicit low-confidence calls from PhotoProcessor stay lightweight and never recurse. */
     override fun detect(bitmap: Bitmap, minConfidence: Float): List<RectD> =
-        fuseDetections(delegate.detect(bitmap, minConfidence))
+        fuseDetections(usefulDetections(delegate.detect(bitmap, minConfidence), bitmap))
+
+    /**
+     * Re-open the selected main person(s) in a tighter local window and union only a matching local
+     * observation with the original box. This expands missing extremities without turning a nearby
+     * referee or the second wrestler into the same person.
+     */
+    private fun refineForegroundSubjects(src: Bitmap, boxes: List<RectD>): List<RectD> {
+        if (boxes.isEmpty()) return boxes
+        val image = ImageSize(src.width, src.height)
+        val selected = runCatching { WrestlingSubjectSelector.select(image, boxes) }.getOrNull()
+            ?.take(2)
+            .orEmpty()
+        if (selected.isEmpty()) return boxes
+
+        val refined = selected.map { refineSubject(src, it) }
+        val background = boxes.filterNot { box -> selected.any { sameBox(it, box) } }
+        return fuseDetections(background + refined)
+    }
+
+    private fun refineSubject(src: Bitmap, anchor: RectD): RectD {
+        val padX = max(anchor.width * FOCUS_PADDING_X, src.width * 0.025)
+        val padY = max(anchor.height * FOCUS_PADDING_Y, src.height * 0.025)
+        val region = RectD(
+            anchor.left - padX,
+            anchor.top - padY,
+            anchor.right + padX,
+            anchor.bottom + padY,
+        ).let { clamp(it, src.width, src.height) } ?: return anchor
+
+        val imageArea = src.width.toDouble() * src.height.toDouble()
+        if (region.area / imageArea.coerceAtLeast(1.0) >= 0.94) return anchor
+
+        val left = floor(region.left).toInt().coerceIn(0, src.width - 1)
+        val top = floor(region.top).toInt().coerceIn(0, src.height - 1)
+        val right = ceil(region.right).toInt().coerceIn(left + 1, src.width)
+        val bottom = ceil(region.bottom).toInt().coerceIn(top + 1, src.height)
+        val tile = Bitmap.createBitmap(src, left, top, right - left, bottom - top)
+
+        return try {
+            val candidates = delegate.detect(tile, FOCUS_CONFIDENCE)
+                .mapNotNull { b ->
+                    clamp(
+                        RectD(b.left + left, b.top + top, b.right + left, b.bottom + top),
+                        src.width,
+                        src.height,
+                    )
+                }
+                .filter { isUseful(it, src) && matchesSameForeground(anchor, it) }
+
+            val best = candidates.maxByOrNull { focusMatchScore(anchor, it) } ?: return anchor
+            union(anchor, best).let { clamp(it, src.width, src.height) } ?: anchor
+        } finally {
+            if (tile !== src && !tile.isRecycled) tile.recycle()
+        }
+    }
+
+    private fun matchesSameForeground(anchor: RectD, candidate: RectD): Boolean {
+        val overlap = overlapFractionOfSmaller(anchor, candidate)
+        val areaRatio = min(anchor.area, candidate.area) / max(anchor.area, candidate.area).coerceAtLeast(1.0)
+        val dx = abs(anchor.centerX - candidate.centerX) / max(anchor.width, candidate.width).coerceAtLeast(1.0)
+        val dy = abs(anchor.centerY - candidate.centerY) / max(anchor.height, candidate.height).coerceAtLeast(1.0)
+
+        return when {
+            iou(anchor, candidate) >= 0.72 && dx <= 0.16 && dy <= 0.16 -> true
+            overlap >= 0.90 && areaRatio >= 0.48 && dx <= 0.13 && dy <= 0.13 -> true
+            else -> false
+        }
+    }
+
+    private fun focusMatchScore(anchor: RectD, candidate: RectD): Double {
+        val overlap = overlapFractionOfSmaller(anchor, candidate)
+        val areaGain = (candidate.area / anchor.area.coerceAtLeast(1.0)).coerceIn(0.5, 1.8)
+        val dx = abs(anchor.centerX - candidate.centerX) / max(anchor.width, candidate.width).coerceAtLeast(1.0)
+        val dy = abs(anchor.centerY - candidate.centerY) / max(anchor.height, candidate.height).coerceAtLeast(1.0)
+        return overlap * 1.6 + areaGain * 0.25 - (dx + dy) * 0.55
+    }
 
     private fun needsDeepRecovery(boxes: List<RectD>, bitmap: Bitmap): Boolean {
         if (boxes.isEmpty()) return true
@@ -65,11 +153,13 @@ class RobustPersonDetector(
         val unionFraction = u.area / imageArea.coerceAtLeast(1.0)
         val largestFraction = selected.maxOf { it.area } / imageArea.coerceAtLeast(1.0)
         val touchesEdge = selected.any { touchesSourceEdge(it, bitmap) }
+        val shape = max(u.width / u.height.coerceAtLeast(1.0), u.height / u.width.coerceAtLeast(1.0))
 
         return when {
-            selected.size >= 2 -> unionFraction < 0.10 || largestFraction < 0.035
-            touchesEdge -> unionFraction < 0.16
-            else -> unionFraction < 0.085
+            selected.size >= 2 -> unionFraction < 0.105 || largestFraction < 0.032
+            touchesEdge -> true
+            shape > 3.8 -> true
+            else -> unionFraction < 0.20
         }
     }
 
@@ -77,8 +167,8 @@ class RobustPersonDetector(
         val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
         val rotated = Bitmap.createBitmap(src, 0, 0, src.width, src.height, matrix, true)
         return try {
-            delegate.detect(rotated, ROTATED_CONFIDENCE).mapNotNull { b ->
-                val mapped = when (degrees) {
+            val mapped = delegate.detect(rotated, ROTATED_CONFIDENCE).mapNotNull { b ->
+                val r = when (degrees) {
                     90 -> RectD(
                         b.top,
                         src.height - b.right,
@@ -93,19 +183,20 @@ class RobustPersonDetector(
                     )
                     else -> return@mapNotNull null
                 }
-                clamp(mapped, src.width, src.height)
+                clamp(r, src.width, src.height)
             }
+            usefulDetections(mapped, src)
         } finally {
             if (rotated !== src && !rotated.isRecycled) rotated.recycle()
         }
     }
 
-    private fun detectOverlappingTiles(src: Bitmap): List<RectD> {
+    private fun detectOverlappingStrips(src: Bitmap): List<RectD> {
         val horizontal = src.width >= src.height
         val longSide = if (horizontal) src.width else src.height
         if (longSide < 420) return emptyList()
 
-        val tileLong = (longSide * TILE_FRACTION).roundToInt().coerceIn(1, longSide)
+        val tileLong = (longSide * STRIP_FRACTION).roundToInt().coerceIn(1, longSide)
         val end = longSide - tileLong
         val offsets = intArrayOf(0, end / 2, end).distinct()
         val found = ArrayList<RectD>()
@@ -117,13 +208,13 @@ class RobustPersonDetector(
                 Bitmap.createBitmap(src, 0, offset, src.width, tileLong)
             }
             try {
-                for (b in delegate.detect(tile, TILE_CONFIDENCE)) {
+                for (b in delegate.detect(tile, STRIP_CONFIDENCE)) {
                     val mapped = if (horizontal) {
                         RectD(b.left + offset, b.top, b.right + offset, b.bottom)
                     } else {
                         RectD(b.left, b.top + offset, b.right, b.bottom + offset)
                     }
-                    clamp(mapped, src.width, src.height)?.let { found += it }
+                    clamp(mapped, src.width, src.height)?.let { if (isUseful(it, src)) found += it }
                 }
             } finally {
                 if (tile !== src && !tile.isRecycled) tile.recycle()
@@ -132,11 +223,49 @@ class RobustPersonDetector(
         return found
     }
 
-    /**
-     * Fuse only boxes that are extremely likely to be repeated observations of the SAME person.
-     * Instead of throwing the smaller box away, take their union so head/feet seen in one pass are
-     * preserved. The threshold stays strict so two genuinely overlapping wrestlers remain separate.
-     */
+    private fun detectOverlappingGrid(src: Bitmap): List<RectD> {
+        if (src.width < 360 || src.height < 300) return emptyList()
+
+        val landscape = src.width >= src.height
+        val tileW = (src.width * if (landscape) 0.68 else 0.86).roundToInt().coerceIn(1, src.width)
+        val tileH = (src.height * if (landscape) 0.86 else 0.68).roundToInt().coerceIn(1, src.height)
+        val xEnd = src.width - tileW
+        val yEnd = src.height - tileH
+        val xOffsets = if (landscape) intArrayOf(0, xEnd / 2, xEnd).distinct() else intArrayOf(0, xEnd).distinct()
+        val yOffsets = if (landscape) intArrayOf(0, yEnd).distinct() else intArrayOf(0, yEnd / 2, yEnd).distinct()
+        val found = ArrayList<RectD>()
+
+        for (top in yOffsets) {
+            for (left in xOffsets) {
+                val tile = Bitmap.createBitmap(src, left, top, tileW, tileH)
+                try {
+                    for (b in delegate.detect(tile, GRID_CONFIDENCE)) {
+                        val mapped = RectD(
+                            b.left + left,
+                            b.top + top,
+                            b.right + left,
+                            b.bottom + top,
+                        )
+                        clamp(mapped, src.width, src.height)?.let { if (isUseful(it, src)) found += it }
+                    }
+                } finally {
+                    if (tile !== src && !tile.isRecycled) tile.recycle()
+                }
+            }
+        }
+        return found
+    }
+
+    private fun usefulDetections(input: List<RectD>, src: Bitmap): List<RectD> =
+        input.filter { isUseful(it, src) }
+
+    private fun isUseful(box: RectD, src: Bitmap): Boolean {
+        if (box.width < 5.0 || box.height < 5.0) return false
+        val imageArea = src.width.toDouble() * src.height.toDouble()
+        return box.area / imageArea.coerceAtLeast(1.0) >= MIN_BOX_AREA_FRACTION
+    }
+
+    /** Preserve overlapping wrestlers; merge only extremely similar observations of one person. */
     private fun fuseDetections(input: List<RectD>): List<RectD> {
         if (input.isEmpty()) return emptyList()
         val fused = ArrayList<RectD>()
@@ -145,30 +274,42 @@ class RobustPersonDetector(
             val index = fused.indices
                 .filter { sameObservation(fused[it], candidate) }
                 .maxByOrNull { iou(fused[it], candidate) }
-            if (index == null) {
-                fused += candidate
-            } else {
-                fused[index] = union(fused[index], candidate)
-            }
+            if (index == null) fused += candidate
+            else fused[index] = union(fused[index], candidate)
         }
         return fused.sortedByDescending { it.area }.take(MAX_BOXES)
     }
 
     private fun sameObservation(a: RectD, b: RectD): Boolean {
         val overlap = iou(a, b)
-        if (overlap >= 0.92) return true
-        if (overlap < 0.82) return false
+        if (overlap >= 0.93) return true
+        if (overlap < 0.84) return false
         val areaRatio = min(a.area, b.area) / max(a.area, b.area).coerceAtLeast(1.0)
-        if (areaRatio < 0.76) return false
+        if (areaRatio < 0.78) return false
         val dx = abs(a.centerX - b.centerX) / max(a.width, b.width).coerceAtLeast(1.0)
         val dy = abs(a.centerY - b.centerY) / max(a.height, b.height).coerceAtLeast(1.0)
-        return dx <= 0.09 && dy <= 0.09
+        return dx <= 0.075 && dy <= 0.075
+    }
+
+    private fun sameBox(a: RectD, b: RectD): Boolean {
+        val ratio = min(a.area, b.area) / max(a.area, b.area).coerceAtLeast(1.0)
+        return iou(a, b) >= 0.985 && ratio >= 0.97
     }
 
     private fun touchesSourceEdge(r: RectD, src: Bitmap): Boolean {
-        val ex = max(3.0, src.width * 0.012)
-        val ey = max(3.0, src.height * 0.012)
+        val ex = max(2.0, src.width * 0.006)
+        val ey = max(2.0, src.height * 0.006)
         return r.left <= ex || r.right >= src.width - ex || r.top <= ey || r.bottom >= src.height - ey
+    }
+
+    private fun overlapFractionOfSmaller(a: RectD, b: RectD): Double {
+        val left = max(a.left, b.left)
+        val top = max(a.top, b.top)
+        val right = min(a.right, b.right)
+        val bottom = min(a.bottom, b.bottom)
+        if (right <= left || bottom <= top) return 0.0
+        val intersection = (right - left) * (bottom - top)
+        return intersection / min(a.area, b.area).coerceAtLeast(1.0)
     }
 
     private fun clamp(r: RectD, width: Int, height: Int): RectD? {
@@ -204,18 +345,23 @@ class RobustPersonDetector(
     override fun close() = delegate.close()
 
     companion object {
-        private const val VERIFY_CONFIDENCE = 0.125f
-        private const val ROTATED_CONFIDENCE = 0.095f
-        private const val TILE_CONFIDENCE = 0.085f
-        private const val TILE_FRACTION = 0.72
-        private const val MAX_BOXES = 12
+        private const val VERIFY_CONFIDENCE = 0.115f
+        private const val FOCUS_CONFIDENCE = 0.095f
+        private const val ROTATED_CONFIDENCE = 0.090f
+        private const val STRIP_CONFIDENCE = 0.080f
+        private const val GRID_CONFIDENCE = 0.070f
+
+        private const val FOCUS_PADDING_X = 0.38
+        private const val FOCUS_PADDING_Y = 0.30
+        private const val STRIP_FRACTION = 0.72
+        private const val MIN_BOX_AREA_FRACTION = 0.0015
+        private const val MAX_BOXES = 16
     }
 }
 
 /**
- * Same-package, more-specific overload intentionally wraps the service's existing detector without
- * changing BatchProcessingService. It preserves the existing lifecycle and permits the service's
- * existing non-local returns, matching Kotlin's standard inline use contract.
+ * Same-package, more-specific overload keeps BatchProcessingService unchanged and preserves the
+ * standard inline-use lifecycle/non-local-return behaviour.
  */
 inline fun <R> YoloLiteRtPersonDetector.use(block: (RobustPersonDetector) -> R): R {
     val robust = RobustPersonDetector(this)

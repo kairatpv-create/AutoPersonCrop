@@ -5,12 +5,10 @@ import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
- * Selects the main wrestling action from all detected people.
- *
- * Foreground scale and physical interaction matter much more than image-centre position. A real
- * wrestler at the edge must not lose to a smaller central referee/spectator. Multiple detector
- * passes may contribute boxes, so duplicate rejection is deliberately conservative: two overlapping
- * wrestlers are preserved, while near-identical observations of one person are removed.
+ * Selects the main one/two-person action from all detector candidates.
+ * Foreground scale and physical interaction dominate; image-centre position is only a tiny tie-break.
+ * A clipped but substantial wrestler at a source edge is retained. Only an obviously tiny/thin edge
+ * fragment is allowed to disappear from an otherwise convincing main pair.
  */
 object WrestlingSubjectSelector {
     fun select(image: ImageSize, people: List<RectD>): List<RectD> {
@@ -41,8 +39,8 @@ object WrestlingSubjectSelector {
             return when {
                 relative < 0.06 -> 0.50
                 relative < 0.15 -> 0.32
-                relative < 0.30 -> 0.14
-                relative < 0.45 -> 0.03
+                relative < 0.30 -> 0.13
+                relative < 0.45 -> 0.02
                 else -> 0.0
             }
         }
@@ -80,10 +78,10 @@ object WrestlingSubjectSelector {
                 val sizeBalance = sqrt((min(a.area, b.area) / larger).coerceIn(0.0, 1.0))
 
                 val physicallyLinked = when {
-                    overlap >= 0.022 -> true
-                    gap <= 0.045 && sizeBalance >= 0.16 -> true
-                    gap <= 0.090 && sizeBalance >= 0.24 && centerDistance <= 2.55 -> true
-                    gap <= 0.130 && sizeBalance >= 0.40 && centerDistance <= 2.05 -> true
+                    overlap >= 0.020 -> true
+                    gap <= 0.050 && sizeBalance >= 0.15 -> true
+                    gap <= 0.095 && sizeBalance >= 0.22 && centerDistance <= 2.60 -> true
+                    gap <= 0.135 && sizeBalance >= 0.38 && centerDistance <= 2.10 -> true
                     else -> false
                 }
                 if (!physicallyLinked) continue
@@ -95,24 +93,22 @@ object WrestlingSubjectSelector {
                 val pairUnion = union(a, b)
                 val unionAreaFraction = (pairUnion.area / imageArea.coerceAtLeast(1.0)).coerceIn(0.0, 1.0)
 
-                // Reject small background pairs unless overlap is strong enough to look like one
-                // wrestling action. A small second box is allowed when it is heavily occluded.
-                if (dominance < 0.32 && unionAreaFraction < 0.070) continue
-                if (support < 0.085 && overlap < 0.14) continue
+                if (dominance < 0.31 && unionAreaFraction < 0.068) continue
+                if (support < 0.075 && overlap < 0.13) continue
 
                 val pairScale = sqrt(((a.area + b.area) / (2.0 * maxArea)).coerceIn(0.0, 1.0))
                 val interaction = relation(a, b)
                 val pairCentrality = centrality(pairUnion)
                 val fullVisibility = (if (isFullyVisible(image, a)) 0.5 else 0.0) +
                     (if (isFullyVisible(image, b)) 0.5 else 0.0)
-                val pairEdgePenalty = (edgePenalty(a) + edgePenalty(b)) * 0.20
+                val pairEdgePenalty = (edgePenalty(a) + edgePenalty(b)) * 0.18
 
-                val score = interaction * 0.33 +
+                val score = interaction * 0.34 +
                     pairScale * 0.24 +
                     dominance * 0.25 +
-                    sizeBalance * 0.08 +
-                    pairCentrality * 0.03 +
-                    fullVisibility * 0.07 -
+                    sizeBalance * 0.09 +
+                    pairCentrality * 0.02 +
+                    fullVisibility * 0.06 -
                     pairEdgePenalty
 
                 val choice = PairChoice(a, b, score, interaction, dominance, support, unionAreaFraction)
@@ -124,8 +120,8 @@ object WrestlingSubjectSelector {
         val confidentPair = bestPair?.takeIf {
             it.score >= PAIR_SCORE_THRESHOLD &&
                 it.interaction >= PAIR_INTERACTION_THRESHOLD &&
-                it.dominance >= 0.32 &&
-                (it.support >= 0.085 || overlapFractionOfSmaller(it.a, it.b) >= 0.14)
+                it.dominance >= 0.31 &&
+                (it.support >= 0.075 || overlapFractionOfSmaller(it.a, it.b) >= 0.13)
         }
         if (confidentPair != null) {
             val a = confidentPair.a
@@ -133,20 +129,19 @@ object WrestlingSubjectSelector {
             val aFull = isFullyVisible(image, a)
             val bFull = isFullyVisible(image, b)
 
-            // Previous versions discarded any clipped partner too aggressively. Keep a clipped person
-            // when it is comparable in size to the complete wrestler: that is usually a real main
-            // wrestler at the source edge. Ignore it only when it is clearly a minor edge fragment.
+            // Keep a substantial clipped partner. Drop only a small, thin and weakly-overlapping edge
+            // fragment; this prevents a real second wrestler at the frame edge from vanishing.
             if (aFull xor bFull) {
                 val full = if (aFull) a else b
                 val clipped = if (aFull) b else a
                 val overlap = overlapFractionOfSmaller(full, clipped)
                 val linked = overlap >= 0.02 || normalizedGap(full, clipped, image) <= 0.105
-                val clippedMinor = clipped.area <= full.area * 0.62
+                val clippedMinor = clipped.area <= full.area * 0.38
                 val clippedThin = min(
                     clipped.width / full.width.coerceAtLeast(1.0),
                     clipped.height / full.height.coerceAtLeast(1.0),
-                ) <= 0.40
-                if (linked && clippedMinor && (clippedThin || overlap < 0.16)) return listOf(full)
+                ) <= 0.30
+                if (linked && clippedMinor && clippedThin && overlap < 0.10) return listOf(full)
             }
             return listOf(a, b)
         }
@@ -159,11 +154,11 @@ object WrestlingSubjectSelector {
                 .maxOrNull() ?: 0.0
             val imageFraction = (r.area / imageArea.coerceAtLeast(1.0)).coerceIn(0.0, 1.0)
             val foregroundBonus = sqrt(imageFraction).coerceIn(0.0, 0.40) * 0.12
-            val fullBonus = if (isFullyVisible(image, r)) 0.035 else 0.0
+            val fullBonus = if (isFullyVisible(image, r)) 0.025 else 0.0
 
-            return relativeArea * 0.79 +
-                centrality(r) * 0.04 +
-                bestInteraction * 0.10 +
+            return relativeArea * 0.81 +
+                centrality(r) * 0.02 +
+                bestInteraction * 0.11 +
                 foregroundBonus +
                 fullBonus -
                 edgePenalty(r)
@@ -244,8 +239,8 @@ object WrestlingSubjectSelector {
     }
 
     private fun isEdgeFragment(r: RectD, image: ImageSize): Boolean {
-        val edgeX = max(3.0, image.width * 0.012)
-        val edgeY = max(3.0, image.height * 0.012)
+        val edgeX = max(3.0, image.width * 0.010)
+        val edgeY = max(3.0, image.height * 0.010)
         return r.left <= edgeX ||
             r.right >= image.width - edgeX ||
             r.top <= edgeY ||
@@ -267,7 +262,7 @@ object WrestlingSubjectSelector {
         return RectD(l, t, r, b)
     }
 
-    private const val PAIR_SCORE_THRESHOLD = 0.47
-    private const val PAIR_INTERACTION_THRESHOLD = 0.275
-    private const val FULL_VISIBILITY_EDGE_FRACTION = 0.008
+    private const val PAIR_SCORE_THRESHOLD = 0.445
+    private const val PAIR_INTERACTION_THRESHOLD = 0.255
+    private const val FULL_VISIBILITY_EDGE_FRACTION = 0.006
 }
