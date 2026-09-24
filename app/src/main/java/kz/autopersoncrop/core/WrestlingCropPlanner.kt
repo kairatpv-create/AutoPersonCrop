@@ -2,28 +2,23 @@ package kz.autopersoncrop.core
 
 import kotlin.math.ceil
 import kotlin.math.floor
-import kotlin.math.max
 
 /**
- * Tight free-aspect crop planner for wrestling photos.
+ * Edge-aware free-aspect crop planner for wrestling photos.
  *
- * Agreed phone-test behaviour:
- * - one standing person: about 5% above and below, sides kept compact;
- * - two standing people: the same rule around the combined group;
- * - wide/ground wrestling (two lying people or one sitting on another): landscape composition,
- *   anchored from the side where the source already has less empty space, with the opposite side
- *   fitted around the complete action;
- * - no artificial minimum crop area. A valid main subject must not be surrounded by large amounts
- *   of background just to satisfy a percentage of the original image.
+ * Phone-test behaviour:
+ * - keep roughly 5% breathing room around the selected main person / pair;
+ * - never crop inside the selected subject geometry, protecting head and feet;
+ * - use the same rule for standing, kneeling and ground/lying action;
+ * - if the action is already at a source edge, keep that edge instead of re-centering the people;
+ * - do not force a minimum crop area, which would leave excessive empty background.
  *
- * The planner never rotates, stretches or pads the image.
+ * The planner never rotates, stretches, centres or pads the image.
  */
 object WrestlingCropPlanner {
-    private const val VERTICAL_MARGIN = 0.050
-    private const val PORTRAIT_SIDE_MARGIN = 0.030
-    private const val LANDSCAPE_NEAR_SIDE_MARGIN = 0.030
-    private const val LANDSCAPE_FAR_SIDE_MARGIN = 0.050
-    private const val MIN_IMAGE_MARGIN = 0.008
+    // 5.56% of the detected subject produces about a 5% border in the resulting frame when both
+    // opposite margins are available: margin / (subject + 2 * margin) ~= 0.05.
+    private const val SUBJECT_MARGIN_FOR_FIVE_PERCENT_FRAME = 0.0556
     private const val SOURCE_EDGE_FRACTION = 0.012
 
     fun plan(image: ImageSize, subjects: List<RectD>): PixelRect {
@@ -37,49 +32,20 @@ object WrestlingCropPlanner {
         val subject = union(clean).clampTo(image)
         if (subject.width < 2.0 || subject.height < 2.0) return full(image)
 
-        val portraitScene = isStandingPortraitScene(clean)
-        val required = if (portraitScene) {
-            // Standing portrait: fixed ~5% head/foot breathing room. Side margins are deliberately
-            // smaller because the user wants the crop to follow the body instead of the room.
-            expandDirectional(
-                subject = subject,
-                image = image,
-                leftFraction = PORTRAIT_SIDE_MARGIN,
-                rightFraction = PORTRAIT_SIDE_MARGIN,
-                topFraction = VERTICAL_MARGIN,
-                bottomFraction = VERTICAL_MARGIN,
-            )
-        } else {
-            // Ground/wide action: start from the side which already has less empty source space.
-            // That side gets the tighter margin; the opposite side gets the normal 5% allowance.
-            val leftGap = subject.left
-            val rightGap = image.width.toDouble() - subject.right
-            val anchorLeft = leftGap <= rightGap
-            expandDirectional(
-                subject = subject,
-                image = image,
-                leftFraction = if (anchorLeft) LANDSCAPE_NEAR_SIDE_MARGIN else LANDSCAPE_FAR_SIDE_MARGIN,
-                rightFraction = if (anchorLeft) LANDSCAPE_FAR_SIDE_MARGIN else LANDSCAPE_NEAR_SIDE_MARGIN,
-                topFraction = VERTICAL_MARGIN,
-                bottomFraction = VERTICAL_MARGIN,
-            )
-        }
+        // Do not classify standing/lying people differently here. The subject selector has already
+        // chosen the main action. The crop simply follows that geometry with the same ~5% breathing
+        // room on every free side. A side that is already at the source edge remains at that edge;
+        // we never shift the frame just to centre the person or pair.
+        val required = expandDirectional(
+            subject = subject,
+            image = image,
+            leftFraction = SUBJECT_MARGIN_FOR_FIVE_PERCENT_FRAME,
+            rightFraction = SUBJECT_MARGIN_FOR_FIVE_PERCENT_FRAME,
+            topFraction = SUBJECT_MARGIN_FOR_FIVE_PERCENT_FRAME,
+            bottomFraction = SUBJECT_MARGIN_FOR_FIVE_PERCENT_FRAME,
+        )
 
         return required.toPixelRect(image)
-    }
-
-    /**
-     * A single clearly vertical body is a standing portrait subject. Two clearly vertical bodies are
-     * treated as a standing pair even when their combined union becomes fairly wide. Any other pair
-     * (lying, kneeling, overlapping, one sitting on another) follows the wide/action rule.
-     */
-    private fun isStandingPortraitScene(subjects: List<RectD>): Boolean {
-        fun isVerticalBody(r: RectD): Boolean = r.height >= r.width * 1.15
-        return when (subjects.size) {
-            1 -> isVerticalBody(subjects.first())
-            2 -> subjects.all(::isVerticalBody)
-            else -> false
-        }
     }
 
     private fun expandDirectional(
@@ -90,12 +56,13 @@ object WrestlingCropPlanner {
         topFraction: Double,
         bottomFraction: Double,
     ): RectD {
-        val minX = image.width * MIN_IMAGE_MARGIN
-        val minY = image.height * MIN_IMAGE_MARGIN
-        val leftMargin = max(subject.width * leftFraction, minX)
-        val rightMargin = max(subject.width * rightFraction, minX)
-        val topMargin = max(subject.height * topFraction, minY)
-        val bottomMargin = max(subject.height * bottomFraction, minY)
+        // Margins are derived only from the selected subject size. Do not impose an image-size based
+        // minimum: for small/edge subjects that minimum was the reason some 0.7.2 crops retained far
+        // more than the requested 5% empty background.
+        val leftMargin = subject.width * leftFraction
+        val rightMargin = subject.width * rightFraction
+        val topMargin = subject.height * topFraction
+        val bottomMargin = subject.height * bottomFraction
 
         val edgeX = image.width * SOURCE_EDGE_FRACTION
         val edgeY = image.height * SOURCE_EDGE_FRACTION
