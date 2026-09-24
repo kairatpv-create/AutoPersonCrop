@@ -11,7 +11,6 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
-import kotlin.math.sqrt
 
 /**
  * Accuracy-first wrapper for wrestling sequences.
@@ -215,9 +214,10 @@ class RobustPersonDetector(
 
 /**
  * Same-package, more-specific overload intentionally wraps the service's existing detector without
- * changing BatchProcessingService. It preserves the existing lifecycle and stable GPU/CPU reporting.
+ * changing BatchProcessingService. It preserves the existing lifecycle and permits the service's
+ * existing non-local returns, matching Kotlin's standard inline use contract.
  */
-fun <R> YoloLiteRtPersonDetector.use(block: (RobustPersonDetector) -> R): R {
+inline fun <R> YoloLiteRtPersonDetector.use(block: (RobustPersonDetector) -> R): R {
     val robust = RobustPersonDetector(this)
     return try {
         block(robust)
