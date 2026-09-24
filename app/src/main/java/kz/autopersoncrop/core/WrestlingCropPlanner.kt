@@ -4,29 +4,22 @@ import kotlin.math.ceil
 import kotlin.math.floor
 
 /**
- * Crop planner tuned from the user's manually cropped VideoFrames reference set.
+ * Edge-aware crop planner tuned to the user's manual VideoFrames reference set.
  *
- * Reference behaviour:
- * - keep about 5% breathing room around the selected main person / wrestling pair;
- * - never crop inside selected subject geometry, so detected head/feet stay protected;
- * - standing, kneeling and ground action use the same edge-aware base rule;
- * - a person/action near a source edge stays near that edge: never re-centre just for symmetry;
- * - avoid unnaturally narrow or ultra-wide crops. The reference set stays roughly within
- *   width/height 0.58..1.78, so aspect correction EXPANDS the free dimension only;
- * - aspect expansion is distributed toward available source space, preserving an off-centre subject.
- *
- * The planner never rotates, stretches, centres or pads the image.
+ * The detector is intentionally allowed a small amount of uncertainty around a person's extremities.
+ * We therefore protect head/feet slightly more than the sides, while still keeping empty background
+ * close to the user's requested ~5% and never re-centering edge subjects.
  */
 object WrestlingCropPlanner {
-    // 5.56% of subject size gives about a 5% border in the resulting frame when both sides are free.
-    private const val SUBJECT_MARGIN_FOR_FIVE_PERCENT_FRAME = 0.0556
+    private const val SIDE_SUBJECT_MARGIN = 0.0556
+    private const val VERTICAL_SUBJECT_MARGIN = 0.072
+    private const val MIN_SIDE_IMAGE_MARGIN = 0.006
+    private const val MIN_VERTICAL_IMAGE_MARGIN = 0.008
 
-    // Bounds measured from the confidently matched manual crops in VideoFrames.rar.
     private const val MIN_REFERENCE_ASPECT = 0.58
     private const val MAX_REFERENCE_ASPECT = 1.78
-
     private const val SOURCE_EDGE_FRACTION = 0.012
-    private const val EDGE_SNAP_MARGIN_MULTIPLIER = 1.50
+    private const val EDGE_SNAP_MARGIN_MULTIPLIER = 1.45
 
     fun plan(image: ImageSize, subjects: List<RectD>): PixelRect {
         require(subjects.isNotEmpty()) { "At least one wrestling subject is required" }
@@ -39,52 +32,56 @@ object WrestlingCropPlanner {
         val subject = union(clean).clampTo(image)
         if (subject.width < 2.0 || subject.height < 2.0) return full(image)
 
-        val base = expandWithReferenceMargin(subject, image)
-        val fitted = fitReferenceAspectWithoutRecentering(base, image)
-        return fitted.toPixelRect(image)
+        val base = expandSafely(subject, image)
+        return fitReferenceAspectWithoutRecentering(base, image).toPixelRect(image)
     }
 
-    private fun expandWithReferenceMargin(subject: RectD, image: ImageSize): RectD {
-        val leftMargin = subject.width * SUBJECT_MARGIN_FOR_FIVE_PERCENT_FRAME
-        val rightMargin = subject.width * SUBJECT_MARGIN_FOR_FIVE_PERCENT_FRAME
-        val topMargin = subject.height * SUBJECT_MARGIN_FOR_FIVE_PERCENT_FRAME
-        val bottomMargin = subject.height * SUBJECT_MARGIN_FOR_FIVE_PERCENT_FRAME
+    private fun expandSafely(subject: RectD, image: ImageSize): RectD {
+        val sideMargin = maxOf(
+            subject.width * SIDE_SUBJECT_MARGIN,
+            image.width * MIN_SIDE_IMAGE_MARGIN,
+        )
+        val verticalMargin = maxOf(
+            subject.height * VERTICAL_SUBJECT_MARGIN,
+            image.height * MIN_VERTICAL_IMAGE_MARGIN,
+        )
 
         val edgeX = image.width * SOURCE_EDGE_FRACTION
         val edgeY = image.height * SOURCE_EDGE_FRACTION
 
-        // The manual crops often keep the natural image/floor edge when the action is already close
-        // to it. Snap only when the remaining gap is comparable to the wanted breathing room.
-        val left = if (subject.left <= maxOf(edgeX, leftMargin * EDGE_SNAP_MARGIN_MULTIPLIER)) {
+        val left = if (subject.left <= maxOf(edgeX, sideMargin * EDGE_SNAP_MARGIN_MULTIPLIER)) {
             0.0
         } else {
-            subject.left - leftMargin
+            subject.left - sideMargin
         }
+
         val rightGap = image.width.toDouble() - subject.right
-        val right = if (rightGap <= maxOf(edgeX, rightMargin * EDGE_SNAP_MARGIN_MULTIPLIER)) {
+        val right = if (rightGap <= maxOf(edgeX, sideMargin * EDGE_SNAP_MARGIN_MULTIPLIER)) {
             image.width.toDouble()
         } else {
-            subject.right + rightMargin
+            subject.right + sideMargin
         }
-        val top = if (subject.top <= maxOf(edgeY, topMargin * EDGE_SNAP_MARGIN_MULTIPLIER)) {
+
+        val top = if (subject.top <= maxOf(edgeY, verticalMargin * EDGE_SNAP_MARGIN_MULTIPLIER)) {
             0.0
         } else {
-            subject.top - topMargin
+            subject.top - verticalMargin
         }
+
         val bottomGap = image.height.toDouble() - subject.bottom
-        val bottom = if (bottomGap <= maxOf(edgeY, bottomMargin * EDGE_SNAP_MARGIN_MULTIPLIER)) {
+        val bottom = if (bottomGap <= maxOf(edgeY, verticalMargin * EDGE_SNAP_MARGIN_MULTIPLIER)) {
             image.height.toDouble()
         } else {
-            subject.bottom + bottomMargin
+            subject.bottom + verticalMargin
         }
 
         return RectD(left, top, right, bottom).clampTo(image)
     }
 
     /**
-     * Manual reference crops never become extremely thin. Correct the aspect only by EXPANDING the
-     * crop, never by trimming a dimension that already contains the subjects. Extra room goes toward
-     * whichever side of the source actually has room, so edge subjects remain off-centre.
+     * Keep the crop inside the aspect range observed in the user's manual examples. Correction only
+     * EXPANDS a free dimension; it never trims through already selected people. Extra room is biased
+     * toward whichever source side actually has room, preserving natural edge composition.
      */
     private fun fitReferenceAspectWithoutRecentering(rect: RectD, image: ImageSize): RectD {
         val ratio = rect.width / rect.height.coerceAtLeast(1.0)
@@ -123,7 +120,6 @@ object WrestlingCropPlanner {
         return RectD(rect.left, rect.top - topAdd, rect.right, rect.bottom + bottomAdd)
     }
 
-    /** Allocate added size in proportion to the free source space, not around the crop centre. */
     private fun distributeExpansion(delta: Double, beforeSpace: Double, afterSpace: Double): Pair<Double, Double> {
         val totalSpace = beforeSpace + afterSpace
         if (delta <= 0.0 || totalSpace <= 0.0) return 0.0 to 0.0
