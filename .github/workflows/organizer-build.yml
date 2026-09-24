@@ -54,6 +54,7 @@ jobs:
           python3 organizer/apply_v091.py organizer/buildsrc092/MyOrganizer-v0.9.0-source
           mv organizer/buildsrc092/MyOrganizer-v0.9.0-source organizer/buildsrc092/MyOrganizer-v0.9.1-source
           python3 organizer/v092/apply.py organizer/buildsrc092/MyOrganizer-v0.9.1-source
+          sed -i 's/MoneyEntryCard(m,lang,if(m.type=="income")MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error){/MoneyEntryCard(m,lang,if(m.type=="income")MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,if(m.type=="income")0 else 1){/' organizer/buildsrc092/MyOrganizer-v0.9.1-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
           mv organizer/buildsrc092/MyOrganizer-v0.9.1-source organizer/buildsrc092/MyOrganizer-v0.9.2-source
           grep -q 'versionCode = 35' organizer/buildsrc092/MyOrganizer-v0.9.2-source/app/build.gradle.kts
           grep -q 'versionName = "0.9.2"' organizer/buildsrc092/MyOrganizer-v0.9.2-source/app/build.gradle.kts
