@@ -7,10 +7,9 @@ import kotlin.math.sqrt
 /**
  * Selects the main wrestling action from all detected people.
  *
- * The selector prefers a physically linked pair, but only when that pair is large enough to look
- * like foreground action. This prevents two small spectators/judges in the background from beating
- * a much larger wrestler or a merged wrestling box. When no credible foreground pair exists, the
- * largest central person becomes the anchor.
+ * Tuned from the user's manual VideoFrames reference crops: foreground scale and physical
+ * interaction matter much more than image-centre position. A real wrestler at the edge must not lose
+ * to a smaller central referee/spectator just because it is off-centre.
  */
 object WrestlingSubjectSelector {
     fun select(image: ImageSize, people: List<RectD>): List<RectD> {
@@ -38,11 +37,15 @@ object WrestlingSubjectSelector {
         fun edgePenalty(r: RectD): Double {
             val relative = r.area / maxArea
             if (!isEdgeFragment(r, image)) return 0.0
+
+            // Edge position is not an error by itself. Only tiny clipped boxes are strongly
+            // suspicious; a large foreground person at an edge is valid in the manual references.
             return when {
                 relative < 0.06 -> 0.52
-                relative < 0.15 -> 0.38
-                relative < 0.30 -> 0.23
-                else -> 0.10
+                relative < 0.15 -> 0.36
+                relative < 0.30 -> 0.18
+                relative < 0.45 -> 0.05
+                else -> 0.0
             }
         }
 
@@ -93,29 +96,26 @@ object WrestlingSubjectSelector {
                 val pairUnion = union(a, b)
                 val unionAreaFraction = (pairUnion.area / imageArea.coerceAtLeast(1.0)).coerceIn(0.0, 1.0)
 
-                // Two small background people must not win just because they are sitting close.
-                // A very strongly overlapping second wrestler may be small due to occlusion, so it
-                // is allowed only when the overlap itself is convincing.
+                // Two small background people must not win just because they are sitting close. A
+                // heavily occluded second wrestler may be small only when overlap is convincing.
                 if (dominance < 0.34 && unionAreaFraction < 0.075) continue
                 if (support < 0.10 && overlap < 0.12) continue
 
                 val pairScale = sqrt(((a.area + b.area) / (2.0 * maxArea)).coerceIn(0.0, 1.0))
                 val interaction = relation(a, b)
                 val pairCentrality = centrality(pairUnion)
-
-                // A weak pair deep in a corner is almost always spectators/judges in the supplied
-                // test series. Large foreground pairs are still allowed near an edge.
-                if (pairCentrality < 0.34 && dominance < 0.62 && unionAreaFraction < 0.10) continue
-
                 val fullVisibility = (if (isFullyVisible(image, a)) 0.5 else 0.0) +
                     (if (isFullyVisible(image, b)) 0.5 else 0.0)
-                val pairEdgePenalty = (edgePenalty(a) + edgePenalty(b)) * 0.42
-                val score = interaction * 0.27 +
-                    pairScale * 0.21 +
-                    dominance * 0.21 +
-                    sizeBalance * 0.07 +
-                    pairCentrality * 0.16 +
-                    fullVisibility * 0.08 -
+                val pairEdgePenalty = (edgePenalty(a) + edgePenalty(b)) * 0.25
+
+                // Centre position is only a weak tie-breaker. The manual crops intentionally retain
+                // foreground action near the source edges.
+                val score = interaction * 0.31 +
+                    pairScale * 0.24 +
+                    dominance * 0.25 +
+                    sizeBalance * 0.08 +
+                    pairCentrality * 0.05 +
+                    fullVisibility * 0.07 -
                     pairEdgePenalty
 
                 val choice = PairChoice(a, b, score, interaction, dominance, support)
@@ -136,8 +136,8 @@ object WrestlingSubjectSelector {
             val aFull = isFullyVisible(image, a)
             val bFull = isFullyVisible(image, b)
 
-            // If the source itself already cut one linked person, do not let that incomplete body
-            // drag the crop away from the complete wrestler.
+            // If the source already cut one linked person, do not let that incomplete body drag the
+            // crop away from a complete wrestler. Keep this established behaviour.
             if (aFull xor bFull) {
                 val full = if (aFull) a else b
                 val clipped = if (aFull) b else a
@@ -156,9 +156,12 @@ object WrestlingSubjectSelector {
                 .map { relation(r, it) }
                 .maxOrNull() ?: 0.0
             val fullBonus = if (isFullyVisible(image, r)) 0.05 else 0.0
-            return relativeArea * 0.62 +
-                centrality(r) * 0.25 +
-                bestInteraction * 0.08 +
+
+            // Foreground size dominates; centre is only a small tie-breaker. This is the key change
+            // for manually cropped examples where the main person deliberately remains near an edge.
+            return relativeArea * 0.78 +
+                centrality(r) * 0.08 +
+                bestInteraction * 0.09 +
                 fullBonus -
                 edgePenalty(r)
         }
