@@ -1,4 +1,4 @@
-name: Build Organizer Pro v0.9.5
+name: Build Organizer Pro v0.9.6
 
 on:
   push:
@@ -35,73 +35,74 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Restore v0.9.4 and apply v0.9.5 update
+      - name: Restore v0.9.5 and apply v0.9.6 update
         shell: bash
         run: |
-          mkdir -p organizer/buildsrc095
+          mkdir -p organizer/buildsrc096
           cat organizer/v090tar/part00 organizer/v090tar/part01 organizer/v090tar/part02 organizer/v090tar/part03 > organizer/MyOrganizer-v0.9.0-source.tar.xz.b64
           base64 -d organizer/MyOrganizer-v0.9.0-source.tar.xz.b64 > organizer/MyOrganizer-v0.9.0-source.tar.xz
-          tar -xJf organizer/MyOrganizer-v0.9.0-source.tar.xz -C organizer/buildsrc095
-          test -f organizer/buildsrc095/MyOrganizer-v0.9.0-source/app/build.gradle.kts
+          tar -xJf organizer/MyOrganizer-v0.9.0-source.tar.xz -C organizer/buildsrc096
+          test -f organizer/buildsrc096/MyOrganizer-v0.9.0-source/app/build.gradle.kts
           python3 - <<'PY'
           import base64,zlib,pathlib
-          root=pathlib.Path('organizer/buildsrc095/MyOrganizer-v0.9.0-source')
+          root=pathlib.Path('organizer/buildsrc096/MyOrganizer-v0.9.0-source')
           appstrings=zlib.decompress(base64.b64decode(pathlib.Path('organizer/v091/appstrings.zlib.b64').read_text())).decode()
           (root/'app/src/main/java/kz/kairat/organizer/AppStrings.kt').write_text(appstrings)
           apply_script=zlib.decompress(base64.b64decode(pathlib.Path('organizer/v091/apply.zlib.b64').read_text())).decode()
           pathlib.Path('organizer/apply_v091.py').write_text(apply_script)
           PY
-          python3 organizer/apply_v091.py organizer/buildsrc095/MyOrganizer-v0.9.0-source
-          mv organizer/buildsrc095/MyOrganizer-v0.9.0-source organizer/buildsrc095/MyOrganizer-v0.9.1-source
-          python3 organizer/v092/apply.py organizer/buildsrc095/MyOrganizer-v0.9.1-source
-          sed -i 's/MoneyEntryCard(m,lang,if(m.type=="income")MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error){/MoneyEntryCard(m,lang,if(m.type=="income")MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,if(m.type=="income")0 else 1){/' organizer/buildsrc095/MyOrganizer-v0.9.1-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          mv organizer/buildsrc095/MyOrganizer-v0.9.1-source organizer/buildsrc095/MyOrganizer-v0.9.2-source
-          python3 organizer/v093/apply.py organizer/buildsrc095/MyOrganizer-v0.9.2-source
-          mv organizer/buildsrc095/MyOrganizer-v0.9.2-source organizer/buildsrc095/MyOrganizer-v0.9.3-source
-          python3 organizer/v094/apply.py organizer/buildsrc095/MyOrganizer-v0.9.3-source
-          mv organizer/buildsrc095/MyOrganizer-v0.9.3-source organizer/buildsrc095/Organizer-Pro-v0.9.4-source
-          python3 organizer/v095/apply.py organizer/buildsrc095/Organizer-Pro-v0.9.4-source
-          mv organizer/buildsrc095/Organizer-Pro-v0.9.4-source organizer/buildsrc095/Organizer-Pro-v0.9.5-source
-          grep -q 'versionCode = 38' organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/build.gradle.kts
-          grep -q 'versionName = "0.9.5"' organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/build.gradle.kts
-          grep -q 'applicationId = "kz.kairat.organizer"' organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/build.gradle.kts
-          grep -q 'supportedLanguages = listOf("kk","ru","en","zh","de","es","fr","tr")' organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt
-          grep -q 'SQLiteOpenHelper(context, "organizer.db", null, 8)' organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt
-          grep -q 'addMoneyType="income"' organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          grep -q 'addMoneyType="expense"' organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          grep -q 'if(showNewProject){' organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          grep -q 'BackHandler{onDismiss()}' organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          grep -q 'title={Text(AppStrings.t(lang,"new_project"))}' organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          grep -q 'title={Text(AppStrings.t(lang,fixedType))}' organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          grep -q 'height(40.dp).clickable{onSelected(key)}' organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          grep -q 'syncAndroidAppLocale(context,newLang)' organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          grep -q 'android:localeConfig="@xml/locales_config"' organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/src/main/AndroidManifest.xml
-          grep -q 'Органайзер Про' organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/src/main/res/values/strings.xml
-          test -f organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/src/main/res/drawable/ic_app_icon_approved.xml
+          python3 organizer/apply_v091.py organizer/buildsrc096/MyOrganizer-v0.9.0-source
+          mv organizer/buildsrc096/MyOrganizer-v0.9.0-source organizer/buildsrc096/MyOrganizer-v0.9.1-source
+          python3 organizer/v092/apply.py organizer/buildsrc096/MyOrganizer-v0.9.1-source
+          sed -i 's/MoneyEntryCard(m,lang,if(m.type=="income")MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error){/MoneyEntryCard(m,lang,if(m.type=="income")MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,if(m.type=="income")0 else 1){/' organizer/buildsrc096/MyOrganizer-v0.9.1-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+          mv organizer/buildsrc096/MyOrganizer-v0.9.1-source organizer/buildsrc096/MyOrganizer-v0.9.2-source
+          python3 organizer/v093/apply.py organizer/buildsrc096/MyOrganizer-v0.9.2-source
+          mv organizer/buildsrc096/MyOrganizer-v0.9.2-source organizer/buildsrc096/MyOrganizer-v0.9.3-source
+          python3 organizer/v094/apply.py organizer/buildsrc096/MyOrganizer-v0.9.3-source
+          mv organizer/buildsrc096/MyOrganizer-v0.9.3-source organizer/buildsrc096/Organizer-Pro-v0.9.4-source
+          python3 organizer/v095/apply.py organizer/buildsrc096/Organizer-Pro-v0.9.4-source
+          mv organizer/buildsrc096/Organizer-Pro-v0.9.4-source organizer/buildsrc096/Organizer-Pro-v0.9.5-source
+          python3 organizer/v096/apply.py organizer/buildsrc096/Organizer-Pro-v0.9.5-source
+          mv organizer/buildsrc096/Organizer-Pro-v0.9.5-source organizer/buildsrc096/Organizer-Pro-v0.9.6-source
+          grep -q 'versionCode = 39' organizer/buildsrc096/Organizer-Pro-v0.9.6-source/app/build.gradle.kts
+          grep -q 'versionName = "0.9.6"' organizer/buildsrc096/Organizer-Pro-v0.9.6-source/app/build.gradle.kts
+          grep -q 'applicationId = "kz.kairat.organizer"' organizer/buildsrc096/Organizer-Pro-v0.9.6-source/app/build.gradle.kts
+          grep -q 'supportedLanguages = listOf("kk","ru","en","zh","de","es","fr","tr")' organizer/buildsrc096/Organizer-Pro-v0.9.6-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt
+          grep -q 'SQLiteOpenHelper(context, "organizer.db", null, 9)' organizer/buildsrc096/Organizer-Pro-v0.9.6-source/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt
+          grep -q 'ALTER TABLE projects ADD COLUMN color_key' organizer/buildsrc096/Organizer-Pro-v0.9.6-source/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt
+          grep -q 'ALTER TABLE money_entries ADD COLUMN color_key' organizer/buildsrc096/Organizer-Pro-v0.9.6-source/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt
+          grep -q 'TopColorMenu(colorKey){colorKey=it}' organizer/buildsrc096/Organizer-Pro-v0.9.6-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+          grep -q 'db.addProject(name,description,colorKey)' organizer/buildsrc096/Organizer-Pro-v0.9.6-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+          grep -q 'db.addMoneyEntry(fixedType,amount,cat,null,note,colorKey)' organizer/buildsrc096/Organizer-Pro-v0.9.6-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+          ! grep -q 'NoteColorPicker(' organizer/buildsrc096/Organizer-Pro-v0.9.6-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+          grep -q 'syncAndroidAppLocale(context,newLang)' organizer/buildsrc096/Organizer-Pro-v0.9.6-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+          grep -q 'android:localeConfig="@xml/locales_config"' organizer/buildsrc096/Organizer-Pro-v0.9.6-source/app/src/main/AndroidManifest.xml
+          grep -q 'Органайзер Про' organizer/buildsrc096/Organizer-Pro-v0.9.6-source/app/src/main/res/values/strings.xml
+          test -f organizer/buildsrc096/Organizer-Pro-v0.9.6-source/app/src/main/res/drawable/ic_app_icon_approved.xml
 
       - name: Build APK
-        working-directory: organizer/buildsrc095/Organizer-Pro-v0.9.5-source
+        working-directory: organizer/buildsrc096/Organizer-Pro-v0.9.6-source
         run: gradle --no-daemon assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Organizer-Pro-v0.9.5-debug
-          path: organizer/buildsrc095/Organizer-Pro-v0.9.5-source/app/build/outputs/apk/debug/app-debug.apk
+          name: Organizer-Pro-v0.9.6-debug
+          path: organizer/buildsrc096/Organizer-Pro-v0.9.6-source/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 1
 
       - name: Archive source
         shell: bash
         run: |
-          cd organizer/buildsrc095
-          zip -qr ../Organizer-Pro-v0.9.5-source.zip Organizer-Pro-v0.9.5-source
+          cd organizer/buildsrc096
+          zip -qr ../Organizer-Pro-v0.9.6-source.zip Organizer-Pro-v0.9.6-source
 
       - name: Upload source
         uses: actions/upload-artifact@v4
         with:
-          name: Organizer-Pro-v0.9.5-source
-          path: organizer/Organizer-Pro-v0.9.5-source.zip
+          name: Organizer-Pro-v0.9.6-source
+          path: organizer/Organizer-Pro-v0.9.6-source.zip
           if-no-files-found: error
           retention-days: 1
 
