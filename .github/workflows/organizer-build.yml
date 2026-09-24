@@ -57,6 +57,20 @@ jobs:
           grep -q 'versionName = "0.9.1"' organizer/buildsrc091/MyOrganizer-v0.9.1-source/app/build.gradle.kts
           grep -q 'supportedLanguages = listOf("ru","kk","en","zh","de","es","fr","tr")' organizer/buildsrc091/MyOrganizer-v0.9.1-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt
 
+      - name: Archive v0.9.1 source
+        shell: bash
+        run: |
+          cd organizer/buildsrc091
+          zip -qr ../MyOrganizer-v0.9.1-source.zip MyOrganizer-v0.9.1-source
+
+      - name: Upload v0.9.1 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyOrganizer-v0.9.1-source
+          path: organizer/MyOrganizer-v0.9.1-source.zip
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Build APK
         working-directory: organizer/buildsrc091/MyOrganizer-v0.9.1-source
         run: gradle --no-daemon assembleDebug
