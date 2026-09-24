@@ -16,7 +16,6 @@ text_payloads = {
     'db.zlib.b64': 'app/src/main/java/kz/kairat/organizer/NoteDatabase.kt',
     'backup.zlib.b64': 'app/src/main/java/kz/kairat/organizer/BackupManager.kt',
     'strings.zlib.b64': 'app/src/main/java/kz/kairat/organizer/AppStrings.kt',
-    'ui.zlib.b64': 'app/src/main/java/kz/kairat/organizer/OrganizerUi.kt',
 }
 for payload, rel in text_payloads.items():
     data = zlib.decompress(base64.b64decode((assets / payload).read_text()))
@@ -24,8 +23,13 @@ for payload, rel in text_payloads.items():
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(data)
 
+ui_b64 = ''.join((assets / f'ui.part{i:02d}').read_text() for i in range(4))
+ui_target = root / 'app/src/main/java/kz/kairat/organizer/OrganizerUi.kt'
+ui_target.write_bytes(zlib.decompress(base64.b64decode(ui_b64)))
+
 # Bright glossy 3D logo approved for v0.9.3.
-icon = base64.b64decode((assets / 'icon.b64').read_text())
+icon_b64 = ''.join((assets / f'icon.part{i:02d}').read_text() for i in range(6))
+icon = base64.b64decode(icon_b64)
 old_xml = root / 'app/src/main/res/drawable/ic_app_icon_approved.xml'
 if old_xml.exists():
     old_xml.unlink()
