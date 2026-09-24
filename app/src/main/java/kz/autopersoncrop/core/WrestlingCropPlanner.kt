@@ -3,29 +3,28 @@ package kz.autopersoncrop.core
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.sqrt
 
 /**
- * Free-aspect crop planner for wrestling photos.
+ * Tight free-aspect crop planner for wrestling photos.
  *
- * The frame follows the action instead of forcing 2:3 / 3:2. For a tall composition we protect
- * roughly 5% at the left/right and let top/bottom breathe naturally. For a wide composition we do
- * the opposite. Small or doubtful subject groups keep much more surrounding context so a detector
- * mistake cannot become an extreme close-up of a spectator, referee or body fragment.
+ * Agreed phone-test behaviour:
+ * - one standing person: about 5% above and below, sides kept compact;
+ * - two standing people: the same rule around the combined group;
+ * - wide/ground wrestling (two lying people or one sitting on another): landscape composition,
+ *   anchored from the side where the source already has less empty space, with the opposite side
+ *   fitted around the complete action;
+ * - no artificial minimum crop area. A valid main subject must not be surrounded by large amounts
+ *   of background just to satisfy a percentage of the original image.
+ *
+ * The planner never rotates, stretches or pads the image.
  */
 object WrestlingCropPlanner {
-    private const val PRIMARY_MARGIN = 0.050
-    private const val FREE_MARGIN_SINGLE = 0.090
-    private const val FREE_MARGIN_PAIR = 0.105
-    private const val BALANCED_MARGIN = 0.070
-    private const val MIN_IMAGE_MARGIN = 0.012
+    private const val VERTICAL_MARGIN = 0.050
+    private const val PORTRAIT_SIDE_MARGIN = 0.030
+    private const val LANDSCAPE_NEAR_SIDE_MARGIN = 0.030
+    private const val LANDSCAPE_FAR_SIDE_MARGIN = 0.050
+    private const val MIN_IMAGE_MARGIN = 0.008
     private const val SOURCE_EDGE_FRACTION = 0.012
-
-    // Soft limits only. We expand the frame to respect them; pixels are never stretched or squeezed.
-    private const val MIN_ASPECT = 0.62
-    private const val MAX_ASPECT = 1.80
-    private const val EPS = 1e-6
 
     fun plan(image: ImageSize, subjects: List<RectD>): PixelRect {
         require(subjects.isNotEmpty()) { "At least one wrestling subject is required" }
@@ -38,98 +37,49 @@ object WrestlingCropPlanner {
         val subject = union(clean).clampTo(image)
         if (subject.width < 2.0 || subject.height < 2.0) return full(image)
 
-        val imageArea = image.width.toDouble() * image.height.toDouble()
-        val subjectAreaFraction = (subject.area / imageArea.coerceAtLeast(1.0)).coerceIn(0.0, 1.0)
-        val ratio = subject.width / subject.height.coerceAtLeast(1.0)
-        val freeMargin = if (clean.size >= 2) FREE_MARGIN_PAIR else FREE_MARGIN_SINGLE
-
-        val required = when {
-            ratio <= 0.82 -> expandDirectional(
+        val portraitScene = isStandingPortraitScene(clean)
+        val required = if (portraitScene) {
+            // Standing portrait: fixed ~5% head/foot breathing room. Side margins are deliberately
+            // smaller because the user wants the crop to follow the body instead of the room.
+            expandDirectional(
                 subject = subject,
                 image = image,
-                leftFraction = PRIMARY_MARGIN,
-                rightFraction = PRIMARY_MARGIN,
-                topFraction = freeMargin + 0.020,
-                bottomFraction = freeMargin,
+                leftFraction = PORTRAIT_SIDE_MARGIN,
+                rightFraction = PORTRAIT_SIDE_MARGIN,
+                topFraction = VERTICAL_MARGIN,
+                bottomFraction = VERTICAL_MARGIN,
             )
-            ratio >= 1.22 -> expandDirectional(
+        } else {
+            // Ground/wide action: start from the side which already has less empty source space.
+            // That side gets the tighter margin; the opposite side gets the normal 5% allowance.
+            val leftGap = subject.left
+            val rightGap = image.width.toDouble() - subject.right
+            val anchorLeft = leftGap <= rightGap
+            expandDirectional(
                 subject = subject,
                 image = image,
-                leftFraction = freeMargin,
-                rightFraction = freeMargin,
-                topFraction = PRIMARY_MARGIN,
-                bottomFraction = PRIMARY_MARGIN,
-            )
-            else -> expandDirectional(
-                subject = subject,
-                image = image,
-                leftFraction = BALANCED_MARGIN,
-                rightFraction = BALANCED_MARGIN,
-                topFraction = BALANCED_MARGIN + 0.012,
-                bottomFraction = BALANCED_MARGIN,
+                leftFraction = if (anchorLeft) LANDSCAPE_NEAR_SIDE_MARGIN else LANDSCAPE_FAR_SIDE_MARGIN,
+                rightFraction = if (anchorLeft) LANDSCAPE_FAR_SIDE_MARGIN else LANDSCAPE_NEAR_SIDE_MARGIN,
+                topFraction = VERTICAL_MARGIN,
+                bottomFraction = VERTICAL_MARGIN,
             )
         }
 
-        var targetWidth = required.width
-        var targetHeight = required.height
+        return required.toPixelRect(image)
+    }
 
-        // Soft aspect guard: expand the short dimension only. Never shrink around the athletes.
-        var aspect = targetWidth / targetHeight.coerceAtLeast(1.0)
-        if (aspect < MIN_ASPECT) {
-            targetWidth = targetHeight * MIN_ASPECT
-        } else if (aspect > MAX_ASPECT) {
-            targetHeight = targetWidth / MAX_ASPECT
+    /**
+     * A single clearly vertical body is a standing portrait subject. Two clearly vertical bodies are
+     * treated as a standing pair even when their combined union becomes fairly wide. Any other pair
+     * (lying, kneeling, overlapping, one sitting on another) follows the wide/action rule.
+     */
+    private fun isStandingPortraitScene(subjects: List<RectD>): Boolean {
+        fun isVerticalBody(r: RectD): Boolean = r.height >= r.width * 1.15
+        return when (subjects.size) {
+            1 -> isVerticalBody(subjects.first())
+            2 -> subjects.all(::isVerticalBody)
+            else -> false
         }
-
-        // Context safety from the real test sets. Tiny selected groups are often background people.
-        // The smaller the protected group is, the more of the original scene we deliberately keep.
-        val minAreaFraction = when {
-            subjectAreaFraction < 0.025 -> 0.42
-            subjectAreaFraction < 0.050 -> 0.34
-            subjectAreaFraction < 0.090 -> 0.26
-            clean.size >= 2 -> 0.19
-            else -> 0.22
-        }
-        val currentArea = targetWidth * targetHeight
-        val wantedArea = imageArea * minAreaFraction
-        if (currentArea < wantedArea && currentArea > 1.0) {
-            val scale = sqrt(wantedArea / currentArea)
-            targetWidth *= scale
-            targetHeight *= scale
-        }
-
-        targetWidth = targetWidth.coerceIn(required.width, image.width.toDouble())
-        targetHeight = targetHeight.coerceIn(required.height, image.height.toDouble())
-
-        aspect = targetWidth / targetHeight.coerceAtLeast(1.0)
-        if (aspect < MIN_ASPECT && targetWidth < image.width) {
-            targetWidth = min(image.width.toDouble(), targetHeight * MIN_ASPECT)
-        } else if (aspect > MAX_ASPECT && targetHeight < image.height) {
-            targetHeight = min(image.height.toDouble(), targetWidth / MAX_ASPECT)
-        }
-
-        // When a tiny subject is selected, bias the enlarged frame back toward the image centre.
-        // This keeps the likely wrestling action in view even if the detector briefly picks a small
-        // spectator near an edge. Strong/large subjects remain centred on themselves.
-        val centreBlend = when {
-            subjectAreaFraction < 0.025 -> 0.45
-            subjectAreaFraction < 0.050 -> 0.32
-            subjectAreaFraction < 0.090 -> 0.18
-            else -> 0.0
-        }
-        val preferredCenterX = subject.centerX * (1.0 - centreBlend) + image.width * 0.5 * centreBlend
-        val preferredCenterY = subject.centerY * (1.0 - centreBlend) + image.height * 0.5 * centreBlend
-        val verticalBias = if (ratio <= 0.82) -0.012 else 0.0
-
-        return placeFrame(
-            image = image,
-            required = required,
-            requestedWidth = targetWidth,
-            requestedHeight = targetHeight,
-            preferredCenterX = preferredCenterX,
-            preferredCenterY = preferredCenterY,
-            verticalBias = verticalBias,
-        ) ?: full(image)
     }
 
     private fun expandDirectional(
@@ -157,39 +107,12 @@ object WrestlingCropPlanner {
         return RectD(left, top, right, bottom).clampTo(image)
     }
 
-    private fun placeFrame(
-        image: ImageSize,
-        required: RectD,
-        requestedWidth: Double,
-        requestedHeight: Double,
-        preferredCenterX: Double,
-        preferredCenterY: Double,
-        verticalBias: Double,
-    ): PixelRect? {
-        val width = requestedWidth.coerceIn(required.width, image.width.toDouble())
-        val height = requestedHeight.coerceIn(required.height, image.height.toDouble())
-        if (width < 2.0 || height < 2.0) return null
-
-        val maxImageLeft = image.width - width
-        val maxImageTop = image.height - height
-        val minLeft = max(0.0, required.right - width)
-        val maxLeft = min(required.left, maxImageLeft)
-        val minTop = max(0.0, required.bottom - height)
-        val maxTop = min(required.top, maxImageTop)
-        if (minLeft > maxLeft + EPS || minTop > maxTop + EPS) return null
-
-        val preferredLeft = preferredCenterX - width / 2.0
-        val preferredTop = preferredCenterY - height / 2.0 + height * verticalBias
-        val left = preferredLeft.coerceIn(minLeft, maxLeft)
-        val top = preferredTop.coerceIn(minTop, maxTop)
-
-        val px = PixelRect(
-            left = floor(left).toInt().coerceIn(0, image.width - 1),
-            top = floor(top).toInt().coerceIn(0, image.height - 1),
-            right = ceil(left + width).toInt().coerceIn(1, image.width),
-            bottom = ceil(top + height).toInt().coerceIn(1, image.height),
-        )
-        return px.takeIf { it.width >= 2 && it.height >= 2 }
+    private fun RectD.toPixelRect(image: ImageSize): PixelRect {
+        val l = floor(left).toInt().coerceIn(0, image.width - 1)
+        val t = floor(top).toInt().coerceIn(0, image.height - 1)
+        val r = ceil(right).toInt().coerceIn(l + 1, image.width)
+        val b = ceil(bottom).toInt().coerceIn(t + 1, image.height)
+        return PixelRect(l, t, r, b)
     }
 
     private fun union(rects: List<RectD>): RectD = RectD(
