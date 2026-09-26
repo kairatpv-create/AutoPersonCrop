@@ -1,4 +1,4 @@
-name: Build Organizer Pro v0.9.16
+name: Build Organizer Pro v0.9.17
 
 on:
   push:
@@ -35,37 +35,40 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Restore v0.9.15 and apply v0.9.16 update
+      - name: Restore v0.9.16 and apply v0.9.17 update
         shell: bash
         run: |
           python3 organizer/v0106/rebuild.py
           test -f organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/build.gradle.kts
-          grep -q 'versionCode = 49' organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/build.gradle.kts
-          grep -q 'versionName = "0.9.16"' organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/build.gradle.kts
-          grep -q 'applicationId = "kz.kairat.organizer"' organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/build.gradle.kts
-          grep -q 'supportedLanguages = listOf("kk","ru","en","zh","de","es","fr","tr")' organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt
-          grep -q 'SQLiteOpenHelper(context, "organizer.db", null, 9)' organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt
-          grep -q 'titleLarge=TextStyle(fontSize=17.sp' organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/src/main/java/kz/kairat/organizer/Theme.kt
-          grep -q 'titleMedium=TextStyle(fontSize=15.sp' organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/src/main/java/kz/kairat/organizer/Theme.kt
-          grep -q 'bodyMedium=TextStyle(fontSize=14.sp' organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/src/main/java/kz/kairat/organizer/Theme.kt
-          grep -Fq 'val pillHeight=(44f*uiScale).dp' organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          grep -Fq 'val pillHeight=(40f*uiScale).dp' organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          grep -Fq 'val pillHeight=(32f*uiScale).dp' organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          grep -q 'style=MaterialTheme.typography.labelLarge' organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          grep -q 'basicMarquee(iterations=Int.MAX_VALUE' organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          ! grep -q 'fixedTextSize' organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          grep -q 'BottomTextNavPill(section=="settings"' organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          ! grep -q 'Text(languagesLabel(lang)' organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+          python3 organizer/v0107/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.16-source
+          mv organizer/buildsrc0106/Organizer-Pro-v0.9.16-source organizer/buildsrc0106/Organizer-Pro-v0.9.17-source
+          grep -q 'versionCode = 50' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/build.gradle.kts
+          grep -q 'versionName = "0.9.17"' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/build.gradle.kts
+          grep -q 'applicationId = "kz.kairat.organizer"' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/build.gradle.kts
+          grep -q 'supportedLanguages = listOf("kk","ru","en","zh","de","es","fr","tr")' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt
+          grep -q 'SQLiteOpenHelper(context, "organizer.db", null, 9)' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt
+          grep -q 'fun getStandaloneMoneyEntries()' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt
+          grep -q 'WHERE m.project_id IS NULL' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt
+          grep -Fq 'WHERE m.project_id=?' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt
+          grep -q 'db.getStandaloneMoneyEntries()' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+          grep -q 'MoneyAnalytics(list,lang' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+          ! grep -q 'MoneyAnalytics(db,list,lang' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+          grep -q 'titleLarge=TextStyle(fontSize=17.sp' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/src/main/java/kz/kairat/organizer/Theme.kt
+          grep -q 'titleMedium=TextStyle(fontSize=15.sp' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/src/main/java/kz/kairat/organizer/Theme.kt
+          grep -q 'bodyMedium=TextStyle(fontSize=14.sp' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/src/main/java/kz/kairat/organizer/Theme.kt
+          grep -Fq 'val pillHeight=(44f*uiScale).dp' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+          grep -q 'basicMarquee(iterations=Int.MAX_VALUE' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
+          ! grep -q 'Text(languagesLabel(lang)' organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
 
       - name: Build APK
-        working-directory: organizer/buildsrc0106/Organizer-Pro-v0.9.16-source
+        working-directory: organizer/buildsrc0106/Organizer-Pro-v0.9.17-source
         run: gradle --no-daemon assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Organizer-Pro-v0.9.16-debug
-          path: organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/build/outputs/apk/debug/app-debug.apk
+          name: Organizer-Pro-v0.9.17-debug
+          path: organizer/buildsrc0106/Organizer-Pro-v0.9.17-source/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 1
 
@@ -73,13 +76,13 @@ jobs:
         shell: bash
         run: |
           cd organizer/buildsrc0106
-          zip -qr ../Organizer-Pro-v0.9.16-source.zip Organizer-Pro-v0.9.16-source
+          zip -qr ../Organizer-Pro-v0.9.17-source.zip Organizer-Pro-v0.9.17-source
 
       - name: Upload source
         uses: actions/upload-artifact@v4
         with:
-          name: Organizer-Pro-v0.9.16-source
-          path: organizer/Organizer-Pro-v0.9.16-source.zip
+          name: Organizer-Pro-v0.9.17-source
+          path: organizer/Organizer-Pro-v0.9.17-source.zip
           if-no-files-found: error
           retention-days: 1
 
