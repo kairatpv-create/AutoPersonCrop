@@ -2,135 +2,173 @@ package kz.autopersoncrop.core
 
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
 
 /**
- * Crop planner calibrated against the user's manual VideoFrames examples.
+ * Crop planner for source frames that contain ONLY one person or two wrestlers.
  *
- * Rules:
- *  - keep every selected main person inside the crop;
- *  - start from ~5% breathing room on every free side;
- *  - crop both sides whenever source pixels allow it;
- *  - never stretch/resize the image;
- *  - only widen/tall the frame when the raw 5% crop would become unnaturally narrow/wide;
- *  - aspect correction expands in a balanced way, instead of dumping all spare background on one side;
- *  - if a person genuinely reaches the source edge, keep that source edge rather than cutting the person.
+ * Important rules from the user:
+ * - crop only; never stretch, squeeze, scale or rotate the image;
+ * - never recenter the people;
+ * - keep the natural position of the one/two people inside the source frame;
+ * - portrait: normally remove 5% from source top and 5% from source bottom, but never through a body;
+ *   choose the side boundaries only to make a normal portrait composition;
+ * - landscape: normally remove 5% from source left and 5% from source right, but never through a body;
+ *   choose top/bottom only to make a normal landscape composition;
+ * - all selected people must remain fully inside the crop with a small safety margin.
  */
 object WrestlingCropPlanner {
-    // To leave 5% of the FINAL crop on each opposite side:
-    // m / (subject + 2m) = 0.05  =>  m ~= subject / 18.
-    private const val SUBJECT_MARGIN_FOR_FIVE_PERCENT_FRAME = 1.0 / 18.0
-    private const val MIN_SIDE_IMAGE_MARGIN = 0.004
-    private const val MIN_VERTICAL_IMAGE_MARGIN = 0.005
+    private const val SOURCE_TRIM = 0.05
+    private const val BODY_SAFETY = 0.025
+    private const val MIN_IMAGE_SAFETY = 0.006
 
-    // Observed useful shape envelope in the user's manual reference set. This is not a forced output
-    // ratio; it is only a guard against a very thin/tall or extremely flat accidental crop.
-    private const val MIN_REFERENCE_ASPECT = 0.58
-    private const val MAX_REFERENCE_ASPECT = 1.78
+    // These are composition targets only. If a person needs more room, the crop grows instead of
+    // cutting the body. Nothing is resized to force these ratios.
+    private const val PORTRAIT_WIDTH_TO_HEIGHT = 0.75   // 3:4
+    private const val LANDSCAPE_WIDTH_TO_HEIGHT = 1.50 // 3:2
+
+    private enum class Orientation { PORTRAIT, LANDSCAPE }
 
     fun plan(image: ImageSize, subjects: List<RectD>): PixelRect {
-        require(subjects.isNotEmpty()) { "At least one wrestling subject is required" }
+        require(subjects.isNotEmpty()) { "At least one person is required" }
 
         val clean = subjects
             .map { it.clampTo(image) }
             .filter { it.width >= 2.0 && it.height >= 2.0 }
+            .take(2)
         if (clean.isEmpty()) return full(image)
 
-        val subject = union(clean).clampTo(image)
-        if (subject.width < 2.0 || subject.height < 2.0) return full(image)
+        val group = union(clean).clampTo(image)
+        val protected = protect(group, image)
+        val orientation = chooseOrientation(clean, group)
 
-        val fivePercent = fivePercentFrame(subject, image)
-        val shaped = fitReferenceAspectBalanced(fivePercent, image)
-        return shaped.clampTo(image).toPixelRect(image)
+        val crop = when (orientation) {
+            Orientation.PORTRAIT -> portraitCrop(image, group, protected)
+            Orientation.LANDSCAPE -> landscapeCrop(image, group, protected)
+        }
+        return crop.clampTo(image).toPixelRect(image)
     }
 
-    /** Tight crop around the main one/two-person union. No edge snapping and no recentring. */
-    private fun fivePercentFrame(subject: RectD, image: ImageSize): RectD {
-        val sideMargin = maxOf(
-            subject.width * SUBJECT_MARGIN_FOR_FIVE_PERCENT_FRAME,
-            image.width * MIN_SIDE_IMAGE_MARGIN,
-        )
-        val verticalMargin = maxOf(
-            subject.height * SUBJECT_MARGIN_FOR_FIVE_PERCENT_FRAME,
-            image.height * MIN_VERTICAL_IMAGE_MARGIN,
-        )
+    private fun chooseOrientation(subjects: List<RectD>, group: RectD): Orientation {
+        if (subjects.size == 1) {
+            return if (group.height >= group.width * 1.05) Orientation.PORTRAIT
+            else Orientation.LANDSCAPE
+        }
 
+        // Two standing wrestlers can be wider as a pair than one standing body. Keep them portrait
+        // while the combined geometry is still reasonably vertical. Ground/lying action goes album.
+        val standing = subjects.count { it.height >= it.width * 1.15 }
+        return if (standing == subjects.size && group.height >= group.width * 0.72) {
+            Orientation.PORTRAIT
+        } else if (group.height > group.width * 1.03) {
+            Orientation.PORTRAIT
+        } else {
+            Orientation.LANDSCAPE
+        }
+    }
+
+    private fun protect(group: RectD, image: ImageSize): RectD {
+        val mx = max(group.width * BODY_SAFETY, image.width * MIN_IMAGE_SAFETY)
+        val my = max(group.height * BODY_SAFETY, image.height * MIN_IMAGE_SAFETY)
         return RectD(
-            left = (subject.left - sideMargin).coerceAtLeast(0.0),
-            top = (subject.top - verticalMargin).coerceAtLeast(0.0),
-            right = (subject.right + sideMargin).coerceAtMost(image.width.toDouble()),
-            bottom = (subject.bottom + verticalMargin).coerceAtMost(image.height.toDouble()),
-        )
+            group.left - mx,
+            group.top - my,
+            group.right + mx,
+            group.bottom + my,
+        ).clampTo(image)
     }
 
     /**
-     * A standing person can produce a mathematically correct 5% crop that is visually too thin;
-     * a fully horizontal action can do the opposite. In those two cases we add context, but we add
-     * it equally to both sides first. Only when a source edge blocks one side does the remainder go
-     * to the other side. This removes the old one-sided-background effect.
+     * Portrait: top/bottom are the user's fixed 5% source trim whenever possible. Side width is then
+     * chosen for a normal portrait frame. The horizontal position is NOT centered on the person:
+     * the person's original relative X position is preserved as closely as source bounds allow.
      */
-    private fun fitReferenceAspectBalanced(rect: RectD, image: ImageSize): RectD {
-        val ratio = rect.width / rect.height.coerceAtLeast(1.0)
-        return when {
-            ratio < MIN_REFERENCE_ASPECT -> {
-                val targetWidth = (rect.height * MIN_REFERENCE_ASPECT)
-                    .coerceAtMost(image.width.toDouble())
-                expandWidthBalanced(rect, targetWidth, image)
-            }
-            ratio > MAX_REFERENCE_ASPECT -> {
-                val targetHeight = (rect.width / MAX_REFERENCE_ASPECT)
-                    .coerceAtMost(image.height.toDouble())
-                expandHeightBalanced(rect, targetHeight, image)
-            }
-            else -> rect
+    private fun portraitCrop(image: ImageSize, group: RectD, protected: RectD): RectD {
+        val desiredTop = image.height * SOURCE_TRIM
+        val desiredBottom = image.height * (1.0 - SOURCE_TRIM)
+
+        val top = min(desiredTop, protected.top)
+        val bottom = max(desiredBottom, protected.bottom)
+        val height = (bottom - top).coerceAtLeast(1.0)
+
+        val requiredWidth = protected.width
+        val targetWidth = max(height * PORTRAIT_WIDTH_TO_HEIGHT, requiredWidth)
+            .coerceAtMost(image.width.toDouble())
+
+        val horizontal = placeWindowPreservingSourcePosition(
+            sourceSize = image.width.toDouble(),
+            targetSize = targetWidth,
+            anchorCenter = group.centerX,
+            requiredMin = protected.left,
+            requiredMax = protected.right,
+        )
+
+        return RectD(horizontal.first, top, horizontal.second, bottom)
+    }
+
+    /**
+     * Landscape: left/right are the user's fixed 5% source trim whenever possible. Height is chosen
+     * for a normal album frame. Vertical placement preserves the original relative Y position rather
+     * than moving the wrestlers toward the middle.
+     */
+    private fun landscapeCrop(image: ImageSize, group: RectD, protected: RectD): RectD {
+        val desiredLeft = image.width * SOURCE_TRIM
+        val desiredRight = image.width * (1.0 - SOURCE_TRIM)
+
+        val left = min(desiredLeft, protected.left)
+        val right = max(desiredRight, protected.right)
+        val width = (right - left).coerceAtLeast(1.0)
+
+        val requiredHeight = protected.height
+        val targetHeight = max(width / LANDSCAPE_WIDTH_TO_HEIGHT, requiredHeight)
+            .coerceAtMost(image.height.toDouble())
+
+        val vertical = placeWindowPreservingSourcePosition(
+            sourceSize = image.height.toDouble(),
+            targetSize = targetHeight,
+            anchorCenter = group.centerY,
+            requiredMin = protected.top,
+            requiredMax = protected.bottom,
+        )
+
+        return RectD(left, vertical.first, right, vertical.second)
+    }
+
+    /**
+     * Preserve the subject's source-relative position. For example, a person who was at 25% of the
+     * source width stays close to 25% of the crop width; we do not force them to 50% (centre).
+     */
+    private fun placeWindowPreservingSourcePosition(
+        sourceSize: Double,
+        targetSize: Double,
+        anchorCenter: Double,
+        requiredMin: Double,
+        requiredMax: Double,
+    ): Pair<Double, Double> {
+        if (targetSize >= sourceSize) return 0.0 to sourceSize
+
+        val sourceFraction = (anchorCenter / sourceSize).coerceIn(0.0, 1.0)
+        var start = anchorCenter - sourceFraction * targetSize
+        start = start.coerceIn(0.0, sourceSize - targetSize)
+        var end = start + targetSize
+
+        if (start > requiredMin) {
+            start = requiredMin.coerceAtLeast(0.0)
+            end = start + targetSize
         }
-    }
-
-    private fun expandWidthBalanced(rect: RectD, targetWidth: Double, image: ImageSize): RectD {
-        val delta = (targetWidth - rect.width).coerceAtLeast(0.0)
-        if (delta <= 0.0) return rect
-
-        val availableLeft = rect.left.coerceAtLeast(0.0)
-        val availableRight = (image.width.toDouble() - rect.right).coerceAtLeast(0.0)
-        val (leftAdd, rightAdd) = distributeBalanced(delta, availableLeft, availableRight)
-        return RectD(rect.left - leftAdd, rect.top, rect.right + rightAdd, rect.bottom)
-    }
-
-    private fun expandHeightBalanced(rect: RectD, targetHeight: Double, image: ImageSize): RectD {
-        val delta = (targetHeight - rect.height).coerceAtLeast(0.0)
-        if (delta <= 0.0) return rect
-
-        val availableTop = rect.top.coerceAtLeast(0.0)
-        val availableBottom = (image.height.toDouble() - rect.bottom).coerceAtLeast(0.0)
-        val (topAdd, bottomAdd) = distributeBalanced(delta, availableTop, availableBottom)
-        return RectD(rect.left, rect.top - topAdd, rect.right, rect.bottom + bottomAdd)
-    }
-
-    /** Equal first; spill only the blocked remainder to the opposite source side. */
-    private fun distributeBalanced(delta: Double, beforeSpace: Double, afterSpace: Double): Pair<Double, Double> {
-        if (delta <= 0.0) return 0.0 to 0.0
-
-        val half = delta / 2.0
-        var beforeAdd = minOf(half, beforeSpace)
-        var afterAdd = minOf(half, afterSpace)
-        var remaining = (delta - beforeAdd - afterAdd).coerceAtLeast(0.0)
-
-        if (remaining > 0.0) {
-            val beforeRoom = (beforeSpace - beforeAdd).coerceAtLeast(0.0)
-            val afterRoom = (afterSpace - afterAdd).coerceAtLeast(0.0)
-
-            if (beforeRoom >= afterRoom) {
-                val extraBefore = minOf(remaining, beforeRoom)
-                beforeAdd += extraBefore
-                remaining -= extraBefore
-                if (remaining > 0.0) afterAdd += minOf(remaining, afterRoom)
-            } else {
-                val extraAfter = minOf(remaining, afterRoom)
-                afterAdd += extraAfter
-                remaining -= extraAfter
-                if (remaining > 0.0) beforeAdd += minOf(remaining, beforeRoom)
-            }
+        if (end < requiredMax) {
+            end = requiredMax.coerceAtMost(sourceSize)
+            start = end - targetSize
         }
-        return beforeAdd to afterAdd
+
+        start = start.coerceIn(0.0, sourceSize - targetSize)
+        end = (start + targetSize).coerceAtMost(sourceSize)
+
+        // If numeric/clamping limits still cannot contain the protected person, grow only as needed.
+        if (start > requiredMin) start = requiredMin.coerceAtLeast(0.0)
+        if (end < requiredMax) end = requiredMax.coerceAtMost(sourceSize)
+        return start to end
     }
 
     private fun RectD.toPixelRect(image: ImageSize): PixelRect {
@@ -142,10 +180,10 @@ object WrestlingCropPlanner {
     }
 
     private fun union(rects: List<RectD>): RectD = RectD(
-        left = rects.minOf { it.left },
-        top = rects.minOf { it.top },
-        right = rects.maxOf { it.right },
-        bottom = rects.maxOf { it.bottom },
+        rects.minOf { it.left },
+        rects.minOf { it.top },
+        rects.maxOf { it.right },
+        rects.maxOf { it.bottom },
     )
 
     private fun RectD.clampTo(image: ImageSize): RectD {
