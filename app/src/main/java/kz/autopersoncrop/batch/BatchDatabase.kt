@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import kz.autopersoncrop.io.SourcePhoto
 
 /** Persistent queue for very large batches. */
-class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queue.db", null, 4) {
+class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queue.db", null, 5) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """CREATE TABLE queue (
@@ -19,6 +19,7 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
                 message TEXT NOT NULL DEFAULT '',
                 seen INTEGER NOT NULL DEFAULT 1,
                 sort_index INTEGER NOT NULL DEFAULT 0,
+                algo_version INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY(folder, uri)
             )""".trimIndent()
         )
@@ -34,8 +35,16 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
             runCatching { db.execSQL("ALTER TABLE queue ADD COLUMN sort_index INTEGER NOT NULL DEFAULT 0") }
             runCatching { db.execSQL("CREATE INDEX idx_queue_folder_sort ON queue(folder, sort_index)") }
         }
+        if (oldVersion < 5) {
+            runCatching { db.execSQL("ALTER TABLE queue ADD COLUMN algo_version INTEGER NOT NULL DEFAULT 0") }
+        }
     }
 
+    /**
+     * Sync source files and invalidate results made by an older crop algorithm.
+     * PROCESSING is deliberately used as the initial/stale status because BatchProcessingService
+     * already treats it as recoverable and overwrites an existing file in CROP.
+     */
     fun sync(folder: String, photos: List<SourcePhoto>) {
         val db = writableDatabase
         db.beginTransaction()
@@ -43,10 +52,17 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
             db.execSQL("UPDATE queue SET seen=0 WHERE folder=?", arrayOf(folder))
 
             val insert = db.compileStatement(
-                "INSERT OR IGNORE INTO queue(folder,uri,name,rel,status,message,seen,sort_index) VALUES(?,?,?,?,0,'',1,?)"
+                "INSERT OR IGNORE INTO queue(folder,uri,name,rel,status,message,seen,sort_index,algo_version) " +
+                    "VALUES(?,?,?,?,?,'',1,?,?)"
             )
             val update = db.compileStatement(
-                "UPDATE queue SET name=?, rel=?, seen=1, sort_index=? WHERE folder=? AND uri=?"
+                """UPDATE queue SET
+                    name=?, rel=?, seen=1, sort_index=?,
+                    status=CASE WHEN algo_version<>? THEN ? ELSE status END,
+                    message=CASE WHEN algo_version<>? THEN 'Переработка после обновления алгоритма' ELSE message END,
+                    algo_version=?
+                    WHERE folder=? AND uri=?
+                """.trimIndent()
             )
             try {
                 photos.forEachIndexed { index, p ->
@@ -56,15 +72,21 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
                     insert.bindString(2, uri)
                     insert.bindString(3, p.name)
                     insert.bindString(4, p.relativeDir)
-                    insert.bindLong(5, index.toLong())
+                    insert.bindLong(5, PROCESSING.toLong())
+                    insert.bindLong(6, index.toLong())
+                    insert.bindLong(7, CROP_ALGORITHM_VERSION.toLong())
                     val row = insert.executeInsert()
                     if (row == -1L) {
                         update.clearBindings()
                         update.bindString(1, p.name)
                         update.bindString(2, p.relativeDir)
                         update.bindLong(3, index.toLong())
-                        update.bindString(4, folder)
-                        update.bindString(5, uri)
+                        update.bindLong(4, CROP_ALGORITHM_VERSION.toLong())
+                        update.bindLong(5, PROCESSING.toLong())
+                        update.bindLong(6, CROP_ALGORITHM_VERSION.toLong())
+                        update.bindLong(7, CROP_ALGORITHM_VERSION.toLong())
+                        update.bindString(8, folder)
+                        update.bindString(9, uri)
                         update.executeUpdateDelete()
                     }
                 }
@@ -80,7 +102,6 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
         }
     }
 
-    /** Mark every current item in this folder pending so a new crop algorithm can be tested. */
     fun resetFolder(folder: String) {
         val v = ContentValues().apply {
             put("status", PENDING)
@@ -111,7 +132,6 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
         return result
     }
 
-    /** Ordered rows for the user-visible photo status list. */
     fun items(folder: String): List<QueueItem> {
         if (folder.isBlank()) return emptyList()
         val result = ArrayList<QueueItem>()
@@ -186,6 +206,8 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
     }
 
     companion object {
+        private const val CROP_ALGORITHM_VERSION = 709
+
         const val PENDING = 0
         const val DONE = 1
         const val NO_PEOPLE = 2
