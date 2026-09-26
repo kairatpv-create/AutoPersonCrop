@@ -79,11 +79,11 @@ jobs:
         with:
           gradle-version: '9.6.0'
 
-      - name: Build debug APK
+      - name: Test and build debug APK
         shell: bash
         run: |
           set -o pipefail
-          gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee build-output.txt
+          gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee build-output.txt
 
       - name: Upload build log
         if: always()
