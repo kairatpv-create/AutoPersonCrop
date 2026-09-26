@@ -11,8 +11,8 @@ android {
         applicationId = "kz.autopersoncrop"
         minSdk = 26
         targetSdk = 36
-        versionCode = 44
-        versionName = "0.7.8"
+        versionCode = 45
+        versionName = "0.7.9"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -69,4 +69,6 @@ dependencies {
     implementation("androidx.documentfile:documentfile:1.1.0")
     implementation("androidx.exifinterface:exifinterface:1.4.1")
     implementation("com.google.ai.edge.litert:litert:2.1.5")
+
+    testImplementation("junit:junit:4.13.2")
 }
