@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.view.MotionEvent;
@@ -13,14 +14,21 @@ import android.view.View;
 public class CropEditorView extends View {
     public interface SwipeListener { void onSwipe(int direction); }
 
-    private static final int HANDLE_NONE = 0;
-    private static final int HANDLE_LEFT = 1;
-    private static final int HANDLE_TOP = 2;
-    private static final int HANDLE_RIGHT = 4;
-    private static final int HANDLE_BOTTOM = 8;
+    private static final int MODE_NONE = 0;
+    private static final int MODE_IMAGE = 1;
+    private static final int MODE_FRAME = 2;
+    private static final int MODE_LEFT = 3;
+    private static final int MODE_TOP = 4;
+    private static final int MODE_RIGHT = 5;
+    private static final int MODE_BOTTOM = 6;
+    private static final int MODE_TOP_LEFT = 7;
+    private static final int MODE_TOP_RIGHT = 8;
+    private static final int MODE_BOTTOM_LEFT = 9;
+    private static final int MODE_BOTTOM_RIGHT = 10;
 
     private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint borderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint cornerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint shadePaint = new Paint();
     private final RectF crop = new RectF();
     private final ScaleGestureDetector scaleDetector;
@@ -31,19 +39,31 @@ public class CropEditorView extends View {
     private float tx = 0f;
     private float ty = 0f;
     private float lastX, lastY, downX, downY;
-    private int activeHandle = HANDLE_NONE;
-    private boolean movedImage = false;
+    private int mode = MODE_NONE;
+    private boolean multiTouch = false;
     private SwipeListener swipeListener;
 
     public CropEditorView(Context context) {
         super(context);
         setBackgroundColor(Color.BLACK);
+
         borderPaint.setColor(Color.WHITE);
         borderPaint.setStrokeWidth(dp(1.5f));
         borderPaint.setStyle(Paint.Style.STROKE);
-        shadePaint.setColor(0x66000000);
+
+        cornerPaint.setColor(Color.WHITE);
+        cornerPaint.setStrokeWidth(dp(4f));
+        cornerPaint.setStrokeCap(Paint.Cap.SQUARE);
+        cornerPaint.setStyle(Paint.Style.STROKE);
+
+        shadePaint.setColor(0x77000000);
 
         scaleDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            @Override public boolean onScaleBegin(ScaleGestureDetector detector) {
+                multiTouch = true;
+                return bitmap != null;
+            }
+
             @Override public boolean onScale(ScaleGestureDetector detector) {
                 if (bitmap == null) return false;
                 float oldScale = scale;
@@ -74,10 +94,10 @@ public class CropEditorView extends View {
 
     public void rotate90() {
         if (bitmap == null) return;
-        android.graphics.Matrix matrix = new android.graphics.Matrix();
+        Matrix matrix = new Matrix();
         matrix.postRotate(90f);
         Bitmap rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
-        if (rotated != bitmap) bitmap.recycle();
+        if (rotated != bitmap && !bitmap.isRecycled()) bitmap.recycle();
         bitmap = rotated;
         resetGeometry();
         invalidate();
@@ -85,11 +105,24 @@ public class CropEditorView extends View {
 
     private void resetGeometry() {
         if (bitmap == null || getWidth() == 0 || getHeight() == 0) return;
-        float margin = dp(12);
-        crop.set(margin, margin, getWidth() - margin, getHeight() - margin);
-        float sx = crop.width() / bitmap.getWidth();
-        float sy = crop.height() / bitmap.getHeight();
-        minScale = Math.max(sx, sy);
+
+        float margin = dp(18f);
+        float availW = Math.max(dp(100f), getWidth() - margin * 2f);
+        float availH = Math.max(dp(100f), getHeight() - margin * 2f);
+        float photoAspect = (float) bitmap.getWidth() / (float) bitmap.getHeight();
+
+        float cropW = availW;
+        float cropH = cropW / photoAspect;
+        if (cropH > availH) {
+            cropH = availH;
+            cropW = cropH * photoAspect;
+        }
+
+        float left = (getWidth() - cropW) / 2f;
+        float top = (getHeight() - cropH) / 2f;
+        crop.set(left, top, left + cropW, top + cropH);
+
+        updateMinScaleForCrop();
         scale = minScale;
         tx = crop.centerX() - bitmap.getWidth() * scale / 2f;
         ty = crop.centerY() - bitmap.getHeight() * scale / 2f;
@@ -103,7 +136,9 @@ public class CropEditorView extends View {
 
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        canvas.drawColor(Color.BLACK);
         if (bitmap == null) return;
+
         RectF dst = new RectF(tx, ty, tx + bitmap.getWidth() * scale, ty + bitmap.getHeight() * scale);
         canvas.drawBitmap(bitmap, null, dst, bitmapPaint);
 
@@ -111,18 +146,22 @@ public class CropEditorView extends View {
         canvas.drawRect(0, crop.bottom, getWidth(), getHeight(), shadePaint);
         canvas.drawRect(0, crop.top, crop.left, crop.bottom, shadePaint);
         canvas.drawRect(crop.right, crop.top, getWidth(), crop.bottom, shadePaint);
-        canvas.drawRect(crop, borderPaint);
 
-        float c = dp(18);
-        drawCorner(canvas, crop.left, crop.top, c, 1, 1);
-        drawCorner(canvas, crop.right, crop.top, c, -1, 1);
-        drawCorner(canvas, crop.left, crop.bottom, c, 1, -1);
-        drawCorner(canvas, crop.right, crop.bottom, c, -1, -1);
+        canvas.drawRect(crop, borderPaint);
+        drawCorners(canvas);
+    }
+
+    private void drawCorners(Canvas canvas) {
+        float len = dp(24f);
+        drawCorner(canvas, crop.left, crop.top, len, 1, 1);
+        drawCorner(canvas, crop.right, crop.top, len, -1, 1);
+        drawCorner(canvas, crop.left, crop.bottom, len, 1, -1);
+        drawCorner(canvas, crop.right, crop.bottom, len, -1, -1);
     }
 
     private void drawCorner(Canvas canvas, float x, float y, float len, int sx, int sy) {
-        canvas.drawLine(x, y, x + len * sx, y, borderPaint);
-        canvas.drawLine(x, y, x, y + len * sy, borderPaint);
+        canvas.drawLine(x, y, x + len * sx, y, cornerPaint);
+        canvas.drawLine(x, y, x, y + len * sy, cornerPaint);
     }
 
     @Override public boolean onTouchEvent(MotionEvent event) {
@@ -133,8 +172,12 @@ public class CropEditorView extends View {
             case MotionEvent.ACTION_DOWN:
                 downX = lastX = event.getX();
                 downY = lastY = event.getY();
-                activeHandle = detectHandle(lastX, lastY);
-                movedImage = false;
+                mode = detectMode(lastX, lastY);
+                multiTouch = false;
+                return true;
+
+            case MotionEvent.ACTION_POINTER_DOWN:
+                multiTouch = true;
                 return true;
 
             case MotionEvent.ACTION_MOVE:
@@ -143,13 +186,24 @@ public class CropEditorView extends View {
                 float y = event.getY();
                 float dx = x - lastX;
                 float dy = y - lastY;
-                if (activeHandle != HANDLE_NONE) {
-                    resizeCrop(dx, dy);
-                } else {
-                    tx += dx;
-                    ty += dy;
-                    movedImage = true;
-                    constrainImage();
+
+                switch (mode) {
+                    case MODE_IMAGE:
+                        tx += dx;
+                        ty += dy;
+                        constrainImage();
+                        break;
+                    case MODE_FRAME:
+                        crop.offset(dx, dy);
+                        constrainFramePosition();
+                        updateMinScaleForCrop();
+                        constrainImage();
+                        break;
+                    default:
+                        resizeCrop(dx, dy);
+                        updateMinScaleForCrop();
+                        constrainImage();
+                        break;
                 }
                 lastX = x;
                 lastY = y;
@@ -157,55 +211,84 @@ public class CropEditorView extends View {
                 return true;
 
             case MotionEvent.ACTION_UP:
-                if (activeHandle == HANDLE_NONE && !scaleDetector.isInProgress()) {
+                if (!multiTouch && mode == MODE_FRAME) {
                     float totalX = event.getX() - downX;
                     float totalY = event.getY() - downY;
-                    if (Math.abs(totalX) > dp(120) && Math.abs(totalX) > Math.abs(totalY) * 1.4f) {
+                    if (Math.abs(totalX) > dp(120f) && Math.abs(totalX) > Math.abs(totalY) * 1.5f) {
                         if (swipeListener != null) swipeListener.onSwipe(totalX < 0 ? -1 : 1);
                     }
                 }
-                activeHandle = HANDLE_NONE;
+                mode = MODE_NONE;
+                multiTouch = false;
                 return true;
 
             case MotionEvent.ACTION_CANCEL:
-                activeHandle = HANDLE_NONE;
+                mode = MODE_NONE;
+                multiTouch = false;
                 return true;
         }
         return true;
     }
 
-    private int detectHandle(float x, float y) {
-        float hit = dp(34);
-        int h = HANDLE_NONE;
-        if (Math.abs(x - crop.left) <= hit && y >= crop.top - hit && y <= crop.bottom + hit) h |= HANDLE_LEFT;
-        if (Math.abs(x - crop.right) <= hit && y >= crop.top - hit && y <= crop.bottom + hit) h |= HANDLE_RIGHT;
-        if (Math.abs(y - crop.top) <= hit && x >= crop.left - hit && x <= crop.right + hit) h |= HANDLE_TOP;
-        if (Math.abs(y - crop.bottom) <= hit && x >= crop.left - hit && x <= crop.right + hit) h |= HANDLE_BOTTOM;
-        return h;
+    private int detectMode(float x, float y) {
+        float hit = dp(30f);
+        boolean nearLeft = Math.abs(x - crop.left) <= hit;
+        boolean nearRight = Math.abs(x - crop.right) <= hit;
+        boolean nearTop = Math.abs(y - crop.top) <= hit;
+        boolean nearBottom = Math.abs(y - crop.bottom) <= hit;
+        boolean withinX = x >= crop.left - hit && x <= crop.right + hit;
+        boolean withinY = y >= crop.top - hit && y <= crop.bottom + hit;
+
+        if (nearLeft && nearTop) return MODE_TOP_LEFT;
+        if (nearRight && nearTop) return MODE_TOP_RIGHT;
+        if (nearLeft && nearBottom) return MODE_BOTTOM_LEFT;
+        if (nearRight && nearBottom) return MODE_BOTTOM_RIGHT;
+        if (nearLeft && withinY) return MODE_LEFT;
+        if (nearRight && withinY) return MODE_RIGHT;
+        if (nearTop && withinX) return MODE_TOP;
+        if (nearBottom && withinX) return MODE_BOTTOM;
+        if (crop.contains(x, y)) return MODE_IMAGE;
+        return MODE_FRAME;
     }
 
     private void resizeCrop(float dx, float dy) {
-        float min = dp(80);
-        float margin = dp(4);
-        if ((activeHandle & HANDLE_LEFT) != 0) crop.left = clamp(crop.left + dx, margin, crop.right - min);
-        if ((activeHandle & HANDLE_RIGHT) != 0) crop.right = clamp(crop.right + dx, crop.left + min, getWidth() - margin);
-        if ((activeHandle & HANDLE_TOP) != 0) crop.top = clamp(crop.top + dy, margin, crop.bottom - min);
-        if ((activeHandle & HANDLE_BOTTOM) != 0) crop.bottom = clamp(crop.bottom + dy, crop.top + min, getHeight() - margin);
-        updateMinScaleForCrop();
-        constrainImage();
+        float minW = dp(90f);
+        float minH = dp(90f);
+        float margin = dp(6f);
+
+        if (mode == MODE_LEFT || mode == MODE_TOP_LEFT || mode == MODE_BOTTOM_LEFT) {
+            crop.left = clamp(crop.left + dx, margin, crop.right - minW);
+        }
+        if (mode == MODE_RIGHT || mode == MODE_TOP_RIGHT || mode == MODE_BOTTOM_RIGHT) {
+            crop.right = clamp(crop.right + dx, crop.left + minW, getWidth() - margin);
+        }
+        if (mode == MODE_TOP || mode == MODE_TOP_LEFT || mode == MODE_TOP_RIGHT) {
+            crop.top = clamp(crop.top + dy, margin, crop.bottom - minH);
+        }
+        if (mode == MODE_BOTTOM || mode == MODE_BOTTOM_LEFT || mode == MODE_BOTTOM_RIGHT) {
+            crop.bottom = clamp(crop.bottom + dy, crop.top + minH, getHeight() - margin);
+        }
+    }
+
+    private void constrainFramePosition() {
+        float margin = dp(6f);
+        if (crop.left < margin) crop.offset(margin - crop.left, 0);
+        if (crop.right > getWidth() - margin) crop.offset((getWidth() - margin) - crop.right, 0);
+        if (crop.top < margin) crop.offset(0, margin - crop.top);
+        if (crop.bottom > getHeight() - margin) crop.offset(0, (getHeight() - margin) - crop.bottom);
     }
 
     private void updateMinScaleForCrop() {
-        if (bitmap == null) return;
+        if (bitmap == null || crop.width() <= 0 || crop.height() <= 0) return;
         minScale = Math.max(crop.width() / bitmap.getWidth(), crop.height() / bitmap.getHeight());
         if (scale < minScale) {
-            float old = scale;
+            float oldScale = Math.max(scale, 0.0001f);
+            float factor = minScale / oldScale;
+            float cx = crop.centerX();
+            float cy = crop.centerY();
+            tx = cx - (cx - tx) * factor;
+            ty = cy - (cy - ty) * factor;
             scale = minScale;
-            if (old > 0f) {
-                float factor = scale / old;
-                tx = crop.centerX() - (crop.centerX() - tx) * factor;
-                ty = crop.centerY() - (crop.centerY() - ty) * factor;
-            }
         }
     }
 
@@ -213,6 +296,13 @@ public class CropEditorView extends View {
         if (bitmap == null) return;
         float imageW = bitmap.getWidth() * scale;
         float imageH = bitmap.getHeight() * scale;
+
+        if (imageW < crop.width() || imageH < crop.height()) {
+            updateMinScaleForCrop();
+            imageW = bitmap.getWidth() * scale;
+            imageH = bitmap.getHeight() * scale;
+        }
+
         if (tx > crop.left) tx = crop.left;
         if (ty > crop.top) ty = crop.top;
         if (tx + imageW < crop.right) tx = crop.right - imageW;
