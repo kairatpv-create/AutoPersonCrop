@@ -170,7 +170,7 @@ object BirthdayScheduler {
                 if(trigger<=now && item.startAt>now && item.startAt-now<=48*60*60_000L) trigger=now+2500L
                 if(trigger>now){
                     val code=(item.stableId+":"+item.startAt).hashCode()
-                    val pi=pending(context,code,item.title,item.startAt,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                    val pi=pending(context,code,item.title,item.startAt,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)?:return@forEach
                     val am=context.getSystemService(AlarmManager::class.java)
                     if(Build.VERSION.SDK_INT>=31){
                         if(am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,trigger,pi)
