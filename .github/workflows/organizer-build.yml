@@ -1,4 +1,4 @@
-name: Build Organizer Pro v0.9.21
+name: Build Organizer Pro v0.9.22
 
 on:
   push:
@@ -18,12 +18,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Java 17
+        if: ${{ hashFiles('organizer/v0112/apply.py') != '' }}
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Install Android 35
+        if: ${{ hashFiles('organizer/v0112/apply.py') != '' }}
         shell: bash
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
@@ -31,11 +33,13 @@ jobs:
           "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
+        if: ${{ hashFiles('organizer/v0112/apply.py') != '' }}
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
 
-      - name: Restore v0.9.20 and apply v0.9.21 reminder fix
+      - name: Restore v0.9.21 and apply v0.9.22 calendar update
+        if: ${{ hashFiles('organizer/v0112/apply.py') != '' }}
         shell: bash
         run: |
           python3 organizer/v0106/rebuild.py
@@ -50,63 +54,39 @@ jobs:
           mv organizer/buildsrc0106/Organizer-Pro-v0.9.19-source organizer/buildsrc0106/Organizer-Pro-v0.9.20-source
           python3 organizer/v0111/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.20-source
           mv organizer/buildsrc0106/Organizer-Pro-v0.9.20-source organizer/buildsrc0106/Organizer-Pro-v0.9.21-source
-          grep -q 'versionCode = 54' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/build.gradle.kts
-          grep -q 'versionName = "0.9.21"' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/build.gradle.kts
-          grep -q 'applicationId = "kz.kairat.organizer"' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/build.gradle.kts
-          grep -q 'supportedLanguages = listOf("kk","ru","en","zh","de","es","fr","tr")' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/src/main/java/kz/kairat/organizer/AppStrings.kt
-          grep -q 'SQLiteOpenHelper(context, "organizer.db", null, 9)' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt
-          grep -q 'organizer_reminders_v3' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/src/main/java/kz/kairat/organizer/ReminderSystem.kt
-          grep -q 'setUsage(AudioAttributes.USAGE_ALARM)' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/src/main/java/kz/kairat/organizer/ReminderSystem.kt
-          grep -q 'enableVibration(true)' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/src/main/java/kz/kairat/organizer/ReminderSystem.kt
-          grep -q 'canScheduleExactAlarms()' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/src/main/java/kz/kairat/organizer/ReminderSystem.kt
-          grep -q 'ACTION_REQUEST_SCHEDULE_EXACT_ALARM' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/src/main/java/kz/kairat/organizer/ReminderSystem.kt
-          grep -q 'setExactAndAllowWhileIdle' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/src/main/java/kz/kairat/organizer/ReminderSystem.kt
-          grep -Fq 'bounds.height()*0.30f' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/src/main/java/kz/kairat/organizer/ReminderAlertActivity.kt
-          grep -q 'Theme.MyOrganizer.ReminderAlert' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/src/main/res/values/styles.xml
-          grep -q 'SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/src/main/AndroidManifest.xml
-          grep -q 'ReminderScheduler.rescheduleAll(this)' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/src/main/java/kz/kairat/organizer/MainActivity.kt
-          grep -q 'visibleSections=if(projectsEnabled)' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt
-          grep -q 'fun getStandaloneMoneyEntries()' organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt
+          python3 organizer/v0112/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.21-source
+          mv organizer/buildsrc0106/Organizer-Pro-v0.9.21-source organizer/buildsrc0106/Organizer-Pro-v0.9.22-source
+          ROOT=organizer/buildsrc0106/Organizer-Pro-v0.9.22-source
+          grep -q 'versionCode = 55' "$ROOT/app/build.gradle.kts"
+          grep -q 'versionName = "0.9.22"' "$ROOT/app/build.gradle.kts"
+          grep -q 'applicationId = "kz.kairat.organizer"' "$ROOT/app/build.gradle.kts"
+          grep -q 'supportedLanguages = listOf("kk","ru","en","zh","de","es","fr","tr")' "$ROOT/app/src/main/java/kz/kairat/organizer/AppStrings.kt"
+          grep -q 'SQLiteOpenHelper(context, "organizer.db", null, 9)' "$ROOT/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt"
+          grep -q 'android.permission.READ_CALENDAR' "$ROOT/app/src/main/AndroidManifest.xml"
+          ! grep -q 'android.permission.WRITE_CALENDAR' "$ROOT/app/src/main/AndroidManifest.xml"
+          grep -q 'CalendarContract.Instances.CONTENT_URI' "$ROOT/app/src/main/java/kz/kairat/organizer/CalendarSystem.kt"
+          grep -q 'filter{it.kind=="birthday"}' "$ROOT/app/src/main/java/kz/kairat/organizer/CalendarSystem.kt"
+          grep -q 'add(Calendar.DAY_OF_YEAR,-1)' "$ROOT/app/src/main/java/kz/kairat/organizer/CalendarSystem.kt"
+          grep -q 'set(Calendar.HOUR_OF_DAY,9)' "$ROOT/app/src/main/java/kz/kairat/organizer/CalendarSystem.kt"
+          grep -q 'db.getAllProjectStages()' "$ROOT/app/src/main/java/kz/kairat/organizer/CalendarSystem.kt"
+          grep -q 'TopIconAction(Icons.Default.CalendarMonth)' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
+          grep -q 'OrganizerCalendarPopup(' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
+          grep -q 'fillMaxHeight(.72f)' "$ROOT/app/src/main/java/kz/kairat/organizer/CalendarUi.kt"
+          grep -q 'BirthdayScheduler.rescheduleAll(this)' "$ROOT/app/src/main/java/kz/kairat/organizer/MainActivity.kt"
+          grep -q 'organizer_reminders_v3' "$ROOT/app/src/main/java/kz/kairat/organizer/ReminderSystem.kt"
+          grep -Fq 'bounds.height()*0.30f' "$ROOT/app/src/main/java/kz/kairat/organizer/ReminderAlertActivity.kt"
+          grep -q 'fun getStandaloneMoneyEntries()' "$ROOT/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt"
 
       - name: Build APK
-        working-directory: organizer/buildsrc0106/Organizer-Pro-v0.9.21-source
-        run: gradle --no-daemon assembleDebug
+        if: ${{ hashFiles('organizer/v0112/apply.py') != '' }}
+        working-directory: organizer/buildsrc0106/Organizer-Pro-v0.9.22-source
+        run: gradle --no-daemon --build-cache assembleDebug
 
-      - name: Upload APK
+      - name: Upload APK only
+        if: ${{ hashFiles('organizer/v0112/apply.py') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: Organizer-Pro-v0.9.21-debug
-          path: organizer/buildsrc0106/Organizer-Pro-v0.9.21-source/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Archive source
-        shell: bash
-        run: |
-          cd organizer/buildsrc0106
-          zip -qr ../Organizer-Pro-v0.9.21-source.zip Organizer-Pro-v0.9.21-source
-
-      - name: Upload source
-        uses: actions/upload-artifact@v4
-        with:
-          name: Organizer-Pro-v0.9.21-source
-          path: organizer/Organizer-Pro-v0.9.21-source.zip
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Collect signing tools
-        shell: bash
-        run: |
-          mkdir -p organizer/signing-tools/lib
-          cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" organizer/signing-tools/
-          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" organizer/signing-tools/
-          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" organizer/signing-tools/lib/
-          chmod +x organizer/signing-tools/apksigner organizer/signing-tools/zipalign
-
-      - name: Upload signing tools
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-signing-tools-35
-          path: organizer/signing-tools
+          name: Organizer-Pro-v0.9.22-debug
+          path: organizer/buildsrc0106/Organizer-Pro-v0.9.22-source/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 1
