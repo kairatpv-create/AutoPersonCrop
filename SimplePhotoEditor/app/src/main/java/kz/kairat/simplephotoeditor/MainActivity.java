@@ -10,6 +10,8 @@ import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -35,55 +37,84 @@ public class MainActivity extends Activity {
 
     private final List<Uri> images = new ArrayList<>();
     private CropEditorView editor;
+    private LinearLayout bottomBar;
     private int index = -1;
     private boolean pendingSaveAfterPermission = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (Build.VERSION.SDK_INT >= 21) {
+            getWindow().setStatusBarColor(Color.BLACK);
+            getWindow().setNavigationBarColor(Color.BLACK);
+        }
         buildUi();
         ensurePermissionAndOpenGallery();
     }
 
     private void buildUi() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(0xFF000000);
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.BLACK);
+
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setBackgroundColor(Color.BLACK);
 
         editor = new CropEditorView(this);
+        editor.setBackgroundColor(Color.BLACK);
         editor.setSwipeListener(direction -> {
             if (direction < 0) showRelative(1);
             else showRelative(-1);
         });
-        root.addView(editor, new LinearLayout.LayoutParams(
+        container.addView(editor, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        LinearLayout bar = new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER);
-        bar.setPadding(dp(10), dp(6), dp(10), dp(6));
+        bottomBar = new LinearLayout(this);
+        bottomBar.setOrientation(LinearLayout.HORIZONTAL);
+        bottomBar.setGravity(Gravity.CENTER);
+        bottomBar.setBackgroundColor(Color.BLACK);
+        bottomBar.setPadding(dp(12), dp(8), dp(12), dp(12));
 
-        Button rotate = makeButton("↻");
+        Button back = makeButton("Назад");
+        back.setOnClickListener(v -> openGallery());
+
+        Button rotate = makeButton("Поворот");
         rotate.setOnClickListener(v -> editor.rotate90());
 
-        Button save = makeButton("✓");
-        save.setOnClickListener(v -> saveAndNext());
+        Button done = makeButton("Готово");
+        done.setOnClickListener(v -> saveAndNext());
 
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(58), 1f);
-        p.setMargins(dp(5), 0, dp(5), 0);
-        bar.addView(rotate, p);
-        bar.addView(save, p);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(56), 1f);
+        p.setMargins(dp(6), 0, dp(6), 0);
+        bottomBar.addView(back, p);
+        bottomBar.addView(rotate, p);
+        bottomBar.addView(done, p);
 
-        root.addView(bar, new LinearLayout.LayoutParams(
+        container.addView(bottomBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        root.addView(container, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        root.setOnApplyWindowInsetsListener((v, insets) -> {
+            int top = insets.getSystemWindowInsetTop();
+            int bottom = insets.getSystemWindowInsetBottom();
+            container.setPadding(0, top, 0, 0);
+            bottomBar.setPadding(dp(12), dp(8), dp(12), bottom + dp(12));
+            return insets;
+        });
+        root.requestApplyInsets();
+
         setContentView(root);
     }
 
     private Button makeButton(String text) {
         Button b = new Button(this);
         b.setText(text);
-        b.setTextSize(28);
         b.setAllCaps(false);
+        b.setTextSize(18);
+        b.setTextColor(Color.WHITE);
+        b.setBackgroundColor(0xFF2E2E2E);
         b.setMinHeight(0);
         b.setMinWidth(0);
         return b;
@@ -123,15 +154,17 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQ_PICK && resultCode == RESULT_OK && data != null && data.getData() != null) {
-            Uri selected = data.getData();
-            refreshImageList();
-            index = findIndex(selected);
-            if (index < 0) {
-                images.add(0, selected);
-                index = 0;
+        if (requestCode == REQ_PICK) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                Uri selected = data.getData();
+                refreshImageList();
+                index = findIndex(selected);
+                if (index < 0) {
+                    images.add(0, selected);
+                    index = 0;
+                }
+                loadCurrent();
             }
-            loadCurrent();
         } else if (requestCode == REQ_WRITE && resultCode == RESULT_OK && pendingSaveAfterPermission) {
             pendingSaveAfterPermission = false;
             saveAndNext();
@@ -167,7 +200,7 @@ public class MainActivity extends Activity {
         Uri uri = images.get(index);
         try (InputStream in = getContentResolver().openInputStream(uri)) {
             if (in == null) return;
-            Bitmap bitmap = android.graphics.BitmapFactory.decodeStream(in);
+            Bitmap bitmap = BitmapFactory.decodeStream(in);
             if (bitmap != null) editor.setBitmap(bitmap);
         } catch (IOException e) {
             Toast.makeText(this, "Не удалось открыть фото", Toast.LENGTH_SHORT).show();
@@ -177,7 +210,10 @@ public class MainActivity extends Activity {
     private void showRelative(int delta) {
         if (images.isEmpty()) return;
         int next = index + delta;
-        if (next < 0 || next >= images.size()) return;
+        if (next < 0 || next >= images.size()) {
+            Toast.makeText(this, "Больше фото нет", Toast.LENGTH_SHORT).show();
+            return;
+        }
         index = next;
         loadCurrent();
     }
@@ -204,10 +240,14 @@ public class MainActivity extends Activity {
 
     private void writeBitmap(Uri uri, Bitmap bitmap) throws IOException {
         ContentResolver resolver = getContentResolver();
+        String type = resolver.getType(uri);
+        Bitmap.CompressFormat format = (type != null && type.toLowerCase().contains("png"))
+                ? Bitmap.CompressFormat.PNG
+                : Bitmap.CompressFormat.JPEG;
         try (OutputStream out = resolver.openOutputStream(uri, "rwt")) {
             if (out == null) throw new IOException("No output stream");
-            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 96, out)) {
-                throw new IOException("JPEG compression failed");
+            if (!bitmap.compress(format, 96, out)) {
+                throw new IOException("Compression failed");
             }
             out.flush();
         }
