@@ -8,6 +8,10 @@ on:
       - '.github/workflows/simple-photo-editor.yml'
   workflow_dispatch:
 
+concurrency:
+  group: simple-photo-editor-build
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,12 +34,34 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Restore stable debug keystore
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: simple-photo-editor-debug-keystore-v1
+
+      - name: Ensure stable debug keystore exists
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | grep -E 'SHA1:|SHA256:'
+
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SimplePhotoEditor-0.1.0-debug
+          name: SimplePhotoEditor-0.1.8-debug
           path: SimplePhotoEditor/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
