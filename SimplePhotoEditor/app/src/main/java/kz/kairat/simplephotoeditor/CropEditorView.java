@@ -103,6 +103,15 @@ public class CropEditorView extends View {
         invalidate();
     }
 
+    public void applyCrop() {
+        Bitmap cropped = createCroppedBitmap();
+        if (cropped == null) return;
+        if (bitmap != null && bitmap != cropped && !bitmap.isRecycled()) bitmap.recycle();
+        bitmap = cropped;
+        resetGeometry();
+        invalidate();
+    }
+
     private void resetGeometry() {
         if (bitmap == null || getWidth() == 0 || getHeight() == 0) return;
 
