@@ -7,20 +7,23 @@ import kz.autopersoncrop.core.RectD
 import kz.autopersoncrop.ml.PersonDetector
 import kz.autopersoncrop.ml.YoloLiteRtPersonDetector
 import kotlin.math.abs
-import kotlin.math.ceil
-import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
- * Detector for controlled material: every source contains exactly one person or two wrestlers and no
- * unrelated people. The important rule here is consensus, not an extremely low confidence threshold.
+ * Detector for the controlled input rule: the frame contains only the wanted one person or two
+ * wrestlers. There are no spectators, coaches or referees to reject.
  *
- * Several independent views are evaluated. A candidate becomes a real subject only when it is
- * confirmed by more than one view, or by the stronger whole-frame pass with plausible geometry.
- * This prevents a single huge low-confidence YOLO box from turning the crop back into the full image.
+ * Because of that, recall is more important than requiring the same person to be confirmed by two
+ * independent views. A standing person can come from the normal pass, while a lying wrestler may be
+ * visible only after a 90-degree detector view or inside an enlarged tile. Any plausible person box
+ * is useful evidence. We merge repeated evidence, reject only frame-like garbage, and return the
+ * small set of boxes that belongs to the same action area.
+ *
+ * The source image itself is never rotated. Temporary rotated detector views are mapped back to the
+ * original coordinates before crop planning.
  */
 class RobustPersonDetector(
     private val delegate: YoloLiteRtPersonDetector,
@@ -38,47 +41,84 @@ class RobustPersonDetector(
     )
 
     private data class RankedCandidate(
+        val rect: RectD,
         val score: Double,
-        val cluster: CandidateCluster,
         val passCount: Int,
-        val hasStrongWhole: Boolean,
     )
 
     override fun detect(bitmap: Bitmap): List<RectD> {
         val observations = ArrayList<Observation>()
-        observations += observe(delegate.detect(bitmap, WHOLE_STRONG_CONFIDENCE), bitmap, PASS_WHOLE_STRONG, 4.0)
-        observations += observe(delegate.detect(bitmap, WHOLE_SOFT_CONFIDENCE), bitmap, PASS_WHOLE_SOFT, 2.8)
+
+        // Whole-frame views.
+        observations += observe(
+            delegate.detect(bitmap, WHOLE_STRONG_CONFIDENCE),
+            bitmap,
+            PASS_WHOLE_STRONG,
+            4.0,
+        )
+        observations += observe(
+            delegate.detect(bitmap, WHOLE_SOFT_CONFIDENCE),
+            bitmap,
+            PASS_WHOLE_SOFT,
+            2.7,
+        )
+
+        // A generic person model is weakest on lying/rotated wrestling poses. These views are not an
+        // emergency fallback any more; they are a normal part of recognition for this material.
         observations += detectRotated(bitmap, 90, PASS_ROTATED_90)
         observations += detectRotated(bitmap, -90, PASS_ROTATED_MINUS_90)
+        observations += detectRotated(bitmap, 180, PASS_ROTATED_180)
+
+        // Enlarged views help when two wrestlers overlap or occupy a small part of the original.
         observations += detectOverlappingStrips(bitmap)
         observations += detectOverlappingGrid(bitmap)
 
-        val clusters = buildClusters(observations)
-        val ranked = clusters
-            .mapNotNull { cluster -> rankCluster(cluster, bitmap) }
-            .sortedByDescending { it.score }
-
-        val selected = selectSubjects(ranked, bitmap)
-        if (selected.isEmpty()) {
-            Log.w(TAG, "No reliable person consensus: observations=${observations.size}, clusters=${clusters.size}")
-            return failureMarker()
+        if (observations.isEmpty()) {
+            Log.w(TAG, "No person observations in any detector view")
+            return emptyList()
         }
 
-        val refined = selected.map { refineSubject(bitmap, it) }
+        val ranked = buildClusters(observations)
+            .mapNotNull { rankCluster(it, bitmap) }
+            .sortedByDescending { it.score }
+
+        if (ranked.isEmpty()) {
+            Log.w(TAG, "All person observations were rejected as implausible")
+            return emptyList()
+        }
+
+        val primary = ranked.first()
+        val selected = ArrayList<RectD>()
+        selected += primary.rect
+
+        // We do not have to decide perfectly whether every box is person #1 or person #2. Crop
+        // planning only needs the complete action envelope. Keep a few non-duplicate boxes that are
+        // physically in the same action area; their union safely covers one or both wrestlers.
+        for (candidate in ranked.drop(1)) {
+            if (selected.size >= MAX_ACTION_BOXES) break
+            if (selected.any { sameFinalSubject(it, candidate.rect) }) continue
+            if (candidate.score < primary.score * MIN_RELATED_SCORE_RATIO) continue
+            if (!belongsToSameAction(primary.rect, candidate.rect, bitmap)) continue
+            selected += candidate.rect
+        }
+
+        val result = selected
+            .map { addSmallDetectorSafety(it, bitmap) }
+            .filter { usefulBox(it, bitmap) }
+
         Log.i(
             TAG,
-            "Person consensus: observations=${observations.size}, clusters=${clusters.size}, selected=${refined.size}, boxes=${refined.joinToString()}",
+            "person views=${observations.size}, clusters=${ranked.size}, kept=${result.size}, boxes=${result.joinToString()}",
         )
-        return refined
+        return result
     }
 
-    /** PhotoProcessor should normally stop after detect(bitmap). Keep explicit calls conservative. */
     override fun detect(bitmap: Bitmap, minConfidence: Float): List<RectD> {
         val threshold = maxOf(minConfidence, EXPLICIT_MIN_CONFIDENCE)
         return delegate.detect(bitmap, threshold)
             .filter { usefulBox(it, bitmap) }
             .sortedByDescending { it.area }
-            .take(4)
+            .take(MAX_ACTION_BOXES)
     }
 
     private fun observe(
@@ -109,12 +149,18 @@ class RobustPersonDetector(
                             src.width - box.top,
                             box.right,
                         )
+                        180 -> RectD(
+                            src.width - box.right,
+                            src.height - box.bottom,
+                            src.width - box.left,
+                            src.height - box.top,
+                        )
                         else -> return@mapNotNull null
                     }
                     clamp(mapped, src.width, src.height)
                 }
                 .filter { usefulBox(it, src) }
-                .map { Observation(it, passId, 2.5) }
+                .map { Observation(it, passId, 2.4) }
         } finally {
             if (rotated !== src && !rotated.isRecycled) rotated.recycle()
         }
@@ -123,7 +169,7 @@ class RobustPersonDetector(
     private fun detectOverlappingStrips(src: Bitmap): List<Observation> {
         val horizontal = src.width >= src.height
         val longSide = if (horizontal) src.width else src.height
-        if (longSide < 360) return emptyList()
+        if (longSide < 320) return emptyList()
 
         val tileLong = (longSide * STRIP_FRACTION).roundToInt().coerceIn(1, longSide)
         val end = longSide - tileLong
@@ -145,7 +191,7 @@ class RobustPersonDetector(
                     }
                     clamp(mapped, src.width, src.height)
                         ?.takeIf { usefulBox(it, src) }
-                        ?.let { found += Observation(it, PASS_STRIP_BASE + index, 1.9) }
+                        ?.let { found += Observation(it, PASS_STRIP_BASE + index, 1.8) }
                 }
             } finally {
                 if (tile !== src && !tile.isRecycled) tile.recycle()
@@ -155,11 +201,11 @@ class RobustPersonDetector(
     }
 
     private fun detectOverlappingGrid(src: Bitmap): List<Observation> {
-        if (src.width < 280 || src.height < 220) return emptyList()
+        if (src.width < 260 || src.height < 200) return emptyList()
 
         val landscape = src.width >= src.height
-        val tileW = (src.width * if (landscape) 0.62 else 0.84).roundToInt().coerceIn(1, src.width)
-        val tileH = (src.height * if (landscape) 0.84 else 0.62).roundToInt().coerceIn(1, src.height)
+        val tileW = (src.width * if (landscape) 0.64 else 0.86).roundToInt().coerceIn(1, src.width)
+        val tileH = (src.height * if (landscape) 0.86 else 0.64).roundToInt().coerceIn(1, src.height)
         val xEnd = src.width - tileW
         val yEnd = src.height - tileH
         val xOffsets = intArrayOf(0, xEnd / 2, xEnd).distinct()
@@ -180,7 +226,7 @@ class RobustPersonDetector(
                         )
                         clamp(mapped, src.width, src.height)
                             ?.takeIf { usefulBox(it, src) }
-                            ?.let { found += Observation(it, pass, 1.45) }
+                            ?.let { found += Observation(it, pass, 1.35) }
                     }
                 } finally {
                     if (tile !== src && !tile.isRecycled) tile.recycle()
@@ -200,11 +246,8 @@ class RobustPersonDetector(
                 .maxByOrNull { it.second }
                 ?.first
 
-            if (best == null) {
-                clusters += CandidateCluster(mutableListOf(observation))
-            } else {
-                best.observations += observation
-            }
+            if (best == null) clusters += CandidateCluster(mutableListOf(observation))
+            else best.observations += observation
         }
         return clusters
     }
@@ -214,162 +257,66 @@ class RobustPersonDetector(
         val rect = representative(cluster)
         if (!usefulBox(rect, src)) return null
 
+        val imageArea = src.width.toDouble() * src.height.toDouble()
+        val areaFraction = rect.area / imageArea.coerceAtLeast(1.0)
         val passWeights = cluster.observations
             .groupBy { it.passId }
             .mapValues { (_, values) -> values.maxOf { it.weight } }
         val passCount = passWeights.size
         val support = passWeights.values.sum()
-        val hasStrongWhole = PASS_WHOLE_STRONG in passWeights
 
-        val widthFraction = rect.width / src.width.toDouble()
-        val heightFraction = rect.height / src.height.toDouble()
-        val areaFraction = rect.area / (src.width.toDouble() * src.height.toDouble())
-
-        if (widthFraction > 0.92 && heightFraction > 0.92) return null
-        if (widthFraction > 0.86 && heightFraction > 0.86 && passCount < 3) return null
-
-        val framePenalty = if (widthFraction > 0.84 && heightFraction > 0.84) 3.0 else 0.0
-        val sizeBonus = sqrt(areaFraction.coerceIn(0.0, 0.55)) * 2.2
-        val score = support + passCount * 0.65 + sizeBonus - framePenalty
-        if (score <= 0.5) return null
-
-        return RankedCandidate(score, cluster, passCount, hasStrongWhole)
+        // A single rotated/tile observation is valid in this controlled dataset. Multi-view support
+        // still ranks higher, but it is no longer mandatory.
+        val sizeBonus = sqrt(areaFraction.coerceIn(0.0, 0.65)) * 1.6
+        val score = support + passCount * 0.50 + sizeBonus
+        return RankedCandidate(rect, score, passCount)
     }
 
-    private fun selectSubjects(
-        ranked: List<RankedCandidate>,
-        src: Bitmap,
-    ): List<RectD> {
-        if (ranked.isEmpty()) return emptyList()
-
-        val primaryRanked = ranked.firstOrNull { it.hasStrongWhole || it.passCount >= 2 } ?: return emptyList()
-        val primary = representative(primaryRanked.cluster)
-        val selected = ArrayList<RectD>()
-        selected += primary
-
-        for (candidateRanked in ranked) {
-            if (candidateRanked === primaryRanked) continue
-            val candidate = representative(candidateRanked.cluster)
-            if (sameFinalSubject(primary, candidate)) continue
-            if (!plausiblePartner(primary, candidate, src)) continue
-
-            val minimumSecondScore = if (candidateRanked.passCount >= 2 || candidateRanked.hasStrongWhole) {
-                primaryRanked.score * SECOND_SCORE_RATIO
-            } else {
-                primaryRanked.score * SINGLE_VIEW_SECOND_SCORE_RATIO
-            }
-            if (candidateRanked.score < minimumSecondScore) continue
-            selected += candidate
-            break
-        }
-        return selected
-    }
-
-    private fun plausiblePartner(a: RectD, b: RectD, src: Bitmap): Boolean {
-        val areaRatio = min(a.area, b.area) / max(a.area, b.area).coerceAtLeast(1.0)
-        if (areaRatio < MIN_SECOND_AREA_RATIO) return false
-        if (overlapFractionOfSmaller(a, b) > 0.02) return true
+    private fun belongsToSameAction(primary: RectD, candidate: RectD, src: Bitmap): Boolean {
+        val areaRatio = min(primary.area, candidate.area) /
+            max(primary.area, candidate.area).coerceAtLeast(1.0)
+        if (areaRatio < MIN_RELATED_AREA_RATIO) return false
+        if (overlapFractionOfSmaller(primary, candidate) >= 0.01) return true
 
         val horizontalGap = when {
-            a.right < b.left -> b.left - a.right
-            b.right < a.left -> a.left - b.right
+            primary.right < candidate.left -> candidate.left - primary.right
+            candidate.right < primary.left -> primary.left - candidate.right
             else -> 0.0
         }
         val verticalGap = when {
-            a.bottom < b.top -> b.top - a.bottom
-            b.bottom < a.top -> a.top - b.bottom
+            primary.bottom < candidate.top -> candidate.top - primary.bottom
+            candidate.bottom < primary.top -> primary.top - candidate.bottom
             else -> 0.0
         }
         val normalizedGap = sqrt(
             (horizontalGap / src.width.toDouble()).let { it * it } +
                 (verticalGap / src.height.toDouble()).let { it * it }
         )
-        return normalizedGap <= MAX_PARTNER_GAP
+        return normalizedGap <= MAX_ACTION_GAP
     }
 
-    private fun refineSubject(src: Bitmap, anchor: RectD): RectD {
-        val padX = max(anchor.width * 0.30, src.width * 0.025)
-        val padY = max(anchor.height * 0.24, src.height * 0.025)
-        val region = clamp(
-            RectD(anchor.left - padX, anchor.top - padY, anchor.right + padX, anchor.bottom + padY),
-            src.width,
-            src.height,
-        ) ?: return anchor
-
-        if (region.width >= src.width * 0.96 && region.height >= src.height * 0.96) return anchor
-
-        val left = floor(region.left).toInt().coerceIn(0, src.width - 1)
-        val top = floor(region.top).toInt().coerceIn(0, src.height - 1)
-        val right = ceil(region.right).toInt().coerceIn(left + 1, src.width)
-        val bottom = ceil(region.bottom).toInt().coerceIn(top + 1, src.height)
-        val tile = Bitmap.createBitmap(src, left, top, right - left, bottom - top)
-
-        return try {
-            val local = delegate.detect(tile, FOCUS_CONFIDENCE)
-                .mapNotNull { box ->
-                    clamp(
-                        RectD(box.left + left, box.top + top, box.right + left, box.bottom + top),
-                        src.width,
-                        src.height,
-                    )
-                }
-                .filter { usefulBox(it, src) && sameForeground(anchor, it) }
-
-            val best = local.maxByOrNull { localMatchScore(anchor, it) } ?: return addSafety(anchor, src)
-            val merged = union(anchor, best)
-            val maxAllowedArea = anchor.area * MAX_REFINEMENT_AREA_GROWTH
-            val safe = if (merged.area <= maxAllowedArea) merged else anchor
-            addSafety(safe, src)
-        } finally {
-            if (tile !== src && !tile.isRecycled) tile.recycle()
-        }
-    }
-
-    private fun addSafety(rect: RectD, src: Bitmap): RectD {
-        val mx = max(rect.width * DETECTOR_SAFETY, src.width * 0.004)
-        val my = max(rect.height * DETECTOR_SAFETY, src.height * 0.004)
-        return clamp(
-            RectD(rect.left - mx, rect.top - my, rect.right + mx, rect.bottom + my),
-            src.width,
-            src.height,
-        ) ?: rect
-    }
-
-    private fun sameForeground(anchor: RectD, candidate: RectD): Boolean {
-        val overlap = overlapFractionOfSmaller(anchor, candidate)
-        val areaRatio = min(anchor.area, candidate.area) / max(anchor.area, candidate.area).coerceAtLeast(1.0)
-        val dx = abs(anchor.centerX - candidate.centerX) / max(anchor.width, candidate.width).coerceAtLeast(1.0)
-        val dy = abs(anchor.centerY - candidate.centerY) / max(anchor.height, candidate.height).coerceAtLeast(1.0)
-        return when {
-            iou(anchor, candidate) >= 0.58 && dx <= 0.24 && dy <= 0.24 -> true
-            overlap >= 0.82 && areaRatio >= 0.32 && dx <= 0.22 && dy <= 0.22 -> true
-            else -> false
-        }
-    }
-
-    private fun localMatchScore(anchor: RectD, candidate: RectD): Double {
-        val overlap = overlapFractionOfSmaller(anchor, candidate)
-        val areaGain = (candidate.area / anchor.area.coerceAtLeast(1.0)).coerceIn(0.4, 2.0)
-        val dx = abs(anchor.centerX - candidate.centerX) / max(anchor.width, candidate.width).coerceAtLeast(1.0)
-        val dy = abs(anchor.centerY - candidate.centerY) / max(anchor.height, candidate.height).coerceAtLeast(1.0)
-        return overlap * 1.8 + areaGain * 0.24 - (dx + dy) * 0.45
-    }
-
+    /**
+     * Cluster representative deliberately uses robust outer quantiles rather than a pure median.
+     * It keeps head/feet/hands seen by only some passes while ignoring a single wild outlier when
+     * several passes agree.
+     */
     private fun representative(cluster: CandidateCluster): RectD {
         val observations = cluster.observations
+        if (observations.size == 1) return observations.first().rect
+
         return RectD(
-            median(observations.map { it.rect.left }),
-            median(observations.map { it.rect.top }),
-            median(observations.map { it.rect.right }),
-            median(observations.map { it.rect.bottom }),
+            quantile(observations.map { it.rect.left }, 0.20),
+            quantile(observations.map { it.rect.top }, 0.20),
+            quantile(observations.map { it.rect.right }, 0.80),
+            quantile(observations.map { it.rect.bottom }, 0.80),
         )
     }
 
-    private fun median(values: List<Double>): Double {
+    private fun quantile(values: List<Double>, fraction: Double): Double {
         val sorted = values.sorted()
-        val middle = sorted.size / 2
-        return if (sorted.size % 2 == 1) sorted[middle]
-        else (sorted[middle - 1] + sorted[middle]) / 2.0
+        if (sorted.size == 1) return sorted.first()
+        val index = ((sorted.lastIndex) * fraction).roundToInt().coerceIn(0, sorted.lastIndex)
+        return sorted[index]
     }
 
     private fun clusterAffinity(a: RectD, b: RectD): Double {
@@ -379,8 +326,8 @@ class RobustPersonDetector(
         val dx = abs(a.centerX - b.centerX) / max(a.width, b.width).coerceAtLeast(1.0)
         val dy = abs(a.centerY - b.centerY) / max(a.height, b.height).coerceAtLeast(1.0)
 
-        if (areaRatio < 0.30 || dx > 0.30 || dy > 0.30) return 0.0
-        return overlap * 0.60 + smallerOverlap * 0.30 + areaRatio * 0.10
+        if (dx > 0.55 || dy > 0.55) return 0.0
+        return overlap * 0.50 + smallerOverlap * 0.35 + areaRatio * 0.15
     }
 
     private fun sameFinalSubject(a: RectD, b: RectD): Boolean {
@@ -388,23 +335,36 @@ class RobustPersonDetector(
         val areaRatio = min(a.area, b.area) / max(a.area, b.area).coerceAtLeast(1.0)
         val dx = abs(a.centerX - b.centerX) / max(a.width, b.width).coerceAtLeast(1.0)
         val dy = abs(a.centerY - b.centerY) / max(a.height, b.height).coerceAtLeast(1.0)
-        return overlap >= 0.86 && areaRatio >= 0.62 && dx <= 0.12 && dy <= 0.12
+        return overlap >= 0.82 && areaRatio >= 0.55 && dx <= 0.16 && dy <= 0.16
     }
 
     private fun usefulBox(box: RectD, src: Bitmap): Boolean {
         if (box.width < 4.0 || box.height < 4.0) return false
+        val imageArea = src.width.toDouble() * src.height.toDouble()
         val widthFraction = box.width / src.width.toDouble()
         val heightFraction = box.height / src.height.toDouble()
-        val areaFraction = box.area / (src.width.toDouble() * src.height.toDouble())
+        val areaFraction = box.area / imageArea.coerceAtLeast(1.0)
         val aspect = box.width / box.height.coerceAtLeast(1.0)
 
         if (areaFraction < MIN_BOX_AREA_FRACTION) return false
-        if (widthFraction > 0.92 && heightFraction > 0.92) return false
-        if (aspect < 0.10 || aspect > 6.5) return false
+        // This is the important false-positive guard: a vague low-confidence box covering almost the
+        // whole source is not a person. A real lying body may span nearly all width, so width alone is
+        // never rejected.
+        if (areaFraction > MAX_FRAME_LIKE_AREA_FRACTION) return false
+        if (widthFraction > 0.97 && heightFraction > 0.88) return false
+        if (aspect < 0.07 || aspect > 8.0) return false
         return true
     }
 
-    private fun failureMarker(): List<RectD> = listOf(RectD(-10.0, -10.0, -9.0, -9.0))
+    private fun addSmallDetectorSafety(rect: RectD, src: Bitmap): RectD {
+        val mx = max(rect.width * DETECTOR_SAFETY, src.width * 0.002)
+        val my = max(rect.height * DETECTOR_SAFETY, src.height * 0.002)
+        return clamp(
+            RectD(rect.left - mx, rect.top - my, rect.right + mx, rect.bottom + my),
+            src.width,
+            src.height,
+        ) ?: rect
+    }
 
     private fun overlapFractionOfSmaller(a: RectD, b: RectD): Double {
         val left = max(a.left, b.left)
@@ -424,13 +384,6 @@ class RobustPersonDetector(
         return if (right - left >= 2.0 && bottom - top >= 2.0) RectD(left, top, right, bottom) else null
     }
 
-    private fun union(a: RectD, b: RectD): RectD = RectD(
-        min(a.left, b.left),
-        min(a.top, b.top),
-        max(a.right, b.right),
-        max(a.bottom, b.bottom),
-    )
-
     private fun iou(a: RectD, b: RectD): Double {
         val left = max(a.left, b.left)
         val top = max(a.top, b.top)
@@ -445,30 +398,30 @@ class RobustPersonDetector(
     override fun close() = delegate.close()
 
     companion object {
-        private const val TAG = "AutoPersonCropConsensus"
+        private const val TAG = "AutoPersonCropAction"
 
-        private const val WHOLE_STRONG_CONFIDENCE = 0.13f
-        private const val WHOLE_SOFT_CONFIDENCE = 0.07f
-        private const val ROTATED_CONFIDENCE = 0.07f
-        private const val STRIP_CONFIDENCE = 0.055f
-        private const val GRID_CONFIDENCE = 0.045f
-        private const val FOCUS_CONFIDENCE = 0.060f
-        private const val EXPLICIT_MIN_CONFIDENCE = 0.055f
+        private const val WHOLE_STRONG_CONFIDENCE = 0.14f
+        private const val WHOLE_SOFT_CONFIDENCE = 0.055f
+        private const val ROTATED_CONFIDENCE = 0.045f
+        private const val STRIP_CONFIDENCE = 0.040f
+        private const val GRID_CONFIDENCE = 0.035f
+        private const val EXPLICIT_MIN_CONFIDENCE = 0.040f
 
         private const val STRIP_FRACTION = 0.70
         private const val MIN_BOX_AREA_FRACTION = 0.0010
-        private const val CLUSTER_AFFINITY_THRESHOLD = 0.56
-        private const val SECOND_SCORE_RATIO = 0.30
-        private const val SINGLE_VIEW_SECOND_SCORE_RATIO = 0.18
-        private const val MIN_SECOND_AREA_RATIO = 0.055
-        private const val MAX_PARTNER_GAP = 0.28
-        private const val MAX_REFINEMENT_AREA_GROWTH = 1.75
-        private const val DETECTOR_SAFETY = 0.025
+        private const val MAX_FRAME_LIKE_AREA_FRACTION = 0.84
+        private const val CLUSTER_AFFINITY_THRESHOLD = 0.43
+        private const val MIN_RELATED_AREA_RATIO = 0.025
+        private const val MIN_RELATED_SCORE_RATIO = 0.10
+        private const val MAX_ACTION_GAP = 0.55
+        private const val DETECTOR_SAFETY = 0.010
+        private const val MAX_ACTION_BOXES = 4
 
         private const val PASS_WHOLE_STRONG = 0
         private const val PASS_WHOLE_SOFT = 1
         private const val PASS_ROTATED_90 = 2
         private const val PASS_ROTATED_MINUS_90 = 3
+        private const val PASS_ROTATED_180 = 4
         private const val PASS_STRIP_BASE = 10
         private const val PASS_GRID_BASE = 20
     }
