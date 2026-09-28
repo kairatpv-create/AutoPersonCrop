@@ -17,6 +17,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify direct crop pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE="app/src/main/java/kz/autopersoncrop/batch/PhotoProcessor.kt"
+          for forbidden in "copyExact(" "sequenceFallback" "sequenceAssist" "detectPeopleWithRecovery"; do
+            if grep -Fq "$forbidden" "$FILE"; then
+              echo "Forbidden legacy pass-through path found: $forbidden"
+              exit 1
+            fi
+          done
+          grep -Fq "transformer.crop(" "$FILE"
+          grep -Fq "JPEG-рамка" "$FILE"
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
