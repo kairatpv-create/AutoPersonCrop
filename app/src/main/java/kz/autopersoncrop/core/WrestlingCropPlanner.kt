@@ -6,22 +6,32 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Crop planner for controlled source frames that contain only one person or two wrestlers.
+ * Crop planner for controlled source frames containing only one person or two wrestlers.
  *
- * Rules:
- * - crop only: never stretch, squeeze, scale, rotate or recenter the people;
- * - portrait: normally trim 5% from source top and bottom, unless that would cut a body;
- * - landscape: normally trim 5% from source left and right, unless that would cut a body;
- * - the opposite pair of edges is chosen only to make a natural portrait/landscape frame;
- * - all people stay fully inside the crop with a small safety margin.
+ * The image is never scaled, stretched, squeezed, rotated or force-centred. Only crop boundaries
+ * move. Portrait and landscape are photographic shape ranges, not rigid aspect ratios: a rigid
+ * ratio previously expanded wide action shots back to the complete source frame.
+ *
+ * Portrait:
+ *  - normally remove 5% from source top and 5% from source bottom;
+ *  - if a body occupies that zone, move that edge outward to keep the body;
+ *  - choose only as much side width as is needed for a natural portrait.
+ *
+ * Landscape:
+ *  - normally remove 5% from source left and 5% from source right;
+ *  - if a body occupies that zone, move that edge outward to keep the body;
+ *  - choose only as much top/bottom height as is needed for a natural landscape.
  */
 object WrestlingCropPlanner {
     private const val SOURCE_TRIM = 0.05
     private const val BODY_SAFETY = 0.025
     private const val MIN_IMAGE_SAFETY = 0.006
 
-    private const val PORTRAIT_WIDTH_TO_HEIGHT = 0.75
-    private const val LANDSCAPE_WIDTH_TO_HEIGHT = 1.70
+    // These are composition guides, not mandatory output ratios.
+    private const val PORTRAIT_GUIDE_ASPECT = 0.75
+    private const val PORTRAIT_MAX_SOURCE_WIDTH = 0.88
+    private const val LANDSCAPE_GUIDE_ASPECT = 16.0 / 9.0
+    private const val LANDSCAPE_MAX_SOURCE_HEIGHT = 0.90
 
     private enum class Orientation { PORTRAIT, LANDSCAPE }
 
@@ -46,10 +56,7 @@ object WrestlingCropPlanner {
     }
 
     private fun chooseOrientation(subjects: List<RectD>, group: RectD): Orientation {
-        val effectivelySingle = subjects.size == 1 ||
-            (subjects.size >= 2 && overlapIoU(subjects[0], subjects[1]) >= 0.98)
-
-        if (effectivelySingle) {
+        if (subjects.size == 1) {
             return if (group.height >= group.width * 1.05) Orientation.PORTRAIT
             else Orientation.LANDSCAPE
         }
@@ -83,8 +90,12 @@ object WrestlingCropPlanner {
         val bottom = max(desiredBottom, protected.bottom)
         val height = (bottom - top).coerceAtLeast(1.0)
 
-        val requiredWidth = protected.width
-        val targetWidth = max(height * PORTRAIT_WIDTH_TO_HEIGHT, requiredWidth)
+        // Do not widen all the way to the source just to hit a fixed portrait ratio.
+        val guidedWidth = min(
+            height * PORTRAIT_GUIDE_ASPECT,
+            image.width * PORTRAIT_MAX_SOURCE_WIDTH,
+        )
+        val targetWidth = max(guidedWidth, protected.width)
             .coerceAtMost(image.width.toDouble())
 
         val horizontal = placeWindowPreservingSourcePosition(
@@ -106,8 +117,14 @@ object WrestlingCropPlanner {
         val right = max(desiredRight, protected.right)
         val width = (right - left).coerceAtLeast(1.0)
 
-        val requiredHeight = protected.height
-        val targetHeight = max(width / LANDSCAPE_WIDTH_TO_HEIGHT, requiredHeight)
+        // A wide pair may legitimately force left/right to the source edges. Previously width/1.70
+        // could then demand the full source height. Cap the composition guide at 90% of source height;
+        // protected body geometry can still override the cap when necessary.
+        val guidedHeight = min(
+            width / LANDSCAPE_GUIDE_ASPECT,
+            image.height * LANDSCAPE_MAX_SOURCE_HEIGHT,
+        )
+        val targetHeight = max(guidedHeight, protected.height)
             .coerceAtMost(image.height.toDouble())
 
         val vertical = placeWindowPreservingSourcePosition(
@@ -121,6 +138,11 @@ object WrestlingCropPlanner {
         return RectD(left, vertical.first, right, vertical.second)
     }
 
+    /**
+     * Preserve the subject's relative source position. This is intentionally not centring: if the
+     * person is left, right, high or low in the source, the crop keeps that visual bias whenever the
+     * image boundaries allow it.
+     */
     private fun placeWindowPreservingSourcePosition(
         sourceSize: Double,
         targetSize: Double,
@@ -150,17 +172,6 @@ object WrestlingCropPlanner {
         if (start > requiredMin) start = requiredMin.coerceAtLeast(0.0)
         if (end < requiredMax) end = requiredMax.coerceAtMost(sourceSize)
         return start to end
-    }
-
-    private fun overlapIoU(a: RectD, b: RectD): Double {
-        val left = max(a.left, b.left)
-        val top = max(a.top, b.top)
-        val right = min(a.right, b.right)
-        val bottom = min(a.bottom, b.bottom)
-        if (right <= left || bottom <= top) return 0.0
-        val intersection = (right - left) * (bottom - top)
-        val union = a.area + b.area - intersection
-        return if (union <= 0.0) 0.0 else intersection / union
     }
 
     private fun RectD.toPixelRect(image: ImageSize): PixelRect {
