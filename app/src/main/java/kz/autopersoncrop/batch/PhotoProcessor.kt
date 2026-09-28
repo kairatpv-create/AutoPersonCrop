@@ -15,7 +15,6 @@ import kz.autopersoncrop.core.ImageSize
 import kz.autopersoncrop.core.PixelRect
 import kz.autopersoncrop.core.RectD
 import kz.autopersoncrop.core.WrestlingCropPlanner
-import kz.autopersoncrop.core.WrestlingSubjectSelector
 import kz.autopersoncrop.io.ImageFrameLoader
 import kz.autopersoncrop.io.PhotoFrame
 import kz.autopersoncrop.io.SourcePhoto
@@ -34,15 +33,14 @@ sealed class ProcessResult {
 }
 
 /**
- * Direct processor for the controlled source rule used from 0.7.10:
- * every source image contains exactly one person or two wrestlers and no unrelated people.
+ * Direct processor for controlled material: every source contains only the wanted one person or two
+ * wrestlers. The robust detector may return several overlapping evidence boxes from different views;
+ * they all belong to the wanted action. Crop planning therefore uses their combined envelope instead
+ * of trying to re-decide which box is "person #1" or "person #2" a second time.
  *
- * There is deliberately no sequence memory, neighbour-frame recovery, second detector tree or
- * successful full-frame copy. A file has only two valid outcomes:
- *  1) one/two reliable people -> a smaller crop is written to CROP;
- *  2) reliable geometry cannot be produced -> the file is marked ERROR by the batch service.
- *
- * This makes recognition failures visible instead of hiding them as untouched originals in CROP.
+ * There is no successful full-frame copy. A valid result must be an actual crop. If reliable person
+ * geometry cannot be produced, the batch service records an ERROR instead of hiding the failure as
+ * an untouched JPEG in CROP.
  */
 class PhotoProcessor(
     private val context: Context,
@@ -73,23 +71,17 @@ class PhotoProcessor(
         val previewHeight = preview.height
 
         val previewSubjects = try {
-            val detected = detector.detect(preview)
-            if (detected.isEmpty()) {
-                throw IllegalStateException("Человек не распознан; исходник не скопирован")
-            }
-            WrestlingSubjectSelector.select(
-                ImageSize(previewWidth, previewHeight),
-                detected,
-            )
+            detector.detect(preview)
+                .filterNot { it.left < 0.0 || it.top < 0.0 || it.right <= it.left || it.bottom <= it.top }
         } finally {
             if (!preview.isRecycled) preview.recycle()
         }
 
         require(previewSubjects.isNotEmpty()) {
-            "Нет подтверждённого человека; исходник не скопирован"
+            "Человек не распознан ни в одном проходе; исходник не скопирован"
         }
-        require(previewSubjects.size <= 2) {
-            "Ожидался один человек или два борца, получено ${previewSubjects.size}"
+        require(previewSubjects.size <= MAX_DETECTOR_EVIDENCE_BOXES) {
+            "Слишком много областей распознавания: ${previewSubjects.size}"
         }
 
         val sx = frame.uprightWidth.toDouble() / previewWidth.coerceAtLeast(1)
@@ -117,7 +109,7 @@ class PhotoProcessor(
 
         Log.i(
             TAG,
-            "${photo.name}: subjects=${subjects.size} " +
+            "${photo.name}: evidence=${subjects.size} " +
                 "upright=${imageSize.width}x${imageSize.height} " +
                 "crop=${uprightCrop.left},${uprightCrop.top}-${uprightCrop.right},${uprightCrop.bottom} " +
                 "raw=${raw.left},${raw.top}-${raw.right},${raw.bottom}",
@@ -148,16 +140,16 @@ class PhotoProcessor(
             val wf = union.width / image.width.toDouble()
             val hf = union.height / image.height.toDouble()
             throw IllegalStateException(
-                "Рамка $name получилась полным кадром (человек ${(wf * 100).roundToInt()}% ширины, " +
+                "Рамка $name получилась полным кадром (область людей ${(wf * 100).roundToInt()}% ширины, " +
                     "${(hf * 100).roundToInt()}% высоты); исходник не скопирован"
             )
         }
 
-        // Planner must never cut a confirmed person. A one-pixel tolerance covers floor/ceil mapping.
+        // No confirmed detector evidence may be cut. One-pixel tolerance covers floor/ceil mapping.
         for (subject in subjects) {
             require(crop.left <= subject.left + 1.0 && crop.top <= subject.top + 1.0 &&
                 crop.right >= subject.right - 1.0 && crop.bottom >= subject.bottom - 1.0) {
-                "Защитная проверка: рамка $name режет человека"
+                "Защитная проверка: рамка $name режет распознанного человека"
             }
         }
     }
@@ -295,5 +287,6 @@ class PhotoProcessor(
 
     companion object {
         private const val TAG = "AutoPersonCropDirect"
+        private const val MAX_DETECTOR_EVIDENCE_BOXES = 4
     }
 }
