@@ -17,7 +17,7 @@ class WrestlingCropPlannerTest {
         assertEquals(682, crop.bottom)
         assertTrue(crop.left < person.left)
         assertTrue(crop.right > person.right)
-        assertTrue("portrait must be much tighter than old 75% guide", crop.width < 380)
+        assertTrue("portrait must stay compact", crop.width < 380)
 
         val topEmptyFraction = (person.top - crop.top) / crop.height.toDouble()
         val bottomEmptyFraction = (crop.bottom - person.bottom) / crop.height.toDouble()
@@ -44,13 +44,68 @@ class WrestlingCropPlannerTest {
     }
 
     @Test
-    fun personAtSourceEdgeIsNeverCutToManufactureMargin() {
+    fun landscapeNearLeftEdgeUsesLessMarginThereAndBreathesOnRight() {
         val lyingAtLeft = RectD(5.0, 220.0, 940.0, 520.0)
         val crop = WrestlingCropPlanner.plan(image, listOf(lyingAtLeft))
 
         assertEquals(0, crop.left)
         assertTrue(crop.right > lyingAtLeft.right)
         assertTrue(crop.height < image.height)
+
+        val leftEmpty = lyingAtLeft.left - crop.left
+        val rightEmpty = crop.right - lyingAtLeft.right
+        assertTrue("blocked edge may have less than 5%", leftEmpty < rightEmpty)
+        assertTrue("opposite side must keep natural breathing room", rightEmpty > 50.0)
+    }
+
+    @Test
+    fun landscapeNearRightEdgeMirrorsNaturalAsymmetry() {
+        val lyingAtRight = RectD(330.0, 205.0, 1274.0, 515.0)
+        val crop = WrestlingCropPlanner.plan(image, listOf(lyingAtRight))
+
+        assertEquals(1280, crop.right)
+        assertTrue(crop.left < lyingAtRight.left)
+        val leftEmpty = lyingAtRight.left - crop.left
+        val rightEmpty = crop.right - lyingAtRight.right
+        assertTrue(rightEmpty < leftEmpty)
+        assertTrue(leftEmpty > 50.0)
+    }
+
+    @Test
+    fun portraitNearTopEdgeUsesAvailableTopAndAddsBreathingRoomBelow() {
+        val person = RectD(430.0, 4.0, 690.0, 610.0)
+        val crop = WrestlingCropPlanner.plan(image, listOf(person))
+
+        assertEquals(0, crop.top)
+        assertTrue(crop.bottom > person.bottom)
+        val topEmpty = person.top - crop.top
+        val bottomEmpty = crop.bottom - person.bottom
+        assertTrue(topEmpty < bottomEmpty)
+        assertTrue(bottomEmpty > 35.0)
+    }
+
+    @Test
+    fun portraitNearBottomEdgeUsesAvailableBottomAndAddsBreathingRoomAbove() {
+        val person = RectD(400.0, 115.0, 675.0, 716.0)
+        val crop = WrestlingCropPlanner.plan(image, listOf(person))
+
+        assertEquals(720, crop.bottom)
+        assertTrue(crop.top < person.top)
+        val topEmpty = person.top - crop.top
+        val bottomEmpty = crop.bottom - person.bottom
+        assertTrue(bottomEmpty < topEmpty)
+        assertTrue(topEmpty > 35.0)
+    }
+
+    @Test
+    fun portraitPersonNearLeftEdgeIsNotArtificiallyCentered() {
+        val person = RectD(7.0, 90.0, 270.0, 655.0)
+        val crop = WrestlingCropPlanner.plan(image, listOf(person))
+
+        assertEquals(0, crop.left)
+        assertTrue(crop.right > person.right)
+        val subjectFraction = (person.centerX - crop.left) / crop.width.toDouble()
+        assertTrue("edge subject must remain visually left-biased", subjectFraction < 0.45)
     }
 
     @Test
