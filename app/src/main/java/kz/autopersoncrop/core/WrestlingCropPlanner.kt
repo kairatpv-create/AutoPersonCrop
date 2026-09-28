@@ -3,35 +3,35 @@ package kz.autopersoncrop.core
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
-import kotlin.math.min
 
 /**
- * Crop planner for controlled source frames containing only one person or two wrestlers.
+ * Crop planner for controlled material that contains only the wanted person/people.
  *
- * The image is never scaled, stretched, squeezed, rotated or force-centred. Only crop boundaries
- * move. Portrait and landscape are photographic shape ranges, not rigid aspect ratios: a rigid
- * ratio previously expanded wide action shots back to the complete source frame.
+ * The detector geometry is the only anchor. We never stretch, squeeze, rotate or force-centre the
+ * picture. We only move crop boundaries.
  *
- * Portrait:
- *  - normally remove 5% from source top and 5% from source bottom;
- *  - if a body occupies that zone, move that edge outward to keep the body;
- *  - choose only as much side width as is needed for a natural portrait.
+ * Portrait (standing / sitting / kneeling):
+ *  - leave 5% of the FINAL crop as empty space above the detected people;
+ *  - leave 5% of the FINAL crop as empty space below them;
+ *  - crop left/right as tightly as possible while keeping a normal portrait shape and the complete
+ *    detected people.
  *
- * Landscape:
- *  - normally remove 5% from source left and 5% from source right;
- *  - if a body occupies that zone, move that edge outward to keep the body;
- *  - choose only as much top/bottom height as is needed for a natural landscape.
+ * Landscape (lying / wrestling / clearly horizontal action):
+ *  - leave 5% of the FINAL crop as empty space left of the detected people;
+ *  - leave 5% of the FINAL crop as empty space right of them;
+ *  - crop top/bottom as tightly as possible while keeping a normal landscape shape and the complete
+ *    detected people.
+ *
+ * When a person touches a real source edge, the source edge wins: the body is never cut just to
+ * manufacture a 5% margin that does not exist in the original.
  */
 object WrestlingCropPlanner {
-    private const val SOURCE_TRIM = 0.05
-    private const val BODY_SAFETY = 0.025
-    private const val MIN_IMAGE_SAFETY = 0.006
+    private const val FINAL_MARGIN_FRACTION = 0.05
+    private const val SECONDARY_AXIS_SAFETY = 0.04
+    private const val MIN_IMAGE_SAFETY = 0.003
 
-    // These are composition guides, not mandatory output ratios.
-    private const val PORTRAIT_GUIDE_ASPECT = 0.75
-    private const val PORTRAIT_MAX_SOURCE_WIDTH = 0.88
-    private const val LANDSCAPE_GUIDE_ASPECT = 16.0 / 9.0
-    private const val LANDSCAPE_MAX_SOURCE_HEIGHT = 0.90
+    // Prevents an unnaturally thin strip. It is only a crop-shape guard, never image scaling.
+    private const val MAX_LONG_TO_SHORT_RATIO = 2.0
 
     private enum class Orientation { PORTRAIT, LANDSCAPE }
 
@@ -41,107 +41,93 @@ object WrestlingCropPlanner {
         val clean = subjects
             .map { it.clampTo(image) }
             .filter { it.width >= 2.0 && it.height >= 2.0 }
-            .take(2)
         require(clean.isNotEmpty()) { "Не удалось построить рамку по человеку" }
 
         val group = union(clean).clampTo(image)
-        val protected = protect(group, image)
-        val orientation = chooseOrientation(clean, group)
+        require(group.width >= 2.0 && group.height >= 2.0) { "Пустая область людей" }
 
-        val crop = when (orientation) {
-            Orientation.PORTRAIT -> portraitCrop(image, group, protected)
-            Orientation.LANDSCAPE -> landscapeCrop(image, group, protected)
+        val crop = when (chooseOrientation(clean, group)) {
+            Orientation.PORTRAIT -> portraitCrop(image, group)
+            Orientation.LANDSCAPE -> landscapeCrop(image, group)
         }
         return crop.clampTo(image).toPixelRect(image)
     }
 
     private fun chooseOrientation(subjects: List<RectD>, group: RectD): Orientation {
-        if (subjects.size == 1) {
-            return if (group.height >= group.width * 1.05) Orientation.PORTRAIT
-            else Orientation.LANDSCAPE
-        }
+        // A clearly horizontal combined action is always landscape, even if one partial detector box
+        // happens to look vertical.
+        if (group.width >= group.height * 1.30) return Orientation.LANDSCAPE
 
-        val standing = subjects.count { it.height >= it.width * 1.15 }
-        return if (standing == subjects.size && group.height >= group.width * 0.72) {
-            Orientation.PORTRAIT
-        } else if (group.height > group.width * 1.03) {
-            Orientation.PORTRAIT
-        } else {
-            Orientation.LANDSCAPE
-        }
+        // Standing, sitting and kneeling detections are normally taller than wide. One convincing
+        // vertical observation is enough because the source is guaranteed to contain no bystanders.
+        if (subjects.any { it.height >= it.width * 1.05 }) return Orientation.PORTRAIT
+
+        // Near-square human groups look more natural as portrait. Only clearly wider action becomes
+        // landscape.
+        return if (group.height >= group.width * 0.90) Orientation.PORTRAIT
+        else Orientation.LANDSCAPE
     }
 
-    private fun protect(group: RectD, image: ImageSize): RectD {
-        val mx = max(group.width * BODY_SAFETY, image.width * MIN_IMAGE_SAFETY)
-        val my = max(group.height * BODY_SAFETY, image.height * MIN_IMAGE_SAFETY)
-        return RectD(
-            group.left - mx,
-            group.top - my,
-            group.right + mx,
-            group.bottom + my,
-        ).clampTo(image)
-    }
-
-    private fun portraitCrop(image: ImageSize, group: RectD, protected: RectD): RectD {
-        val desiredTop = image.height * SOURCE_TRIM
-        val desiredBottom = image.height * (1.0 - SOURCE_TRIM)
-
-        val top = min(desiredTop, protected.top)
-        val bottom = max(desiredBottom, protected.bottom)
+    private fun portraitCrop(image: ImageSize, group: RectD): RectD {
+        val verticalMargin = finalFivePercentMargin(group.height)
+        val top = (group.top - verticalMargin).coerceAtLeast(0.0)
+        val bottom = (group.bottom + verticalMargin).coerceAtMost(image.height.toDouble())
         val height = (bottom - top).coerceAtLeast(1.0)
 
-        // Do not widen all the way to the source just to hit a fixed portrait ratio.
-        val guidedWidth = min(
-            height * PORTRAIT_GUIDE_ASPECT,
-            image.width * PORTRAIT_MAX_SOURCE_WIDTH,
-        )
-        val targetWidth = max(guidedWidth, protected.width)
+        val sideSafety = max(group.width * SECONDARY_AXIS_SAFETY, image.width * MIN_IMAGE_SAFETY)
+        val requiredLeft = (group.left - sideSafety).coerceAtLeast(0.0)
+        val requiredRight = (group.right + sideSafety).coerceAtMost(image.width.toDouble())
+        val requiredWidth = (requiredRight - requiredLeft).coerceAtLeast(1.0)
+
+        // A portrait may be tight around the body, but never a pencil-thin strip.
+        val targetWidth = max(requiredWidth, height / MAX_LONG_TO_SHORT_RATIO)
             .coerceAtMost(image.width.toDouble())
 
         val horizontal = placeWindowPreservingSourcePosition(
             sourceSize = image.width.toDouble(),
             targetSize = targetWidth,
             anchorCenter = group.centerX,
-            requiredMin = protected.left,
-            requiredMax = protected.right,
+            requiredMin = requiredLeft,
+            requiredMax = requiredRight,
         )
-
         return RectD(horizontal.first, top, horizontal.second, bottom)
     }
 
-    private fun landscapeCrop(image: ImageSize, group: RectD, protected: RectD): RectD {
-        val desiredLeft = image.width * SOURCE_TRIM
-        val desiredRight = image.width * (1.0 - SOURCE_TRIM)
-
-        val left = min(desiredLeft, protected.left)
-        val right = max(desiredRight, protected.right)
+    private fun landscapeCrop(image: ImageSize, group: RectD): RectD {
+        val horizontalMargin = finalFivePercentMargin(group.width)
+        val left = (group.left - horizontalMargin).coerceAtLeast(0.0)
+        val right = (group.right + horizontalMargin).coerceAtMost(image.width.toDouble())
         val width = (right - left).coerceAtLeast(1.0)
 
-        // A wide pair may legitimately force left/right to the source edges. Previously width/1.70
-        // could then demand the full source height. Cap the composition guide at 90% of source height;
-        // protected body geometry can still override the cap when necessary.
-        val guidedHeight = min(
-            width / LANDSCAPE_GUIDE_ASPECT,
-            image.height * LANDSCAPE_MAX_SOURCE_HEIGHT,
-        )
-        val targetHeight = max(guidedHeight, protected.height)
+        val verticalSafety = max(group.height * SECONDARY_AXIS_SAFETY, image.height * MIN_IMAGE_SAFETY)
+        val requiredTop = (group.top - verticalSafety).coerceAtLeast(0.0)
+        val requiredBottom = (group.bottom + verticalSafety).coerceAtMost(image.height.toDouble())
+        val requiredHeight = (requiredBottom - requiredTop).coerceAtLeast(1.0)
+
+        // Keep enough height for a normal landscape photograph, but do not inflate it to 16:9 when
+        // the detected action itself is much flatter. This was the source of excessive empty space.
+        val targetHeight = max(requiredHeight, width / MAX_LONG_TO_SHORT_RATIO)
             .coerceAtMost(image.height.toDouble())
 
         val vertical = placeWindowPreservingSourcePosition(
             sourceSize = image.height.toDouble(),
             targetSize = targetHeight,
             anchorCenter = group.centerY,
-            requiredMin = protected.top,
-            requiredMax = protected.bottom,
+            requiredMin = requiredTop,
+            requiredMax = requiredBottom,
         )
-
         return RectD(left, vertical.first, right, vertical.second)
     }
 
     /**
-     * Preserve the subject's relative source position. This is intentionally not centring: if the
-     * person is left, right, high or low in the source, the crop keeps that visual bias whenever the
-     * image boundaries allow it.
+     * If the visible people occupy S pixels and each margin must be exactly 5% of the final crop F:
+     * F = S + 2*0.05F, therefore one margin = S/18.
+     */
+    private fun finalFivePercentMargin(subjectSize: Double): Double =
+        subjectSize * FINAL_MARGIN_FRACTION / (1.0 - 2.0 * FINAL_MARGIN_FRACTION)
+
+    /**
+     * Preserve the subject's position in the original image. This is deliberately not centring.
      */
     private fun placeWindowPreservingSourcePosition(
         sourceSize: Double,
