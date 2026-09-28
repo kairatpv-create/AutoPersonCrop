@@ -12,14 +12,20 @@ class WrestlingSubjectSelectorTest {
         val giant = RectD(20.0, 10.0, 1260.0, 710.0)
         val real = RectD(220.0, 80.0, 520.0, 660.0)
         val selected = WrestlingSubjectSelector.select(image, listOf(giant, real))
-        assertEquals(real, selected[0])
-        assertEquals(real, selected[1])
+        assertEquals(listOf(real), selected)
     }
 
     @Test
-    fun onePersonIsDuplicatedOnlyToBlockOldSequenceAssist() {
+    fun onePersonStaysOnePerson() {
         val real = RectD(220.0, 80.0, 520.0, 660.0)
-        assertEquals(listOf(real, real), WrestlingSubjectSelector.select(image, listOf(real)))
+        assertEquals(listOf(real), WrestlingSubjectSelector.select(image, listOf(real)))
+    }
+
+    @Test
+    fun twoPlausibleWrestlersStayTwo() {
+        val first = RectD(240.0, 100.0, 520.0, 650.0)
+        val second = RectD(500.0, 120.0, 790.0, 650.0)
+        assertEquals(listOf(first, second), WrestlingSubjectSelector.select(image, listOf(first, second)))
     }
 
     @Test
@@ -37,6 +43,6 @@ class WrestlingSubjectSelectorTest {
     fun negativeMarkerIsIgnoredIfLaterRecoveryFoundRealPerson() {
         val real = RectD(200.0, 90.0, 520.0, 660.0)
         val selected = WrestlingSubjectSelector.select(image, listOf(RectD(-10.0, -10.0, -9.0, -9.0), real))
-        assertEquals(real, selected[0])
+        assertEquals(listOf(real), selected)
     }
 }
