@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.os.SystemClock;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
@@ -44,6 +45,10 @@ public class CropEditorView extends View {
     private boolean editMode = false;
     private SwipeListener swipeListener;
 
+    private long lastTapTime = 0L;
+    private float lastTapX = 0f;
+    private float lastTapY = 0f;
+
     public CropEditorView(Context context) {
         super(context);
         setBackgroundColor(Color.BLACK);
@@ -62,11 +67,11 @@ public class CropEditorView extends View {
         scaleDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override public boolean onScaleBegin(ScaleGestureDetector detector) {
                 multiTouch = true;
-                return editMode && bitmap != null;
+                return bitmap != null;
             }
 
             @Override public boolean onScale(ScaleGestureDetector detector) {
-                if (!editMode || bitmap == null) return false;
+                if (bitmap == null) return false;
                 float oldScale = scale;
                 scale *= detector.getScaleFactor();
                 scale = Math.max(minScale, Math.min(scale, minScale * 8f));
@@ -75,7 +80,7 @@ public class CropEditorView extends View {
                 float fy = detector.getFocusY();
                 tx = fx - (fx - tx) * factor;
                 ty = fy - (fy - ty) * factor;
-                constrainImage();
+                if (editMode) constrainImage(); else constrainView();
                 invalidate();
                 return true;
             }
@@ -88,6 +93,7 @@ public class CropEditorView extends View {
         editMode = enabled;
         mode = MODE_NONE;
         multiTouch = false;
+        lastTapTime = 0L;
         if (enabled) resetGeometry();
         invalidate();
     }
@@ -98,6 +104,7 @@ public class CropEditorView extends View {
         if (bitmap != null && bitmap != source && !bitmap.isRecycled()) bitmap.recycle();
         bitmap = source;
         editMode = false;
+        lastTapTime = 0L;
         resetGeometry();
         invalidate();
     }
@@ -109,6 +116,7 @@ public class CropEditorView extends View {
         Bitmap rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
         if (rotated != bitmap && !bitmap.isRecycled()) bitmap.recycle();
         bitmap = rotated;
+        lastTapTime = 0L;
         resetGeometry();
         invalidate();
     }
@@ -134,7 +142,7 @@ public class CropEditorView extends View {
         scale = minScale;
         tx = crop.centerX() - bitmap.getWidth() * scale / 2f;
         ty = crop.centerY() - bitmap.getHeight() * scale / 2f;
-        constrainImage();
+        if (editMode) constrainImage(); else constrainView();
     }
 
     @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
@@ -175,25 +183,67 @@ public class CropEditorView extends View {
 
     @Override public boolean onTouchEvent(MotionEvent event) {
         if (bitmap == null) return true;
+        scaleDetector.onTouchEvent(event);
 
-        if (!editMode) {
-            switch (event.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    downX = event.getX();
-                    downY = event.getY();
-                    return true;
-                case MotionEvent.ACTION_UP:
-                    float dx = event.getX() - downX;
-                    float dy = event.getY() - downY;
-                    if (Math.abs(dx) > dp(80f) && Math.abs(dx) > Math.abs(dy) * 1.3f && swipeListener != null) {
+        if (!editMode) return handleViewTouch(event);
+        return handleEditTouch(event);
+    }
+
+    private boolean handleViewTouch(MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                downX = lastX = event.getX();
+                downY = lastY = event.getY();
+                multiTouch = false;
+                return true;
+
+            case MotionEvent.ACTION_POINTER_DOWN:
+                multiTouch = true;
+                return true;
+
+            case MotionEvent.ACTION_MOVE:
+                if (scaleDetector.isInProgress()) return true;
+                if (scale > minScale * 1.01f) {
+                    float x = event.getX();
+                    float y = event.getY();
+                    tx += x - lastX;
+                    ty += y - lastY;
+                    lastX = x;
+                    lastY = y;
+                    constrainView();
+                    invalidate();
+                }
+                return true;
+
+            case MotionEvent.ACTION_UP:
+                if (!multiTouch) {
+                    float upX = event.getX();
+                    float upY = event.getY();
+                    if (isDoubleTap(upX, upY)) {
+                        toggleViewZoom(upX, upY);
+                        return true;
+                    }
+
+                    float dx = upX - downX;
+                    float dy = upY - downY;
+                    if (scale <= minScale * 1.01f
+                            && Math.abs(dx) > dp(80f)
+                            && Math.abs(dx) > Math.abs(dy) * 1.3f
+                            && swipeListener != null) {
                         swipeListener.onSwipe(dx < 0 ? -1 : 1);
                     }
-                    return true;
-            }
-            return true;
-        }
+                }
+                multiTouch = false;
+                return true;
 
-        scaleDetector.onTouchEvent(event);
+            case MotionEvent.ACTION_CANCEL:
+                multiTouch = false;
+                return true;
+        }
+        return true;
+    }
+
+    private boolean handleEditTouch(MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 downX = lastX = event.getX();
@@ -201,9 +251,11 @@ public class CropEditorView extends View {
                 mode = detectMode(lastX, lastY);
                 multiTouch = false;
                 return true;
+
             case MotionEvent.ACTION_POINTER_DOWN:
                 multiTouch = true;
                 return true;
+
             case MotionEvent.ACTION_MOVE:
                 if (scaleDetector.isInProgress()) return true;
                 float x = event.getX();
@@ -212,18 +264,64 @@ public class CropEditorView extends View {
                 float dy = y - lastY;
                 switch (mode) {
                     case MODE_IMAGE:
-                        tx += dx; ty += dy; constrainImage(); break;
+                        tx += dx;
+                        ty += dy;
+                        constrainImage();
+                        break;
                     case MODE_FRAME:
-                        crop.offset(dx, dy); constrainFramePosition(); updateMinScaleForCrop(); constrainImage(); break;
+                        crop.offset(dx, dy);
+                        constrainFramePosition();
+                        updateMinScaleForCrop();
+                        constrainImage();
+                        break;
                     default:
-                        resizeCrop(dx, dy); updateMinScaleForCrop(); constrainImage(); break;
+                        resizeCrop(dx, dy);
+                        updateMinScaleForCrop();
+                        constrainImage();
+                        break;
                 }
-                lastX = x; lastY = y; invalidate(); return true;
+                lastX = x;
+                lastY = y;
+                invalidate();
+                return true;
+
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
-                mode = MODE_NONE; multiTouch = false; return true;
+                mode = MODE_NONE;
+                multiTouch = false;
+                return true;
         }
         return true;
+    }
+
+    private boolean isDoubleTap(float x, float y) {
+        long now = SystemClock.uptimeMillis();
+        boolean closeInTime = now - lastTapTime <= 320L;
+        boolean closeInSpace = Math.hypot(x - lastTapX, y - lastTapY) <= dp(48f);
+        if (closeInTime && closeInSpace) {
+            lastTapTime = 0L;
+            return true;
+        }
+        lastTapTime = now;
+        lastTapX = x;
+        lastTapY = y;
+        return false;
+    }
+
+    private void toggleViewZoom(float focusX, float focusY) {
+        if (scale > minScale * 1.05f) {
+            resetGeometry();
+            invalidate();
+            return;
+        }
+
+        float target = Math.min(minScale * 2.7f, minScale * 8f);
+        float factor = target / scale;
+        tx = focusX - (focusX - tx) * factor;
+        ty = focusY - (focusY - ty) * factor;
+        scale = target;
+        constrainView();
+        invalidate();
     }
 
     private int detectMode(float x, float y) {
@@ -292,6 +390,28 @@ public class CropEditorView extends View {
         if (ty > crop.top) ty = crop.top;
         if (tx + imageW < crop.right) tx = crop.right - imageW;
         if (ty + imageH < crop.bottom) ty = crop.bottom - imageH;
+    }
+
+    private void constrainView() {
+        if (bitmap == null) return;
+        float imageW = bitmap.getWidth() * scale;
+        float imageH = bitmap.getHeight() * scale;
+        float viewW = getWidth();
+        float viewH = getHeight();
+
+        if (imageW <= viewW) {
+            tx = (viewW - imageW) / 2f;
+        } else {
+            if (tx > 0f) tx = 0f;
+            if (tx + imageW < viewW) tx = viewW - imageW;
+        }
+
+        if (imageH <= viewH) {
+            ty = (viewH - imageH) / 2f;
+        } else {
+            if (ty > 0f) ty = 0f;
+            if (ty + imageH < viewH) ty = viewH - imageH;
+        }
     }
 
     public Bitmap createCroppedBitmap() {
