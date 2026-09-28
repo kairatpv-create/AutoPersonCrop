@@ -456,7 +456,7 @@ public class MainActivity extends Activity {
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(color);
         bg.setCornerRadius(radius);
-        bg.setStroke(dp(1), 0x332FFFFFF);
+        bg.setStroke(dp(1), 0x33FFFFFF);
         return bg;
     }
 
