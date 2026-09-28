@@ -21,11 +21,12 @@ data class PhotoFrame(
 
 class ImageFrameLoader(private val context: Context) {
     /**
-     * Keep enough real pixels for YOLO small-person recall. The previous power-of-two loop could
-     * overshoot badly (for example 6000 px -> 375 px), then upscale that tiny preview back to the
-     * model input. We now stop before the next sample would fall below the detector target.
+     * Keep enough real pixels for wrestling/person recovery tiles. With a 640 px preview, a later
+     * detector tile only enlarged pixels that had already been thrown away. Around 1280 px on the
+     * long side keeps substantially more head/hand/foot and overlapping-body detail while staying
+     * small enough for the controlled batch workflow on a modern phone.
      */
-    fun load(uri: Uri, detectorTargetSide: Int = 640): PhotoFrame {
+    fun load(uri: Uri, detectorTargetSide: Int = 1280): PhotoFrame {
         val pfd = context.contentResolver.openFileDescriptor(uri, "r")
             ?: error("Не удалось открыть изображение")
         pfd.use {
