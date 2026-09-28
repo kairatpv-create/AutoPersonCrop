@@ -7,22 +7,19 @@ import kotlin.math.sqrt
 
 /**
  * Selector for controlled input: only one person or two wrestlers can be present.
- * Detector order is treated as reliability order; we no longer sort by box area, because a giant
- * weak box was the main reason previous versions returned almost the full source image.
+ * Detector order is reliability order. Frame-like boxes are rejected and one real person remains
+ * one subject; we no longer duplicate a single box just to satisfy legacy sequence logic.
  */
 object WrestlingSubjectSelector {
     fun select(image: ImageSize, people: List<RectD>): List<RectD> {
         require(people.isNotEmpty()) { "At least one person box is required" }
 
-        val nonNegative = people.filterNot {
-            it.left < 0.0 || it.top < 0.0 || it.right < 0.0 || it.bottom < 0.0
-        }
-        require(nonNegative.isNotEmpty()) { "Не удалось надёжно распознать человека в кадре" }
-
-        val valid = nonNegative
+        val valid = people.asSequence()
+            .filterNot { it.left < 0.0 || it.top < 0.0 || it.right < 0.0 || it.bottom < 0.0 }
             .map { it.clampTo(image) }
             .filter { it.width >= 3.0 && it.height >= 3.0 && it.area >= 9.0 }
             .filterNot { frameLike(it, image) }
+            .toList()
 
         require(valid.isNotEmpty()) { "Не удалось получить надёжную рамку человека" }
 
@@ -34,7 +31,7 @@ object WrestlingSubjectSelector {
             .filter { plausiblePartner(primary, it, image) }
             .firstOrNull()
 
-        return if (second != null) listOf(primary, second) else listOf(primary, primary)
+        return if (second != null) listOf(primary, second) else listOf(primary)
     }
 
     fun isFullyVisible(image: ImageSize, r: RectD): Boolean {
@@ -49,7 +46,8 @@ object WrestlingSubjectSelector {
     private fun frameLike(r: RectD, image: ImageSize): Boolean {
         val wf = r.width / image.width.toDouble()
         val hf = r.height / image.height.toDouble()
-        return wf > 0.92 && hf > 0.92
+        val af = r.area / (image.width.toDouble() * image.height.toDouble())
+        return (wf > 0.92 && hf > 0.92) || af > 0.86
     }
 
     private fun plausiblePartner(a: RectD, b: RectD, image: ImageSize): Boolean {
