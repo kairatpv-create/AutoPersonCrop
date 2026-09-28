@@ -10,7 +10,7 @@ class WrestlingCropPlannerTest {
     @Test
     fun portraitTrimsTopBottomAndKeepsOffCenterPosition() {
         val person = RectD(160.0, 80.0, 430.0, 650.0)
-        val crop = WrestlingCropPlanner.plan(image, listOf(person, person))
+        val crop = WrestlingCropPlanner.plan(image, listOf(person))
 
         assertEquals(36, crop.top)
         assertEquals(684, crop.bottom)
@@ -24,7 +24,7 @@ class WrestlingCropPlannerTest {
     @Test
     fun landscapeTrimsFivePercentFromBothSidesAndUsesNaturalHeight() {
         val lying = RectD(140.0, 250.0, 1100.0, 520.0)
-        val crop = WrestlingCropPlanner.plan(image, listOf(lying, lying))
+        val crop = WrestlingCropPlanner.plan(image, listOf(lying))
 
         assertEquals(64, crop.left)
         assertEquals(1216, crop.right)
@@ -37,10 +37,11 @@ class WrestlingCropPlannerTest {
     @Test
     fun personAtSourceEdgeIsNeverCutForFivePercentRule() {
         val lyingAtLeft = RectD(5.0, 220.0, 940.0, 520.0)
-        val crop = WrestlingCropPlanner.plan(image, listOf(lyingAtLeft, lyingAtLeft))
+        val crop = WrestlingCropPlanner.plan(image, listOf(lyingAtLeft))
 
         assertEquals(0, crop.left)
         assertTrue(crop.right > lyingAtLeft.right)
+        assertTrue(crop.height < image.height)
     }
 
     @Test
@@ -54,5 +55,17 @@ class WrestlingCropPlannerTest {
         assertTrue(crop.width < crop.height)
         assertTrue(crop.left < first.left)
         assertTrue(crop.right > second.right)
+    }
+
+    @Test
+    fun fullWidthLandscapeDoesNotForceFullSourceHeight() {
+        val wideAction = RectD(0.0, 210.0, 1280.0, 520.0)
+        val crop = WrestlingCropPlanner.plan(image, listOf(wideAction))
+
+        assertEquals(0, crop.left)
+        assertEquals(1280, crop.right)
+        assertTrue("wide action must still crop top/bottom", crop.height < image.height)
+        assertTrue(crop.top <= wideAction.top)
+        assertTrue(crop.bottom >= wideAction.bottom)
     }
 }
