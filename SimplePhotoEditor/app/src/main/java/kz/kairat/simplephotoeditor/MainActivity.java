@@ -12,6 +12,7 @@ import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -21,9 +22,9 @@ import android.provider.Settings;
 import android.util.Size;
 import android.view.Gravity;
 import android.view.ViewGroup;
-import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.GridLayout;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -52,7 +53,6 @@ public class MainActivity extends Activity {
     private static final int SCREEN_EDITOR = 2;
 
     private static class Album {
-        String key;
         String name;
         String relativePath;
         long bucketId;
@@ -75,6 +75,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
+
         root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
         setContentView(root);
@@ -94,7 +95,9 @@ public class MainActivity extends Activity {
 
     private void ensureAllFilesAccess() {
         if (Build.VERSION.SDK_INT >= 30 && !Environment.isExternalStorageManager()) {
-            Toast.makeText(this, "Один раз разрешите Photo Editor доступ ко всем файлам", Toast.LENGTH_LONG).show();
+            Toast.makeText(this,
+                    "Один раз разрешите Photo Editor доступ ко всем файлам",
+                    Toast.LENGTH_LONG).show();
             try {
                 Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
                         Uri.parse("package:" + getPackageName()));
@@ -128,7 +131,7 @@ public class MainActivity extends Activity {
             showFolders();
         } else if (requestCode == REQ_WRITE && resultCode == RESULT_OK && pendingSaveAfterPermission) {
             pendingSaveAfterPermission = false;
-            saveAndNext();
+            saveAndStay();
         }
     }
 
@@ -138,9 +141,14 @@ public class MainActivity extends Activity {
         Uri collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
 
         String[] projection = Build.VERSION.SDK_INT >= 29
-                ? new String[]{MediaStore.Images.Media._ID, MediaStore.Images.Media.RELATIVE_PATH,
-                MediaStore.Images.Media.BUCKET_ID, MediaStore.Images.Media.BUCKET_DISPLAY_NAME}
-                : new String[]{MediaStore.Images.Media._ID, MediaStore.Images.Media.BUCKET_ID,
+                ? new String[]{
+                MediaStore.Images.Media._ID,
+                MediaStore.Images.Media.RELATIVE_PATH,
+                MediaStore.Images.Media.BUCKET_ID,
+                MediaStore.Images.Media.BUCKET_DISPLAY_NAME}
+                : new String[]{
+                MediaStore.Images.Media._ID,
+                MediaStore.Images.Media.BUCKET_ID,
                 MediaStore.Images.Media.BUCKET_DISPLAY_NAME};
 
         String order = MediaStore.Images.Media.DATE_TAKEN + " DESC, "
@@ -149,10 +157,12 @@ public class MainActivity extends Activity {
 
         try (Cursor cursor = getContentResolver().query(collection, projection, null, null, order)) {
             if (cursor == null) return;
+
             int idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
             int bucketIdCol = cursor.getColumnIndex(MediaStore.Images.Media.BUCKET_ID);
             int bucketNameCol = cursor.getColumnIndex(MediaStore.Images.Media.BUCKET_DISPLAY_NAME);
-            int pathCol = Build.VERSION.SDK_INT >= 29 ? cursor.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH) : -1;
+            int pathCol = Build.VERSION.SDK_INT >= 29
+                    ? cursor.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH) : -1;
 
             while (cursor.moveToNext()) {
                 long id = cursor.getLong(idCol);
@@ -160,10 +170,10 @@ public class MainActivity extends Activity {
                 String bucketName = bucketNameCol >= 0 ? cursor.getString(bucketNameCol) : null;
                 String path = pathCol >= 0 ? cursor.getString(pathCol) : null;
                 String key = path != null && !path.isEmpty() ? "P:" + path : "B:" + bucketId;
+
                 Album album = map.get(key);
                 if (album == null) {
                     album = new Album();
-                    album.key = key;
                     album.relativePath = path;
                     album.bucketId = bucketId;
                     album.name = folderName(path, bucketName);
@@ -207,6 +217,7 @@ public class MainActivity extends Activity {
         GridLayout grid = new GridLayout(this);
         grid.setColumnCount(2);
         grid.setPadding(dp(3), dp(3), dp(3), dp(3));
+
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
         int cellWidth = screenWidth / 2;
         int imageHeight = Math.round(cellWidth * 0.78f);
@@ -215,6 +226,7 @@ public class MainActivity extends Activity {
             LinearLayout cell = new LinearLayout(this);
             cell.setOrientation(LinearLayout.VERTICAL);
             cell.setBackgroundColor(0xFF111111);
+
             GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
             lp.width = cellWidth;
             lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
@@ -224,7 +236,8 @@ public class MainActivity extends Activity {
             ImageView cover = new ImageView(this);
             cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
             cover.setBackgroundColor(0xFF202020);
-            cell.addView(cover, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, imageHeight));
+            cell.addView(cover, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, imageHeight));
 
             TextView name = new TextView(this);
             name.setText(album.name + "  (" + album.count + ")");
@@ -239,23 +252,28 @@ public class MainActivity extends Activity {
                 loadSelectedAlbum();
                 showGallery();
             });
+
             grid.addView(cell);
             loadThumbnail(cover, album.cover, cellWidth);
         }
 
         scroll.addView(grid);
-        page.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        root.addView(page, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        page.addView(scroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        root.addView(page, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         applyPageInsets(page, null);
     }
 
     private void loadSelectedAlbum() {
         editorImages.clear();
         if (selectedAlbum == null) return;
+
         Uri collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
         String[] projection = {MediaStore.Images.Media._ID};
         String selection;
         String[] args;
+
         if (Build.VERSION.SDK_INT >= 29 && selectedAlbum.relativePath != null) {
             selection = MediaStore.Images.Media.RELATIVE_PATH + "=?";
             args = new String[]{selectedAlbum.relativePath};
@@ -263,9 +281,11 @@ public class MainActivity extends Activity {
             selection = MediaStore.Images.Media.BUCKET_ID + "=?";
             args = new String[]{Long.toString(selectedAlbum.bucketId)};
         }
+
         String order = MediaStore.Images.Media.DATE_TAKEN + " DESC, "
                 + MediaStore.Images.Media.DATE_ADDED + " DESC, "
                 + MediaStore.Images.Media._ID + " DESC";
+
         try (Cursor cursor = getContentResolver().query(collection, projection, selection, args, order)) {
             if (cursor == null) return;
             int idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
@@ -278,27 +298,29 @@ public class MainActivity extends Activity {
     private void showGallery() {
         currentScreen = SCREEN_GALLERY;
         root.removeAllViews();
+
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setBackgroundColor(Color.BLACK);
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(8), dp(4), dp(8), dp(4));
+        header.setPadding(dp(10), dp(5), dp(10), dp(5));
 
-        Button folders = makeSmallButton("Папки");
+        ImageButton folders = makeIconButton(
+                R.drawable.ic_folder, "Выбрать папку", 0xFF273449, dp(11));
         folders.setOnClickListener(v -> {
             refreshAlbums();
             showFolders();
         });
-        header.addView(folders, new LinearLayout.LayoutParams(dp(84), dp(42)));
+        header.addView(folders, new LinearLayout.LayoutParams(dp(44), dp(42)));
 
         TextView title = new TextView(this);
         title.setText(selectedAlbum != null ? selectedAlbum.name : "Фото");
         title.setTextColor(Color.WHITE);
         title.setTextSize(18);
         title.setGravity(Gravity.CENTER_VERTICAL);
-        title.setPadding(dp(10), 0, dp(6), 0);
+        title.setPadding(dp(12), 0, dp(6), 0);
         header.addView(title, new LinearLayout.LayoutParams(0, dp(42), 1f));
         page.addView(header);
 
@@ -306,30 +328,38 @@ public class MainActivity extends Activity {
         GridLayout grid = new GridLayout(this);
         grid.setColumnCount(3);
         grid.setPadding(dp(1), dp(1), dp(1), dp(1));
+
         int tile = getResources().getDisplayMetrics().widthPixels / 3;
         int count = Math.min(editorImages.size(), MAX_FOLDER_ITEMS);
         for (int i = 0; i < count; i++) {
             final int position = i;
             final Uri uri = editorImages.get(i);
+
             ImageView image = new ImageView(this);
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);
             image.setBackgroundColor(0xFF202020);
+
             GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
             lp.width = tile;
             lp.height = tile;
             lp.setMargins(dp(1), dp(1), dp(1), dp(1));
             image.setLayoutParams(lp);
+
             image.setOnClickListener(v -> {
                 index = position;
                 showEditor();
                 loadCurrent();
             });
+
             grid.addView(image);
             loadThumbnail(image, uri, tile);
         }
+
         scroll.addView(grid);
-        page.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        root.addView(page, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        page.addView(scroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        root.addView(page, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         applyPageInsets(page, null);
     }
 
@@ -344,14 +374,18 @@ public class MainActivity extends Activity {
                         thumb = BitmapFactory.decodeStream(in);
                     }
                 }
-                if (thumb != null) runOnUiThread(() -> imageView.setImageBitmap(thumb));
-            } catch (Exception ignored) {}
+                if (thumb != null) {
+                    runOnUiThread(() -> imageView.setImageBitmap(thumb));
+                }
+            } catch (Exception ignored) {
+            }
         }).start());
     }
 
     private void showEditor() {
         currentScreen = SCREEN_EDITOR;
         root.removeAllViews();
+
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setBackgroundColor(Color.BLACK);
@@ -361,74 +395,82 @@ public class MainActivity extends Activity {
             if (direction < 0) showRelative(1);
             else showRelative(-1);
         });
-        page.addView(editor, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        page.addView(editor, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER);
         bar.setBackgroundColor(Color.BLACK);
 
-        Button folders = makeEditorButton("Папки");
+        ImageButton folders = makeIconButton(
+                R.drawable.ic_folder, "Выбрать папку", 0xFF273449, dp(13));
         folders.setOnClickListener(v -> {
             refreshAlbums();
             showFolders();
         });
-        Button rotate = makeEditorButton("Поворот");
-        rotate.setOnClickListener(v -> editor.rotate90());
-        Button back = makeEditorButton("Назад");
-        back.setOnClickListener(v -> showGallery());
-        Button crop = makeEditorButton("Обрезать");
-        crop.setOnClickListener(v -> editor.applyCrop());
-        Button done = makeEditorButton("Готово");
-        done.setOnClickListener(v -> saveAndNext());
 
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(44), 1f);
-        p.setMargins(dp(2), 0, dp(2), 0);
+        ImageButton rotate = makeIconButton(
+                R.drawable.ic_rotate, "Повернуть", 0xFF34445A, dp(13));
+        rotate.setOnClickListener(v -> editor.rotate90());
+
+        ImageButton back = makeIconButton(
+                R.drawable.ic_back, "Назад", 0xFF374151, dp(13));
+        back.setOnClickListener(v -> showGallery());
+
+        ImageButton crop = makeIconButton(
+                R.drawable.ic_crop, "Кадрировать", 0xFF5B4BC4, dp(13));
+        crop.setOnClickListener(v -> editor.applyCrop());
+
+        ImageButton done = makeIconButton(
+                R.drawable.ic_check, "Сохранить", 0xFF1F8A70, dp(13));
+        done.setOnClickListener(v -> saveAndStay());
+
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(46), 1f);
+        p.setMargins(dp(4), 0, dp(4), 0);
         bar.addView(folders, p);
         bar.addView(rotate, p);
         bar.addView(back, p);
         bar.addView(crop, p);
         bar.addView(done, p);
 
-        page.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(page, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        page.addView(bar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(page, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         applyPageInsets(page, bar);
+    }
+
+    private ImageButton makeIconButton(int iconRes, String description, int backgroundColor, int radius) {
+        ImageButton button = new ImageButton(this);
+        button.setImageResource(iconRes);
+        button.setColorFilter(Color.WHITE);
+        button.setContentDescription(description);
+        button.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        button.setPadding(dp(11), dp(10), dp(11), dp(10));
+        button.setBackground(roundedBackground(backgroundColor, radius));
+        return button;
+    }
+
+    private GradientDrawable roundedBackground(int color, int radius) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(color);
+        bg.setCornerRadius(radius);
+        bg.setStroke(dp(1), 0x332FFFFFF);
+        return bg;
     }
 
     private void applyPageInsets(LinearLayout page, LinearLayout bottomBar) {
         root.setOnApplyWindowInsetsListener((v, insets) -> {
-            page.setPadding(0, insets.getSystemWindowInsetTop(), 0, bottomBar == null ? insets.getSystemWindowInsetBottom() : 0);
+            page.setPadding(0, insets.getSystemWindowInsetTop(), 0,
+                    bottomBar == null ? insets.getSystemWindowInsetBottom() : 0);
             if (bottomBar != null) {
-                bottomBar.setPadding(dp(5), dp(4), dp(5), insets.getSystemWindowInsetBottom() + dp(7));
+                bottomBar.setPadding(dp(8), dp(6), dp(8),
+                        insets.getSystemWindowInsetBottom() + dp(8));
             }
             return insets;
         });
         root.requestApplyInsets();
-    }
-
-    private Button makeEditorButton(String text) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setTextSize(12);
-        b.setTextColor(Color.WHITE);
-        b.setAllCaps(false);
-        b.setBackgroundColor(0xFF262626);
-        b.setPadding(dp(2), 0, dp(2), 0);
-        b.setMinHeight(0);
-        b.setMinWidth(0);
-        return b;
-    }
-
-    private Button makeSmallButton(String text) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setTextSize(14);
-        b.setTextColor(Color.WHITE);
-        b.setAllCaps(false);
-        b.setBackgroundColor(0xFF303030);
-        b.setMinHeight(0);
-        b.setMinWidth(0);
-        return b;
     }
 
     private void loadCurrent() {
@@ -451,23 +493,19 @@ public class MainActivity extends Activity {
         loadCurrent();
     }
 
-    private void saveAndNext() {
+    private void saveAndStay() {
         if (editor == null || index < 0 || index >= editorImages.size()) return;
+
         Bitmap result = editor.createCroppedBitmap();
         if (result == null) return;
         Uri uri = editorImages.get(index);
+
         try {
-            if (!writeBitmapDirect(uri, result)) writeBitmapViaResolver(uri, result);
-            result.recycle();
-            Toast.makeText(this, "Сохранено", Toast.LENGTH_SHORT).show();
-            int next = index + 1;
-            if (next < editorImages.size()) {
-                index = next;
-                loadCurrent();
-            } else {
-                loadSelectedAlbum();
-                showGallery();
+            if (!writeBitmapDirect(uri, result)) {
+                writeBitmapViaResolver(uri, result);
             }
+            editor.setBitmap(result);
+            Toast.makeText(this, "Сохранено", Toast.LENGTH_SHORT).show();
         } catch (SecurityException e) {
             result.recycle();
             requestWritePermission(uri);
@@ -479,14 +517,19 @@ public class MainActivity extends Activity {
 
     private boolean writeBitmapDirect(Uri uri, Bitmap bitmap) throws IOException {
         if (Build.VERSION.SDK_INT >= 30 && !Environment.isExternalStorageManager()) return false;
+
         String path = queryDataPath(uri);
         if (path == null || path.isEmpty()) return false;
+
         String type = getContentResolver().getType(uri);
         Bitmap.CompressFormat format = (type != null && type.toLowerCase().contains("png"))
                 ? Bitmap.CompressFormat.PNG : Bitmap.CompressFormat.JPEG;
+
         File file = new File(path);
         try (OutputStream out = new FileOutputStream(file, false)) {
-            if (!bitmap.compress(format, 96, out)) throw new IOException("Compression failed");
+            if (!bitmap.compress(format, 96, out)) {
+                throw new IOException("Compression failed");
+            }
             out.flush();
         }
         return true;
@@ -499,7 +542,8 @@ public class MainActivity extends Activity {
                 int col = cursor.getColumnIndex(MediaStore.Images.Media.DATA);
                 if (col >= 0) return cursor.getString(col);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         return null;
     }
 
@@ -508,16 +552,20 @@ public class MainActivity extends Activity {
         String type = resolver.getType(uri);
         Bitmap.CompressFormat format = (type != null && type.toLowerCase().contains("png"))
                 ? Bitmap.CompressFormat.PNG : Bitmap.CompressFormat.JPEG;
+
         try (OutputStream out = resolver.openOutputStream(uri, "rwt")) {
             if (out == null) throw new IOException("No output stream");
-            if (!bitmap.compress(format, 96, out)) throw new IOException("Compression failed");
+            if (!bitmap.compress(format, 96, out)) {
+                throw new IOException("Compression failed");
+            }
             out.flush();
         }
     }
 
     private void requestWritePermission(Uri uri) {
         if (Build.VERSION.SDK_INT >= 30) {
-            PendingIntent pi = MediaStore.createWriteRequest(getContentResolver(), Collections.singletonList(uri));
+            PendingIntent pi = MediaStore.createWriteRequest(
+                    getContentResolver(), Collections.singletonList(uri));
             pendingSaveAfterPermission = true;
             try {
                 startIntentSenderForResult(pi.getIntentSender(), REQ_WRITE, null, 0, 0, 0);
