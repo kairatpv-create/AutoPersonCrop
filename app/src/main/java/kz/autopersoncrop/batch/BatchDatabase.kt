@@ -42,8 +42,8 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
 
     /**
      * Sync source files and invalidate results made by an older crop algorithm.
-     * PROCESSING is deliberately used as the initial/stale status because BatchProcessingService
-     * already treats it as recoverable and overwrites an existing file in CROP.
+     * PROCESSING is used for stale entries because BatchProcessingService treats it as recoverable
+     * and overwrites any old output file in CROP.
      */
     fun sync(folder: String, photos: List<SourcePhoto>) {
         val db = writableDatabase
@@ -206,7 +206,7 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
     }
 
     companion object {
-        private const val CROP_ALGORITHM_VERSION = 709
+        private const val CROP_ALGORITHM_VERSION = 710
 
         const val PENDING = 0
         const val DONE = 1
