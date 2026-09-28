@@ -56,16 +56,17 @@ jobs:
           fi
           keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | grep -E 'SHA1:|SHA256:'
 
-      - name: Apply 0.1.11 fixes
-        run: python3 tools/apply_0_1_11.py
+      - name: Apply 0.1.12 fixes
+        run: python3 tools/apply_0_1_12.py
 
       - name: Verify version and fixes
         run: |
-          grep -q 'versionCode = 12' app/build.gradle.kts
-          grep -q 'versionName = "0.1.11"' app/build.gradle.kts
-          grep -q 'fullPhotoCache' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
-          grep -q 'preloadNeighbors' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
-          grep -q 'setDuration(185L)' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
+          grep -q 'versionCode = 13' app/build.gradle.kts
+          grep -q 'versionName = "0.1.12"' app/build.gradle.kts
+          grep -q 'pinchBitmapX' app/src/main/java/kz/kairat/simplephotoeditor/CropEditorView.java
+          grep -q 'GridView' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
+          grep -q 'thumbnailCache' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
+          grep -q 'saveIoPool' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
 
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
@@ -73,6 +74,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SimplePhotoEditor-0.1.11-debug
+          name: SimplePhotoEditor-0.1.12-debug
           path: SimplePhotoEditor/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
