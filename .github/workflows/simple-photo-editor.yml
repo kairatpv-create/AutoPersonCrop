@@ -56,17 +56,18 @@ jobs:
           fi
           keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | grep -E 'SHA1:|SHA256:'
 
-      - name: Apply 0.1.14 fixes
-        run: python3 tools/apply_0_1_14.py
+      - name: Apply 0.1.15 fixes
+        run: python3 tools/apply_0_1_15.py
 
       - name: Verify version and fixes
         run: |
-          grep -q 'versionCode = 15' app/build.gradle.kts
-          grep -q 'versionName = "0.1.14"' app/build.gradle.kts
+          grep -q 'versionCode = 16' app/build.gradle.kts
+          grep -q 'versionName = "0.1.15"' app/build.gradle.kts
+          grep -q 'REQ_DELETE = 104' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
+          grep -q 'requestDeleteCurrent' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
+          grep -q 'galleryAnchorPosition' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
+          grep -q '@quick' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
           grep -q 'editPinchActive' app/src/main/java/kz/kairat/simplephotoeditor/CropEditorView.java
-          grep -q 'postInvalidateOnAnimation' app/src/main/java/kz/kairat/simplephotoeditor/CropEditorView.java
-          grep -q 'decodePreviewPhoto' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
-          grep -q 'previewCache' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
 
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
@@ -74,6 +75,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SimplePhotoEditor-0.1.14-debug
+          name: SimplePhotoEditor-0.1.15-debug
           path: SimplePhotoEditor/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
