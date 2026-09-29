@@ -56,20 +56,20 @@ jobs:
           fi
           keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | grep -E 'SHA1:|SHA256:'
 
-      - name: Apply 0.1.18 fixes
-        run: python3 tools/apply_0_1_18.py
+      - name: Apply 0.1.19 fixes
+        run: python3 tools/apply_0_1_19.py
 
       - name: Verify version and fixes
         run: |
-          grep -q 'versionCode = 19' app/build.gradle.kts
-          grep -q 'versionName = "0.1.18"' app/build.gradle.kts
-          grep -q 'selectedGalleryUris' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
-          grep -q 'deleteSelectedGalleryItems' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
-          grep -q 'publishEditedThumbnailNow' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
+          grep -q 'versionCode = 20' app/build.gradle.kts
+          grep -q 'versionName = "0.1.19"' app/build.gradle.kts
+          grep -q 'Выбрано " + count' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
+          grep -q 'GradientDrawable.OVAL' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
+          grep -q '0xFF1976D2' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
+          grep -q 'gallerySelectionMode' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
           grep -q 'setOnItemLongClickListener' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
-          ! grep -q 'ImageButton back = makeIconButton(R.drawable.ic_back' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
+          grep -q 'updateGallerySelectionUi' app/src/main/java/kz/kairat/simplephotoeditor/MainActivity.java
           grep -q 'minScale = (float) getWidth()' app/src/main/java/kz/kairat/simplephotoeditor/CropEditorView.java
-          grep -q 'editPinchActive' app/src/main/java/kz/kairat/simplephotoeditor/CropEditorView.java
 
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
@@ -77,6 +77,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SimplePhotoEditor-0.1.18-debug
+          name: SimplePhotoEditor-0.1.19-debug
           path: SimplePhotoEditor/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
