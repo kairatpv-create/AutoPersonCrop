@@ -30,10 +30,12 @@ jobs:
           test ! -d dist/assets
           test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 1
           grep -q 'name="organizer-portable" content="true"' dist/index.html
+          ! grep -q 'type="module"' dist/index.html
+          ! grep -q 'assets/' dist/index.html
       - name: Upload web build
         uses: actions/upload-artifact@v4
         with:
-          name: Organizer-Pro-Web-v0.1.2-portable
+          name: Organizer-Pro-Web-v0.1.3-portable
           path: organizer-web/dist/index.html
           if-no-files-found: error
           retention-days: 7
