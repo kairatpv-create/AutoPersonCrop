@@ -1,0 +1,9 @@
+export type Note={id:string;legacyId?:number;title:string;body:string;colorKey:string;createdAt:number;updatedAt:number;deletedAt?:number}
+export type Project={id:string;legacyId?:number;name:string;description:string;status:string;progress:number;startAt:number;dueAt:number;budget:number;client:string;address:string;contact:string;colorKey:string;createdAt:number;updatedAt:number;deletedAt?:number}
+export type ProjectStage={id:string;legacyId?:number;projectId:string;title:string;done:boolean;dueAt:number;createdAt:number;updatedAt:number;deletedAt?:number}
+export type MoneyEntry={id:string;legacyId?:number;type:'income'|'expense';amount:number;category:string;projectId?:string|null;note:string;colorKey:string;createdAt:number;updatedAt:number;deletedAt?:number}
+export type ReminderEntry={id:string;legacyId?:number;targetType:string;targetId:string;triggerAt:number;sound:boolean;vibrate:boolean;soundKey:string;title:string;details:string;scheduleType:'once'|'weekly';daysMask:number;dayMode:'single'|'all_day';baseMinutes:number;createdAt:number;updatedAt:number;deletedAt?:number}
+export type AttachmentMeta={id:string;legacyId?:number;targetType:string;targetId:string;displayName:string;mimeType:string;size:number;createdAt:number;updatedAt:number;cloudPath?:string;deletedAt?:number}
+export type OrganizerState={notes:Note[];projects:Project[];stages:ProjectStage[];money:MoneyEntry[];reminders:ReminderEntry[];attachments:AttachmentMeta[];revision:number}
+export type RecordKind='note'|'project'|'stage'|'money'|'reminder'|'attachment'
+export type CloudRecord={kind:RecordKind;id:string;updatedAt:number;deletedAt?:number;data:unknown}
