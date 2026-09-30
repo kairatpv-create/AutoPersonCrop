@@ -60,6 +60,7 @@ jobs:
           mv organizer/buildsrc0106/Organizer-Pro-v0.9.22-source organizer/buildsrc0106/Organizer-Pro-v0.9.23-source
           python3 organizer/v0114/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.23-source
           mv organizer/buildsrc0106/Organizer-Pro-v0.9.23-source organizer/buildsrc0106/Organizer-Pro-v0.9.24-source
+          sed -i "s/assert a.count('0.9.24 (57)')==8/assert a.count('0.9.24 (57)')==16/" organizer/v0115/apply.py
           python3 organizer/v0115/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.24-source
           mv organizer/buildsrc0106/Organizer-Pro-v0.9.24-source organizer/buildsrc0106/Organizer-Pro-v0.9.25-source
           ROOT=organizer/buildsrc0106/Organizer-Pro-v0.9.25-source
