@@ -20,13 +20,20 @@ jobs:
       - name: Install
         working-directory: organizer-web
         run: npm install
-      - name: Build
+      - name: Build portable web app
         working-directory: organizer-web
         run: npm run build
+      - name: Verify one-file portable output
+        working-directory: organizer-web
+        run: |
+          test -f dist/index.html
+          test ! -d dist/assets
+          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 1
+          grep -q 'name="organizer-portable" content="true"' dist/index.html
       - name: Upload web build
         uses: actions/upload-artifact@v4
         with:
-          name: Organizer-Pro-Web-v0.1
-          path: organizer-web/dist
+          name: Organizer-Pro-Web-v0.1.2-portable
+          path: organizer-web/dist/index.html
           if-no-files-found: error
           retention-days: 7
