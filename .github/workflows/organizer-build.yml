@@ -63,6 +63,7 @@ jobs:
           sed -i "s/assert a.count('0.9.24 (57)')==8/assert a.count('0.9.24 (57)')==16/" organizer/v0115/apply.py
           python3 organizer/v0115/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.24-source
           mv organizer/buildsrc0106/Organizer-Pro-v0.9.24-source organizer/buildsrc0106/Organizer-Pro-v0.9.25-source
+          python3 organizer/v0115/fix_theme_compat.py organizer/buildsrc0106/Organizer-Pro-v0.9.25-source
           ROOT=organizer/buildsrc0106/Organizer-Pro-v0.9.25-source
           grep -q 'versionCode = 58' "$ROOT/app/build.gradle.kts"
           grep -q 'versionName = "0.9.25"' "$ROOT/app/build.gradle.kts"
@@ -73,6 +74,7 @@ jobs:
           grep -q 'button_font_scale' "$ROOT/app/src/main/java/kz/kairat/organizer/SettingsStore.kt"
           grep -q 'LocalButtonTextScale' "$ROOT/app/src/main/java/kz/kairat/organizer/Theme.kt"
           grep -q 'LocalContentTextScale' "$ROOT/app/src/main/java/kz/kairat/organizer/Theme.kt"
+          grep -Fq 'OrganizerTheme(dark,fontScale,fontScale,bold,content)' "$ROOT/app/src/main/java/kz/kairat/organizer/Theme.kt"
           grep -Fq 'FontScaleRow(AppStrings.t(lang,"button_font")' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
           grep -Fq 'FontScaleRow(AppStrings.t(lang,"content_font")' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
           grep -Fq 'SettingSwitch(AppStrings.t(lang,"bold"),bold,onBold)' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
