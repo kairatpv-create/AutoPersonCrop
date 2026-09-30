@@ -17,11 +17,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: organizer-web/package-lock.json
       - name: Install
         working-directory: organizer-web
-        run: npm install --package-lock-only && npm ci
+        run: npm install
       - name: Build
         working-directory: organizer-web
         run: npm run build
