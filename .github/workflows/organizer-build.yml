@@ -83,6 +83,15 @@ jobs:
           grep -Fq 'bounds.height()*0.30f' "$ROOT/app/src/main/java/kz/kairat/organizer/ReminderAlertActivity.kt"
           grep -q 'fun getStandaloneMoneyEntries()' "$ROOT/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt"
 
+      - name: Upload Kotlin source snapshot for v0.9.25 edit
+        if: ${{ hashFiles('organizer/v0114/apply.py') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Organizer-Pro-v0.9.24-kotlin-source
+          path: organizer/buildsrc0106/Organizer-Pro-v0.9.24-source/app/src/main/java/kz/kairat/organizer
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Build APK
         if: ${{ hashFiles('organizer/v0114/apply.py') != '' }}
         working-directory: organizer/buildsrc0106/Organizer-Pro-v0.9.24-source
