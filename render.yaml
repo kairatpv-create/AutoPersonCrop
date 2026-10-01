@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: organizer-pro
+    runtime: node
+    plan: free
+    branch: personal-organizer-web-v1
+    buildCommand: cd organizer-sync-server && npm install --omit=dev
+    startCommand: node organizer-sync-server/server.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: TOKEN_DAYS
+        value: "30"
+      - key: ALLOWED_ORIGINS
+        value: https://organizer-pro.app,https://www.organizer-pro.app
+      - key: DATABASE_URL
+        fromDatabase:
+          name: organizer-pro-db
+          property: connectionString
+
+databases:
+  - name: organizer-pro-db
+    databaseName: organizer_pro
+    user: organizer_pro
+    plan: free
