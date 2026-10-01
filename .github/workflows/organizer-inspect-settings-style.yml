@@ -17,13 +17,14 @@ jobs:
         run: |
           head -n -1 organizer/build_v0931.sh > /tmp/reconstruct_v0931.sh
           bash /tmp/reconstruct_v0931.sh
-      - name: Show SettingsCard and cloud card
+      - name: Show SettingsCard and brand colors
         shell: bash
         run: |
           ROOT=organizer/buildsrc0106/Organizer-Pro-v0.9.31-source
           UI="$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
           CLOUD="$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
-          echo '=== SETTINGSCARD ==='
-          grep -n -B 5 -A 30 '@Composable private fun SettingsCard' "$UI" || true
+          echo '=== BRAND COLORS ==='
+          grep -n -B 8 -A 20 'fun brandCardColors' "$UI" || true
+          grep -n -B 8 -A 20 'brandCardColors' "$UI" | head -80 || true
           echo '=== CLOUD CARD ==='
-          grep -n -B 5 -A 80 '@Composable fun CloudSyncSettingsCard' "$CLOUD" || true
+          grep -n -B 5 -A 70 '@Composable fun CloudSyncSettingsCard' "$CLOUD" || true
