@@ -55,8 +55,8 @@ jobs:
           ! grep -q 'Project ID' organizer-web/static/sync.js
           ! grep -q 'Web API key' organizer-web/static/sync.js
           ! grep -q 'Firebase' organizer-web/static/sync.js
-          grep -q "'/api/auth/login'" organizer-web/static/sync.js
-          grep -q "'/api/auth/register'" organizer-web/static/sync.js
+          grep -q "'/api/auth/'" organizer-web/static/sync.js
+          grep -q "create?'register':'login'" organizer-web/static/sync.js
           grep -q "'/api/sync'" organizer-web/static/sync.js
           grep -q 'autoSync' organizer-web/static/sync.js
           grep -q 'beforeinstallprompt' organizer-web/static/sync.js
@@ -105,7 +105,7 @@ jobs:
         shell: bash
         run: |
           python3 - <<'PY'
-          import json, urllib.request, urllib.error
+          import json, urllib.request
           base='http://127.0.0.1:10000'
           def req(path, method='GET', body=None, token=None):
               data=None if body is None else json.dumps(body).encode()
