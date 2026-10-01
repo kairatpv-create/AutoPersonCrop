@@ -1,0 +1,33 @@
+name: Export Android signing tools temp
+
+on:
+  push:
+    branches:
+      - personal-organizer-v1
+    paths:
+      - '.github/workflows/export-android-signing-tools-temp.yml'
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Android 35
+        shell: bash
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "build-tools;35.0.0"
+      - name: Collect tools
+        shell: bash
+        run: |
+          mkdir -p /tmp/android-signing-tools/lib64
+          cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" /tmp/android-signing-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" /tmp/android-signing-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" /tmp/android-signing-tools/lib/
+          chmod +x /tmp/android-signing-tools/apksigner /tmp/android-signing-tools/zipalign
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-signing-tools-35-temp
+          path: /tmp/android-signing-tools
+          retention-days: 1
