@@ -65,6 +65,7 @@ jobs:
           mv organizer/buildsrc0106/Organizer-Pro-v0.9.24-source organizer/buildsrc0106/Organizer-Pro-v0.9.25-source
           python3 organizer/v0115/fix_theme_compat.py organizer/buildsrc0106/Organizer-Pro-v0.9.25-source
           python3 organizer/v0116/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.25-source
+          python3 organizer/v0116/fix_manifest.py organizer/buildsrc0106/Organizer-Pro-v0.9.25-source
           mv organizer/buildsrc0106/Organizer-Pro-v0.9.25-source organizer/buildsrc0106/Organizer-Pro-v0.9.26-source
           ROOT=organizer/buildsrc0106/Organizer-Pro-v0.9.26-source
           grep -q 'versionCode = 59' "$ROOT/app/build.gradle.kts"
