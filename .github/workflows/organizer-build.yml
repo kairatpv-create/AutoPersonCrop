@@ -1,9 +1,12 @@
-name: Build Organizer Pro v0.9.29 Final Sync
+name: Build Organizer Pro v0.9.31
 
 on:
   push:
     branches:
       - personal-organizer-v1
+    paths:
+      - 'organizer/**'
+      - '.github/workflows/organizer-build.yml'
   workflow_dispatch:
 
 env:
@@ -18,14 +21,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Java 17
-        if: ${{ hashFiles('organizer/v0119/apply.py') != '' }}
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Install Android 35
-        if: ${{ hashFiles('organizer/v0119/apply.py') != '' }}
         shell: bash
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
@@ -33,92 +34,26 @@ jobs:
           "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
-        if: ${{ hashFiles('organizer/v0119/apply.py') != '' }}
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
 
-      - name: Restore current Organizer Pro and apply v0.9.29 final sync
-        if: ${{ hashFiles('organizer/v0119/apply.py') != '' }}
+      - name: Build and verify Organizer Pro v0.9.31
         shell: bash
         run: |
-          python3 organizer/v0106/rebuild.py
-          test -f organizer/buildsrc0106/Organizer-Pro-v0.9.16-source/app/build.gradle.kts
-          python3 organizer/v0107/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.16-source
-          mv organizer/buildsrc0106/Organizer-Pro-v0.9.16-source organizer/buildsrc0106/Organizer-Pro-v0.9.17-source
-          python3 organizer/v0108/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.17-source
-          mv organizer/buildsrc0106/Organizer-Pro-v0.9.17-source organizer/buildsrc0106/Organizer-Pro-v0.9.18-source
-          python3 organizer/v0109/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.18-source
-          mv organizer/buildsrc0106/Organizer-Pro-v0.9.18-source organizer/buildsrc0106/Organizer-Pro-v0.9.19-source
-          python3 organizer/v0110/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.19-source
-          mv organizer/buildsrc0106/Organizer-Pro-v0.9.19-source organizer/buildsrc0106/Organizer-Pro-v0.9.20-source
-          python3 organizer/v0111/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.20-source
-          mv organizer/buildsrc0106/Organizer-Pro-v0.9.20-source organizer/buildsrc0106/Organizer-Pro-v0.9.21-source
-          python3 organizer/v0112/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.21-source
-          mv organizer/buildsrc0106/Organizer-Pro-v0.9.21-source organizer/buildsrc0106/Organizer-Pro-v0.9.22-source
-          python3 organizer/v0113/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.22-source
-          mv organizer/buildsrc0106/Organizer-Pro-v0.9.22-source organizer/buildsrc0106/Organizer-Pro-v0.9.23-source
-          python3 organizer/v0114/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.23-source
-          mv organizer/buildsrc0106/Organizer-Pro-v0.9.23-source organizer/buildsrc0106/Organizer-Pro-v0.9.24-source
-          sed -i "s/assert a.count('0.9.24 (57)')==8/assert a.count('0.9.24 (57)')==16/" organizer/v0115/apply.py
-          python3 organizer/v0115/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.24-source
-          mv organizer/buildsrc0106/Organizer-Pro-v0.9.24-source organizer/buildsrc0106/Organizer-Pro-v0.9.25-source
-          python3 organizer/v0115/fix_theme_compat.py organizer/buildsrc0106/Organizer-Pro-v0.9.25-source
-          python3 organizer/v0116/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.25-source
-          python3 organizer/v0116/fix_manifest.py organizer/buildsrc0106/Organizer-Pro-v0.9.25-source
-          mv organizer/buildsrc0106/Organizer-Pro-v0.9.25-source organizer/buildsrc0106/Organizer-Pro-v0.9.26-source
-          python3 organizer/v0117/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.26-source
-          mv organizer/buildsrc0106/Organizer-Pro-v0.9.26-source organizer/buildsrc0106/Organizer-Pro-v0.9.27-source
-          python3 organizer/v0118/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.27-source
-          mv organizer/buildsrc0106/Organizer-Pro-v0.9.27-source organizer/buildsrc0106/Organizer-Pro-v0.9.28-source
-          python3 organizer/v0119/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.28-source
-          mv organizer/buildsrc0106/Organizer-Pro-v0.9.28-source organizer/buildsrc0106/Organizer-Pro-v0.9.29-source
-          ROOT=organizer/buildsrc0106/Organizer-Pro-v0.9.29-source
-          grep -q 'versionCode = 62' "$ROOT/app/build.gradle.kts"
-          grep -q 'versionName = "0.9.29"' "$ROOT/app/build.gradle.kts"
-          grep -q 'applicationId = "kz.kairat.organizer"' "$ROOT/app/build.gradle.kts"
-          grep -q 'SQLiteOpenHelper(context, "organizer.db", null, 9)' "$ROOT/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt"
-          grep -q 'var buttonFontScale: Float' "$ROOT/app/src/main/java/kz/kairat/organizer/SettingsStore.kt"
-          grep -q 'sync_last_fingerprint' "$ROOT/app/src/main/java/kz/kairat/organizer/SettingsStore.kt"
-          grep -q 'sync_last_cloud_updated_at' "$ROOT/app/src/main/java/kz/kairat/organizer/SettingsStore.kt"
-          grep -q 'LocalButtonTextScale' "$ROOT/app/src/main/java/kz/kairat/organizer/Theme.kt"
-          grep -q 'LocalContentTextScale' "$ROOT/app/src/main/java/kz/kairat/organizer/Theme.kt"
-          grep -Fq 'FontScaleRow(AppStrings.t(lang,"button_font")' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
-          grep -Fq 'FontScaleRow(AppStrings.t(lang,"content_font")' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
-          grep -Fq 'CloudSyncSettingsCard(db,settings,lang)' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
-          grep -Fq 'CloudSyncAutoHost(db,settings,lang)' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
-          grep -Fq 'https://organizer-pro.app' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
-          ! grep -Fq 'kairatpv-create.github.io' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
-          test -f "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
-          grep -Fq 'https://organizer-pro.app' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
-          grep -Fq '/api/auth/login' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
-          grep -Fq '/api/auth/register' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
-          grep -Fq '/api/sync' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
-          ! grep -q 'Firebase' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
-          ! grep -q 'Project ID' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
-          ! grep -q 'Web API key' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
-          ! grep -q 'Отправить с телефона' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
-          ! grep -q 'Получить из облака' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
-          grep -q 'android.permission.INTERNET' "$ROOT/app/src/main/AndroidManifest.xml"
-          grep -q 'android.permission.READ_CALENDAR' "$ROOT/app/src/main/AndroidManifest.xml"
-          ! grep -q 'android.permission.WRITE_CALENDAR' "$ROOT/app/src/main/AndroidManifest.xml"
-          grep -q 'BirthdayScheduler.rescheduleAll(this)' "$ROOT/app/src/main/java/kz/kairat/organizer/MainActivity.kt"
-          grep -q 'organizer_reminders_v3' "$ROOT/app/src/main/java/kz/kairat/organizer/ReminderSystem.kt"
-          grep -Fq 'dismissOnBackPress=true,dismissOnClickOutside=false' "$ROOT/app/src/main/java/kz/kairat/organizer/CalendarUi.kt"
-          ! grep -Fq 'Icons.Default.Close' "$ROOT/app/src/main/java/kz/kairat/organizer/CalendarUi.kt"
-          grep -q 'fun getStandaloneMoneyEntries()' "$ROOT/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt"
-          grep -q 'BackupManager.restore' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt" || true
+          for attempt in 1 2 3; do
+            if bash organizer/build_v0931.sh; then
+              exit 0
+            fi
+            echo "Gradle attempt $attempt failed; waiting before retry..."
+            sleep $((attempt*45))
+          done
+          exit 1
 
-      - name: Build APK
-        if: ${{ hashFiles('organizer/v0119/apply.py') != '' }}
-        working-directory: organizer/buildsrc0106/Organizer-Pro-v0.9.29-source
-        run: gradle --no-daemon --build-cache assembleDebug
-
-      - name: Upload APK only
-        if: ${{ hashFiles('organizer/v0119/apply.py') != '' }}
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Organizer-Pro-v0.9.29-debug
-          path: organizer/buildsrc0106/Organizer-Pro-v0.9.29-source/app/build/outputs/apk/debug/app-debug.apk
+          name: Organizer-Pro-v0.9.31-debug
+          path: organizer/buildsrc0106/Organizer-Pro-v0.9.31-source/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7
