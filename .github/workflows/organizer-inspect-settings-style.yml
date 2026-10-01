@@ -1,0 +1,29 @@
+name: Inspect Organizer Pro settings style
+
+on:
+  push:
+    branches:
+      - personal-organizer-v1
+    paths:
+      - '.github/workflows/organizer-inspect-settings-style.yml'
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct v0.9.31 source without building
+        shell: bash
+        run: |
+          head -n -1 organizer/build_v0931.sh > /tmp/reconstruct_v0931.sh
+          bash /tmp/reconstruct_v0931.sh
+      - name: Show SettingsCard and cloud card
+        shell: bash
+        run: |
+          ROOT=organizer/buildsrc0106/Organizer-Pro-v0.9.31-source
+          UI="$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
+          CLOUD="$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
+          echo '=== SETTINGSCARD ==='
+          grep -n -B 5 -A 30 '@Composable private fun SettingsCard' "$UI" || true
+          echo '=== CLOUD CARD ==='
+          grep -n -B 5 -A 80 '@Composable fun CloudSyncSettingsCard' "$CLOUD" || true
