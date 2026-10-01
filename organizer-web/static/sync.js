@@ -34,7 +34,8 @@ function authHeaders(){var s=session();return {'Content-Type':'application/json'
 function numericId(value,map,counter){
   if(typeof value==='number'&&isFinite(value)&&value>0)return Math.trunc(value);
   var k=String(value==null?'':value);if(map[k])return map[k];
-  var n=Date.now()*1000+(counter.n++%900)+100;map[k]=n;return n;
+  var h=2166136261;for(var i=0;i<k.length;i++){h^=k.charCodeAt(i);h=Math.imul(h,16777619)}
+  var n=1000000000+(h>>>0);while(Object.values(map).indexOf(n)>=0)n++;map[k]=n;return n;
 }
 function normalizeState(st){
   var noteMap={},projectMap={},stageMap={},moneyMap={},remMap={},counter={n:1};
@@ -68,6 +69,14 @@ function fromBackup(b){
   };
 }
 function canonicalLocal(){var payload=JSON.stringify(toBackup(loadState()));return {payload:payload,sig:sig(payload)}}
+function payloadTime(payload){
+  try{
+    var r=JSON.parse(payload||'{}'),max=0;
+    function scan(arr,keys){(Array.isArray(arr)?arr:[]).forEach(function(o){keys.forEach(function(k){max=Math.max(max,Number(o&&o[k]||0))})})}
+    scan(r.notes,['updatedAt','createdAt']);scan(r.projects,['updatedAt','createdAt','dueAt']);scan(r.projectStages,['createdAt','dueAt']);scan(r.money,['createdAt']);scan(r.reminders,['createdAt','triggerAt']);
+    return max;
+  }catch(e){return 0}
+}
 function applyRemote(payload,rev,remoteSig){
   var local=loadState();if(activeCount(local)>0)safety(local,'Перед получением данных из облака');
   var b=JSON.parse(payload);saveState(fromBackup(b));setMeta({rev:Number(rev||0),lastSig:remoteSig,lastSyncAt:Date.now()});
@@ -100,13 +109,16 @@ async function autoSync(force){
     if(!m.lastSig){
       if(activeCount(loadState())===0&&remotePayload){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные получены');notifyCloudApplied();return}
       if(local.sig===remoteSig){setMeta({rev:remoteRev,lastSig:local.sig,lastSyncAt:Date.now()});updateTop('Синхронизировано');return}
-      if(remotePayload){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные получены');notifyCloudApplied();return}
-      await upload(local,remoteRev);updateTop('Синхронизировано');return;
+      if(!remotePayload||payloadTime(local.payload)>payloadTime(remotePayload)){await upload(local,remoteRev);updateTop('Синхронизировано');return}
+      applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные получены');notifyCloudApplied();return
     }
     var localDirty=local.sig!==m.lastSig,remoteDirty=remoteRev!==Number(m.rev||0)||remoteSig!==m.lastSig;
     if(localDirty&&!remoteDirty){await upload(local,remoteRev);updateTop('Синхронизировано');return}
     if(!localDirty&&remoteDirty){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные обновлены');notifyCloudApplied();return}
-    if(localDirty&&remoteDirty){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные обновлены');notifyCloudApplied();return}
+    if(localDirty&&remoteDirty){
+      if(payloadTime(local.payload)>payloadTime(remotePayload)){await upload(local,remoteRev);updateTop('Синхронизировано');return}
+      applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные обновлены');notifyCloudApplied();return
+    }
     setMeta({rev:remoteRev,lastSig:local.sig,lastSyncAt:Date.now()});updateTop('Синхронизировано');
   }catch(e){
     if(/Сессия завершена|Требуется вход/.test(String(e.message||''))){localStorage.removeItem(SESSION_KEY);localStorage.removeItem(META_KEY);renderAccount();}
