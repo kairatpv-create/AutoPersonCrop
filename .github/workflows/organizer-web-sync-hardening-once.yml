@@ -1,0 +1,62 @@
+name: Organizer Pro Web Sync Hardening Once
+
+on:
+  push:
+    branches:
+      - personal-organizer-web-v1-sync-hardening
+    paths:
+      - '.github/workflows/organizer-web-sync-hardening-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: personal-organizer-web-v1-sync-hardening
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Harden cross-device identity and conflict handling
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('organizer-web/static/sync.js')
+          s=p.read_text()
+
+          old="""function numericId(value,map,counter){\n  if(typeof value==='number'&&isFinite(value)&&value>0)return Math.trunc(value);\n  var k=String(value==null?'':value);if(map[k])return map[k];\n  var n=Date.now()*1000+(counter.n++%900)+100;map[k]=n;return n;\n}\n"""
+          new="""function numericId(value,map,counter){\n  if(typeof value==='number'&&isFinite(value)&&value>0)return Math.trunc(value);\n  var k=String(value==null?'':value);if(map[k])return map[k];\n  var h=2166136261;for(var i=0;i<k.length;i++){h^=k.charCodeAt(i);h=Math.imul(h,16777619)}\n  var n=1000000000+(h>>>0);while(Object.values(map).indexOf(n)>=0)n++;map[k]=n;return n;\n}\n"""
+          assert old in s
+          s=s.replace(old,new,1)
+
+          anchor="""function canonicalLocal(){var payload=JSON.stringify(toBackup(loadState()));return {payload:payload,sig:sig(payload)}}\n"""
+          assert anchor in s
+          add="""function canonicalLocal(){var payload=JSON.stringify(toBackup(loadState()));return {payload:payload,sig:sig(payload)}}\nfunction payloadTime(payload){\n  try{\n    var r=JSON.parse(payload||'{}'),max=0;\n    function scan(arr,keys){(Array.isArray(arr)?arr:[]).forEach(function(o){keys.forEach(function(k){max=Math.max(max,Number(o&&o[k]||0))})})}\n    scan(r.notes,['updatedAt','createdAt']);scan(r.projects,['updatedAt','createdAt','dueAt']);scan(r.projectStages,['createdAt','dueAt']);scan(r.money,['createdAt']);scan(r.reminders,['createdAt','triggerAt']);\n    return max;\n  }catch(e){return 0}\n}\n"""
+          s=s.replace(anchor,add,1)
+
+          old="""    if(!m.lastSig){\n      if(activeCount(loadState())===0&&remotePayload){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные получены');notifyCloudApplied();return}\n      if(local.sig===remoteSig){setMeta({rev:remoteRev,lastSig:local.sig,lastSyncAt:Date.now()});updateTop('Синхронизировано');return}\n      if(remotePayload){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные получены');notifyCloudApplied();return}\n      await upload(local,remoteRev);updateTop('Синхронизировано');return;\n    }\n"""
+          new="""    if(!m.lastSig){\n      if(activeCount(loadState())===0&&remotePayload){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные получены');notifyCloudApplied();return}\n      if(local.sig===remoteSig){setMeta({rev:remoteRev,lastSig:local.sig,lastSyncAt:Date.now()});updateTop('Синхронизировано');return}\n      if(!remotePayload||payloadTime(local.payload)>payloadTime(remotePayload)){await upload(local,remoteRev);updateTop('Синхронизировано');return}\n      applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные получены');notifyCloudApplied();return\n    }\n"""
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old="""    if(localDirty&&remoteDirty){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные обновлены');notifyCloudApplied();return}\n"""
+          new="""    if(localDirty&&remoteDirty){\n      if(payloadTime(local.payload)>payloadTime(remotePayload)){await upload(local,remoteRev);updateTop('Синхронизировано');return}\n      applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные обновлены');notifyCloudApplied();return\n    }\n"""
+          assert old in s
+          s=s.replace(old,new,1)
+
+          p.write_text(s)
+          PY
+          node --check organizer-web/static/sync.js
+          grep -q 'function payloadTime' organizer-web/static/sync.js
+          grep -q '1000000000' organizer-web/static/sync.js
+      - name: Commit hardening
+        shell: bash
+        run: |
+          git config user.name 'kairatpv-create'
+          git config user.email 'kairat.pv@gmail.com'
+          git add organizer-web/static/sync.js
+          git commit -m 'Harden Organizer Pro Web cross-device sync'
+          git push origin HEAD:personal-organizer-web-v1-sync-hardening
