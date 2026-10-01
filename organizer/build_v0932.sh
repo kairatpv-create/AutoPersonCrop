@@ -39,6 +39,22 @@ gradle --no-daemon --build-cache -p "$ROOT" assembleDebug
 
 APK="$ROOT/app/build/outputs/apk/debug/app-debug.apk"
 test -f "$APK"
-"$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apksigner-v0932.txt
+APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+DEBUG_KS="$HOME/.android/debug.keystore"
+test -f "$DEBUG_KS"
+
+# AGP debug signing currently emits v2 only. Re-sign the already aligned APK with
+# both v2 and v3 enabled, using the same debug key generated for this build.
+"$APKSIGNER" sign \
+  --ks "$DEBUG_KS" \
+  --ks-key-alias androiddebugkey \
+  --ks-pass pass:android \
+  --key-pass pass:android \
+  --v1-signing-enabled false \
+  --v2-signing-enabled true \
+  --v3-signing-enabled true \
+  "$APK"
+
+"$APKSIGNER" verify --verbose --print-certs "$APK" | tee /tmp/apksigner-v0932.txt
 grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' /tmp/apksigner-v0932.txt
 grep -q 'Verified using v3 scheme (APK Signature Scheme v3): true' /tmp/apksigner-v0932.txt
