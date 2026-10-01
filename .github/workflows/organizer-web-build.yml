@@ -1,11 +1,11 @@
-name: Build Organizer Pro Web
+name: Build Organizer Pro Web Static
 
 on:
   push:
     branches:
       - personal-organizer-web-v1
     paths:
-      - 'organizer-web/**'
+      - 'organizer-web/static/**'
       - '.github/workflows/organizer-web-build.yml'
   workflow_dispatch:
 
@@ -13,29 +13,38 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Install
-        working-directory: organizer-web
-        run: npm install
-      - name: Build portable web app
-        working-directory: organizer-web
-        run: npm run build
-      - name: Verify one-file portable output
-        working-directory: organizer-web
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify static files
+        shell: bash
         run: |
-          test -f dist/index.html
-          test ! -d dist/assets
-          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 1
-          grep -q 'name="organizer-portable" content="true"' dist/index.html
-          ! grep -q 'type="module"' dist/index.html
-          ! grep -q 'assets/' dist/index.html
-      - name: Upload web build
+          test -f organizer-web/static/index.html
+          test -f organizer-web/static/app.js
+          test -f organizer-web/static/style.css
+          grep -q '<script src="app.js"></script>' organizer-web/static/index.html
+          grep -q '<link rel="stylesheet" href="style.css">' organizer-web/static/index.html
+          ! grep -q 'type="module"' organizer-web/static/index.html
+          ! grep -q 'firebase' organizer-web/static/index.html
+          ! grep -q 'import ' organizer-web/static/app.js
+          node --check organizer-web/static/app.js
+
+      - name: Test direct file opening in Chrome
+        shell: bash
+        run: |
+          CHROME=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)
+          test -n "$CHROME"
+          URL="file://$GITHUB_WORKSPACE/organizer-web/static/index.html"
+          "$CHROME" --headless --no-sandbox --disable-gpu --allow-file-access-from-files --virtual-time-budget=2500 --dump-dom "$URL" > /tmp/organizer-dom.html
+          grep -q 'Органайзер Про' /tmp/organizer-dom.html
+          grep -q 'Заметки' /tmp/organizer-dom.html
+          grep -q 'Создать' /tmp/organizer-dom.html
+          ! grep -q 'Ошибка запуска веб-версии' /tmp/organizer-dom.html
+
+      - name: Upload portable web folder
         uses: actions/upload-artifact@v4
         with:
-          name: Organizer-Pro-Web-v0.1.4-portable
-          path: organizer-web/dist/index.html
+          name: Organizer-Pro-Web-v0.2.0-static
+          path: organizer-web/static/
           if-no-files-found: error
           retention-days: 7
