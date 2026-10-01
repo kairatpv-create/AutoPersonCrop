@@ -15,6 +15,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: organizer_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -65,13 +78,62 @@ jobs:
           assert 'express' in p['dependencies'] and 'pg' in p['dependencies'] and 'bcryptjs' in p['dependencies']
           PY
 
-      - name: Test local web rendering in Chrome
+      - name: Install server dependencies
+        working-directory: organizer-sync-server
+        run: npm install --omit=dev --no-audit --no-fund
+
+      - name: Start Organizer Pro test server
+        shell: bash
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/organizer_test
+          JWT_SECRET: organizer-pro-ci-secret-0123456789abcdef0123456789
+          TOKEN_DAYS: '30'
+          ALLOWED_ORIGINS: http://127.0.0.1:10000
+          NODE_ENV: test
+          PORT: '10000'
+        run: |
+          node organizer-sync-server/server.js > /tmp/organizer-server.log 2>&1 &
+          echo $! > /tmp/organizer-server.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:10000/health >/tmp/health.json; then break; fi
+            sleep 1
+          done
+          cat /tmp/health.json
+          grep -q '"ok":true' /tmp/health.json
+
+      - name: Test account and sync API roundtrip
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error
+          base='http://127.0.0.1:10000'
+          def req(path, method='GET', body=None, token=None):
+              data=None if body is None else json.dumps(body).encode()
+              h={'Content-Type':'application/json'}
+              if token: h['Authorization']='Bearer '+token
+              r=urllib.request.Request(base+path,data=data,headers=h,method=method)
+              with urllib.request.urlopen(r,timeout=10) as x:
+                  return json.loads(x.read().decode())
+          reg=req('/api/auth/register','POST',{'email':'ci@organizer-pro.app','password':'Test12345'})
+          assert reg['token']
+          login=req('/api/auth/login','POST',{'email':'ci@organizer-pro.app','password':'Test12345'})
+          token=login['token']
+          empty=req('/api/sync',token=token)
+          assert empty['exists'] is False and empty['rev']==0
+          payload=json.dumps({'format':'my-organizer-backup','version':7,'createdAt':0,'cloudSchema':'organizer-sync-v3','notes':[{'id':1,'title':'CI','body':'ok','createdAt':1,'updatedAt':1,'colorKey':'blue'}],'tasks':[],'projects':[],'projectStages':[],'projectJournal':[],'projectNoteLinks':[],'money':[],'reminders':[]},separators=(',',':'))
+          put=req('/api/sync','PUT',{'payload':payload,'baseRev':0},token)
+          assert put['ok'] is True and put['rev']==1
+          got=req('/api/sync',token=token)
+          assert got['exists'] is True and got['rev']==1 and got['payload']==payload
+          print('API roundtrip OK')
+          PY
+
+      - name: Test served web app in Chrome
         shell: bash
         run: |
           CHROME=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)
           test -n "$CHROME"
-          URL="file://$GITHUB_WORKSPACE/organizer-web/static/index.html"
-          "$CHROME" --headless --no-sandbox --disable-gpu --allow-file-access-from-files --virtual-time-budget=2500 --dump-dom "$URL" > /tmp/organizer-dom.html
+          "$CHROME" --headless --no-sandbox --disable-gpu --virtual-time-budget=3000 --dump-dom http://127.0.0.1:10000/ > /tmp/organizer-dom.html
           grep -q 'Органайзер Про' /tmp/organizer-dom.html
           grep -q 'Заметки' /tmp/organizer-dom.html
           grep -q 'Создать' /tmp/organizer-dom.html
