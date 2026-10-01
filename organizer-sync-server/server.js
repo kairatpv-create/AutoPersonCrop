@@ -13,7 +13,7 @@ const PORT = Number(process.env.PORT || 10000);
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const TOKEN_DAYS = Math.max(1, Number(process.env.TOKEN_DAYS || 30));
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://organizer-pro.app,https://www.organizer-pro.app,https://kairatpv-create.github.io').split(',').map(s => s.trim()).filter(Boolean);
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://organizer-pro.onrender.com,https://organizer-pro.app,https://www.organizer-pro.app,https://kairatpv-create.github.io').split(',').map(s => s.trim()).filter(Boolean);
 const WEB_DIR = path.resolve(__dirname, '..', 'organizer-web', 'static');
 
 if (!DATABASE_URL) throw new Error('DATABASE_URL is required');
