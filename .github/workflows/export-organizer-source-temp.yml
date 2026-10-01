@@ -1,0 +1,29 @@
+name: Export Organizer Pro Source Temp
+
+on:
+  push:
+    branches:
+      - personal-organizer-v1-source-temp-2
+    paths:
+      - '.github/workflows/export-organizer-source-temp.yml'
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct current Organizer Pro 0.9.31 source
+        shell: bash
+        run: |
+          head -n -1 organizer/build_v0930.sh > /tmp/reconstruct_v0930.sh
+          bash /tmp/reconstruct_v0930.sh
+          ROOT=organizer/buildsrc0106/Organizer-Pro-v0.9.30-source
+          python3 organizer/v0121/apply.py "$ROOT"
+          mv "$ROOT" organizer/buildsrc0106/Organizer-Pro-v0.9.31-source
+          ROOT=organizer/buildsrc0106/Organizer-Pro-v0.9.31-source
+          python3 organizer/v0121/fix_sync_card_style.py "$ROOT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Organizer-Pro-v0.9.31-source-temp
+          path: organizer/buildsrc0106/Organizer-Pro-v0.9.31-source/
+          retention-days: 1
