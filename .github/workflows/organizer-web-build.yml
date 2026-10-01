@@ -1,4 +1,4 @@
-name: Build Organizer Pro Web Static
+name: Build Organizer Pro Web v0.3.0 Sync
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
       - personal-organizer-web-v1
     paths:
       - 'organizer-web/static/**'
+      - 'organizer-web/firestore.rules'
       - '.github/workflows/organizer-web-build.yml'
   workflow_dispatch:
 
@@ -16,18 +17,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Verify static files
+      - name: Verify static and sync files
         shell: bash
         run: |
           test -f organizer-web/static/index.html
           test -f organizer-web/static/app.js
           test -f organizer-web/static/style.css
+          test -f organizer-web/static/sync.js
+          test -f organizer-web/static/sync.css
+          test -f organizer-web/static/FIREBASE_SETUP.txt
+          test -f organizer-web/firestore.rules
+          grep -q 'WEB 0.3.0' organizer-web/static/index.html
           grep -q '<script src="app.js"></script>' organizer-web/static/index.html
+          grep -q '<script src="sync.js"></script>' organizer-web/static/index.html
           grep -q '<link rel="stylesheet" href="style.css">' organizer-web/static/index.html
+          grep -q '<link rel="stylesheet" href="sync.css">' organizer-web/static/index.html
           ! grep -q 'type="module"' organizer-web/static/index.html
-          ! grep -q 'firebase' organizer-web/static/index.html
           ! grep -q 'import ' organizer-web/static/app.js
+          ! grep -q 'import ' organizer-web/static/sync.js
+          grep -q 'identitytoolkit.googleapis.com' organizer-web/static/sync.js
+          grep -q 'firestore.googleapis.com' organizer-web/static/sync.js
+          grep -q 'request.auth.uid == userId' organizer-web/firestore.rules
           node --check organizer-web/static/app.js
+          node --check organizer-web/static/sync.js
 
       - name: Test direct file opening in Chrome
         shell: bash
@@ -35,16 +47,17 @@ jobs:
           CHROME=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)
           test -n "$CHROME"
           URL="file://$GITHUB_WORKSPACE/organizer-web/static/index.html"
-          "$CHROME" --headless --no-sandbox --disable-gpu --allow-file-access-from-files --virtual-time-budget=2500 --dump-dom "$URL" > /tmp/organizer-dom.html
+          "$CHROME" --headless --no-sandbox --disable-gpu --allow-file-access-from-files --virtual-time-budget=3000 --dump-dom "$URL" > /tmp/organizer-dom.html
           grep -q 'Органайзер Про' /tmp/organizer-dom.html
           grep -q 'Заметки' /tmp/organizer-dom.html
           grep -q 'Создать' /tmp/organizer-dom.html
+          grep -q 'Синхронизация' /tmp/organizer-dom.html
           ! grep -q 'Ошибка запуска веб-версии' /tmp/organizer-dom.html
 
       - name: Upload portable web folder
         uses: actions/upload-artifact@v4
         with:
-          name: Organizer-Pro-Web-v0.2.0-static
+          name: Organizer-Pro-Web-v0.3.0-sync
           path: organizer-web/static/
           if-no-files-found: error
           retention-days: 7
