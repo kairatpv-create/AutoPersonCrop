@@ -13,11 +13,15 @@ strings=base/'AppStrings.kt'
 cloud.write_text((here/'CloudSync.kt').read_text())
 
 u=ui.read_text()
+# v0.9.27 inserted the old Firebase auto-sync host. Remove it before wiring the first-party host.
+u=u.replace('    CloudAutoSyncHost(db,settings,lang)\n','')
 home='''@Composable private fun OrganizerHome(db:NoteDatabase,settings:SettingsStore,lang:String,onLanguage:(String)->Unit,dark:Boolean,onDark:(Boolean)->Unit,fontScale:Float,onFont:(Float)->Unit,buttonScale:Float,onButtonScale:(Float)->Unit,bold:Boolean,onBold:(Boolean)->Unit,onLock:()->Unit){
     val context=LocalContext.current'''
 assert home in u
 u=u.replace(home,home+'\n    CloudSyncAutoHost(db,settings,lang)',1)
 u=u.replace('https://kairatpv-create.github.io/AutoPersonCrop/','https://organizer-pro.app')
+assert 'CloudAutoSyncHost(db,settings,lang)' not in u
+assert u.count('CloudSyncAutoHost(db,settings,lang)')==1
 ui.write_text(u)
 
 b=gradle.read_text()
