@@ -1,4 +1,4 @@
-name: Build Organizer Pro v0.9.26 Sync
+name: Build Organizer Pro v0.9.27 Auto Sync
 
 on:
   push:
@@ -18,14 +18,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Java 17
-        if: ${{ hashFiles('organizer/v0116/apply.py') != '' }}
+        if: ${{ hashFiles('organizer/v0117/apply.py') != '' }}
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Install Android 35
-        if: ${{ hashFiles('organizer/v0116/apply.py') != '' }}
+        if: ${{ hashFiles('organizer/v0117/apply.py') != '' }}
         shell: bash
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
@@ -33,13 +33,13 @@ jobs:
           "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
-        if: ${{ hashFiles('organizer/v0116/apply.py') != '' }}
+        if: ${{ hashFiles('organizer/v0117/apply.py') != '' }}
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
 
-      - name: Restore v0.9.25 and apply v0.9.26 cloud sync
-        if: ${{ hashFiles('organizer/v0116/apply.py') != '' }}
+      - name: Restore v0.9.26 and apply v0.9.27 simple automatic sync
+        if: ${{ hashFiles('organizer/v0117/apply.py') != '' }}
         shell: bash
         run: |
           python3 organizer/v0106/rebuild.py
@@ -67,28 +67,32 @@ jobs:
           python3 organizer/v0116/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.25-source
           python3 organizer/v0116/fix_manifest.py organizer/buildsrc0106/Organizer-Pro-v0.9.25-source
           mv organizer/buildsrc0106/Organizer-Pro-v0.9.25-source organizer/buildsrc0106/Organizer-Pro-v0.9.26-source
-          ROOT=organizer/buildsrc0106/Organizer-Pro-v0.9.26-source
-          grep -q 'versionCode = 59' "$ROOT/app/build.gradle.kts"
-          grep -q 'versionName = "0.9.26"' "$ROOT/app/build.gradle.kts"
+          python3 organizer/v0117/apply.py organizer/buildsrc0106/Organizer-Pro-v0.9.26-source
+          mv organizer/buildsrc0106/Organizer-Pro-v0.9.26-source organizer/buildsrc0106/Organizer-Pro-v0.9.27-source
+          ROOT=organizer/buildsrc0106/Organizer-Pro-v0.9.27-source
+          grep -q 'versionCode = 60' "$ROOT/app/build.gradle.kts"
+          grep -q 'versionName = "0.9.27"' "$ROOT/app/build.gradle.kts"
           grep -q 'applicationId = "kz.kairat.organizer"' "$ROOT/app/build.gradle.kts"
           grep -q 'SQLiteOpenHelper(context, "organizer.db", null, 9)' "$ROOT/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt"
           grep -q 'var buttonFontScale: Float' "$ROOT/app/src/main/java/kz/kairat/organizer/SettingsStore.kt"
-          grep -q 'content_font_scale' "$ROOT/app/src/main/java/kz/kairat/organizer/SettingsStore.kt"
-          grep -q 'button_font_scale' "$ROOT/app/src/main/java/kz/kairat/organizer/SettingsStore.kt"
-          grep -q 'sync_project_id' "$ROOT/app/src/main/java/kz/kairat/organizer/SettingsStore.kt"
-          grep -q 'sync_api_key' "$ROOT/app/src/main/java/kz/kairat/organizer/SettingsStore.kt"
-          grep -q 'sync_refresh_token' "$ROOT/app/src/main/java/kz/kairat/organizer/SettingsStore.kt"
+          grep -q 'sync_last_fingerprint' "$ROOT/app/src/main/java/kz/kairat/organizer/SettingsStore.kt"
+          grep -q 'sync_last_cloud_updated_at' "$ROOT/app/src/main/java/kz/kairat/organizer/SettingsStore.kt"
           grep -q 'LocalButtonTextScale' "$ROOT/app/src/main/java/kz/kairat/organizer/Theme.kt"
           grep -q 'LocalContentTextScale' "$ROOT/app/src/main/java/kz/kairat/organizer/Theme.kt"
-          grep -Fq 'OrganizerTheme(dark,fontScale,fontScale,bold,content)' "$ROOT/app/src/main/java/kz/kairat/organizer/Theme.kt"
           grep -Fq 'FontScaleRow(AppStrings.t(lang,"button_font")' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
           grep -Fq 'FontScaleRow(AppStrings.t(lang,"content_font")' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
-          grep -Fq 'SettingSwitch(AppStrings.t(lang,"bold"),bold,onBold)' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
           grep -Fq 'CloudSyncSettingsCard(db,settings,lang)' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
+          grep -Fq 'CloudAutoSyncHost(db,settings,lang)' "$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
           test -f "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
           grep -q 'identitytoolkit.googleapis.com' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
           grep -q 'firestore.googleapis.com' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
-          grep -q 'documents:commit' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
+          grep -q 'private const val INTERNAL_PROJECT_ID' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
+          grep -q 'private const val INTERNAL_API_KEY' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
+          grep -q 'fun autoSync' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
+          ! grep -q 'Project ID' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
+          ! grep -q 'Web API key' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
+          ! grep -q 'Отправить с телефона' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
+          ! grep -q 'Получить из облака' "$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
           grep -q 'android.permission.INTERNET' "$ROOT/app/src/main/AndroidManifest.xml"
           grep -q 'android.permission.READ_CALENDAR' "$ROOT/app/src/main/AndroidManifest.xml"
           ! grep -q 'android.permission.WRITE_CALENDAR' "$ROOT/app/src/main/AndroidManifest.xml"
@@ -99,15 +103,15 @@ jobs:
           grep -q 'fun getStandaloneMoneyEntries()' "$ROOT/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt"
 
       - name: Build APK
-        if: ${{ hashFiles('organizer/v0116/apply.py') != '' }}
-        working-directory: organizer/buildsrc0106/Organizer-Pro-v0.9.26-source
+        if: ${{ hashFiles('organizer/v0117/apply.py') != '' }}
+        working-directory: organizer/buildsrc0106/Organizer-Pro-v0.9.27-source
         run: gradle --no-daemon --build-cache assembleDebug
 
       - name: Upload APK only
-        if: ${{ hashFiles('organizer/v0116/apply.py') != '' }}
+        if: ${{ hashFiles('organizer/v0117/apply.py') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: Organizer-Pro-v0.9.26-debug
-          path: organizer/buildsrc0106/Organizer-Pro-v0.9.26-source/app/build/outputs/apk/debug/app-debug.apk
+          name: Organizer-Pro-v0.9.27-debug
+          path: organizer/buildsrc0106/Organizer-Pro-v0.9.27-source/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 1
