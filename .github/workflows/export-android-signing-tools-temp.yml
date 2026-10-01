@@ -21,10 +21,11 @@ jobs:
       - name: Collect tools
         shell: bash
         run: |
-          mkdir -p /tmp/android-signing-tools/lib
+          mkdir -p /tmp/android-signing-tools/lib /tmp/android-signing-tools/lib64
           cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" /tmp/android-signing-tools/
           cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" /tmp/android-signing-tools/
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" /tmp/android-signing-tools/lib/
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib64/libc++.so" /tmp/android-signing-tools/lib64/
           chmod +x /tmp/android-signing-tools/apksigner /tmp/android-signing-tools/zipalign
       - uses: actions/upload-artifact@v4
         with:
