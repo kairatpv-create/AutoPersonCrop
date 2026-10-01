@@ -1,0 +1,41 @@
+name: Organizer Pro live auth smoke temp
+
+on:
+  push:
+    branches:
+      - personal-organizer-web-v1
+    paths:
+      - '.github/workflows/organizer-web-live-auth-smoke-temp.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check health
+        shell: bash
+        run: |
+          curl --fail --show-error --silent --retry 5 --retry-delay 5 https://organizer-pro.onrender.com/health | tee /tmp/health.json
+          grep -q '"ok":true' /tmp/health.json
+      - name: Check browser preflight
+        shell: bash
+        run: |
+          curl --show-error --silent --dump-header /tmp/preflight.headers --output /tmp/preflight.body \
+            -X OPTIONS https://organizer-pro.onrender.com/api/auth/login \
+            -H 'Origin: https://organizer-pro.onrender.com' \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type'
+          cat /tmp/preflight.headers
+          grep -qi '^access-control-allow-origin: https://organizer-pro.onrender.com' /tmp/preflight.headers
+          grep -qi '^access-control-allow-methods: .*POST' /tmp/preflight.headers
+      - name: Check login route reaches auth handler
+        shell: bash
+        run: |
+          code=$(curl --show-error --silent --output /tmp/login.json --write-out '%{http_code}' \
+            -X POST https://organizer-pro.onrender.com/api/auth/login \
+            -H 'Origin: https://organizer-pro.onrender.com' \
+            -H 'Content-Type: application/json' \
+            --data '{"email":"cors-smoke-nonexistent@organizer-pro.invalid","password":"NotARealPassword123"}')
+          cat /tmp/login.json
+          test "$code" = '401'
+          grep -q 'INVALID_LOGIN' /tmp/login.json
+          ! grep -q 'REQUEST_ERROR' /tmp/login.json
