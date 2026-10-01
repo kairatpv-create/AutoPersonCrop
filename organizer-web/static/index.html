@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#1769a6">
-  <meta name="description" content="Органайзер Про — заметки, проекты, финансы и календарь с синхронизацией между телефоном и компьютером.">
+  <meta name="description" content="Органайзер Про — заметки, проекты, финансы и календарь с автоматической синхронизацией между телефоном и компьютером.">
   <title>Органайзер Про</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -15,7 +15,7 @@
   <div id="fatal" class="fatal" hidden></div>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand">Органайзер Про <small>WEB 0.4.0</small></div>
+      <div class="brand">Органайзер Про <small>WEB 0.5.0</small></div>
       <button class="nav active" data-section="notes">Заметки</button>
       <button class="nav" data-section="projects">Проекты</button>
       <button class="nav" data-section="money">Финансы</button>
@@ -27,7 +27,7 @@
       <header class="topbar">
         <button id="calendarBtn" class="accent">Календарь</button>
         <div class="spacer"></div>
-        <span class="mode">Локальный режим</span>
+        <span class="mode">Локально</span>
       </header>
 
       <section id="notesSection" class="section"></section>
@@ -53,7 +53,6 @@
 
   <noscript><div class="noscript">Для работы Органайзера нужно разрешить JavaScript в браузере.</div></noscript>
   <script src="app.js"></script>
-  <script src="cloud-config.js"></script>
   <script src="sync.js"></script>
   <script>
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
