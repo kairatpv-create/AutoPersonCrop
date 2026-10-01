@@ -114,7 +114,7 @@ app.get('/health', async (_req, res) => {
 });
 
 app.get('/api/version', (_req, res) => {
-  res.json({ service: 'organizer-pro-sync', version: 2, web: '0.5.0', android: '0.9.29' });
+  res.json({ service: 'organizer-pro-sync', version: 2, web: '0.5.1', android: '0.9.30' });
 });
 
 app.post('/api/auth/register', authLimiter, async (req, res) => {

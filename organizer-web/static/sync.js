@@ -5,7 +5,7 @@ var STATE_KEY='organizer-pro-web-v1';
 var SESSION_KEY='organizer-pro-session-v3';
 var META_KEY='organizer-pro-sync-meta-v3';
 var SAFETY_PREFIX='organizer-pro-safety-';
-var API_BASE=(location.protocol==='file:'?'https://organizer-pro.app':'');
+var API_BASE=(location.protocol==='file:'?'https://organizer-pro.onrender.com':'');
 var busy=false,timer=null,installPrompt=null,suppress=false;
 
 function q(s){return document.querySelector(s)}
@@ -72,6 +72,7 @@ function applyRemote(payload,rev,remoteSig){
   var local=loadState();if(activeCount(local)>0)safety(local,'Перед получением данных из облака');
   var b=JSON.parse(payload);saveState(fromBackup(b));setMeta({rev:Number(rev||0),lastSig:remoteSig,lastSyncAt:Date.now()});
 }
+function notifyCloudApplied(){try{window.dispatchEvent(new CustomEvent('organizer:cloud-applied'))}catch(e){}}
 
 async function login(email,password,create){
   var data=await api('/api/auth/'+(create?'register':'login'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,password:password})});
@@ -83,7 +84,7 @@ function logout(){localStorage.removeItem(SESSION_KEY);localStorage.removeItem(M
 async function upload(local,baseRev){
   var data=await api('/api/sync',{method:'PUT',headers:authHeaders(),body:JSON.stringify({payload:local.payload,baseRev:Number(baseRev||0)})},true);
   if(data.__conflict){
-    if(data.payload){var rs=sig(data.payload);applyRemote(data.payload,data.rev,rs);setTimeout(function(){location.reload()},250);}
+    if(data.payload){var rs=sig(data.payload);applyRemote(data.payload,data.rev,rs);notifyCloudApplied();}
     return false;
   }
   setMeta({rev:Number(data.rev||0),lastSig:local.sig,lastSyncAt:Date.now()});return true;
@@ -91,21 +92,21 @@ async function upload(local,baseRev){
 async function autoSync(force){
   if(busy||!session().token)return updateTop();
   if(!navigator.onLine){return updateTop('Нет интернета')}
-  busy=true;updateTop('Синхронизация…');
+  busy=true;if(force)updateTop('Синхронизация…');
   try{
     var local=canonicalLocal(),m=meta(),remote=await api('/api/sync',{headers:authHeaders()});
     if(!remote.exists){await upload(local,0);updateTop('Синхронизировано');return}
     var remotePayload=remote.payload||'',remoteSig=sig(remotePayload),remoteRev=Number(remote.rev||0);
     if(!m.lastSig){
-      if(activeCount(loadState())===0&&remotePayload){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные получены');setTimeout(function(){location.reload()},250);return}
+      if(activeCount(loadState())===0&&remotePayload){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные получены');notifyCloudApplied();return}
       if(local.sig===remoteSig){setMeta({rev:remoteRev,lastSig:local.sig,lastSyncAt:Date.now()});updateTop('Синхронизировано');return}
-      if(remotePayload){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные получены');setTimeout(function(){location.reload()},250);return}
+      if(remotePayload){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные получены');notifyCloudApplied();return}
       await upload(local,remoteRev);updateTop('Синхронизировано');return;
     }
     var localDirty=local.sig!==m.lastSig,remoteDirty=remoteRev!==Number(m.rev||0)||remoteSig!==m.lastSig;
     if(localDirty&&!remoteDirty){await upload(local,remoteRev);updateTop('Синхронизировано');return}
-    if(!localDirty&&remoteDirty){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные обновлены');setTimeout(function(){location.reload()},250);return}
-    if(localDirty&&remoteDirty){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные обновлены');setTimeout(function(){location.reload()},250);return}
+    if(!localDirty&&remoteDirty){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные обновлены');notifyCloudApplied();return}
+    if(localDirty&&remoteDirty){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные обновлены');notifyCloudApplied();return}
     setMeta({rev:remoteRev,lastSig:local.sig,lastSyncAt:Date.now()});updateTop('Синхронизировано');
   }catch(e){
     if(/Сессия завершена|Требуется вход/.test(String(e.message||''))){localStorage.removeItem(SESSION_KEY);localStorage.removeItem(META_KEY);renderAccount();}
@@ -116,7 +117,7 @@ function scheduleSync(){clearTimeout(timer);timer=setTimeout(function(){autoSync
 
 function updateTop(text,isError){
   var mode=q('.mode'),b=q('#syncTopBtn'),s=session();
-  if(b)b.textContent=s.token?'Аккаунт':'Войти';
+  if(b){var label=s.token?'Аккаунт':'Войти';if(b.textContent!==label)b.textContent=label;}
   if(!mode)return;
   mode.classList.toggle('sync-error',!!isError);
   if(!navigator.onLine)mode.textContent='Офлайн • данные сохранены';
@@ -152,7 +153,7 @@ function buildUi(){
 window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();installPrompt=e;renderInstallButton()});
 window.addEventListener('online',function(){updateTop();autoSync(false)});window.addEventListener('offline',function(){updateTop()});
 document.addEventListener('visibilitychange',function(){if(!document.hidden)autoSync(false)});
-document.addEventListener('input',function(){if(!suppress)scheduleSync()},true);document.addEventListener('change',function(){if(!suppress)scheduleSync()},true);document.addEventListener('click',function(){if(!suppress)scheduleSync()},true);
+window.addEventListener('organizer:local-change',function(){if(!suppress)scheduleSync()});
 var settings=q('#settingsSection');if(settings)new MutationObserver(function(){ensureSettingsCard()}).observe(settings,{childList:true,subtree:false});
 
 buildUi();setInterval(function(){autoSync(false)},30000);setTimeout(function(){autoSync(false)},1200);

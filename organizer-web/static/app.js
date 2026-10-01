@@ -42,6 +42,7 @@ function save(){
   state.revision=Number(state.revision||0)+1;
   try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state));storageOk=true;}catch(e){storageOk=false;}
   updateStorageStatus();
+  try{window.dispatchEvent(new CustomEvent('organizer:local-change'))}catch(e){}
 }
 function updateStorageStatus(){var s=el('storageStatus');if(s)s.textContent=storageOk?'Локально сохранено':'Память браузера недоступна';}
 function active(arr){return arr.filter(function(x){return !x.deletedAt})}
@@ -49,11 +50,32 @@ function findBy(arr,id){for(var i=0;i<arr.length;i++)if(arr[i].id===id)return ar
 
 function switchSection(name){
   currentSection=name;
+  try{sessionStorage.setItem('organizer-current-section',name)}catch(e){}
   document.querySelectorAll('.nav').forEach(function(b){b.classList.toggle('active',b.getAttribute('data-section')===name)});
   ['notes','projects','money','settings'].forEach(function(x){el(x+'Section').hidden=x!==name});
   renderCurrent();
 }
 function renderCurrent(){if(currentSection==='notes')renderNotes();else if(currentSection==='projects')renderProjects();else if(currentSection==='money')renderMoney();else renderSettings();}
+function refreshFromCloud(){
+  var keepSection=currentSection,keepNote=selectedNote,keepProject=selectedProject;
+  try{
+    var raw=localStorage.getItem(STORAGE_KEY),parsed=raw?JSON.parse(raw):{};
+    state=Object.assign({notes:[],projects:[],stages:[],money:[],reminders:[],attachments:[],revision:1},parsed||{});
+    state.notes=Array.isArray(state.notes)?state.notes:[];
+    state.projects=Array.isArray(state.projects)?state.projects:[];
+    state.stages=Array.isArray(state.stages)?state.stages:[];
+    state.money=Array.isArray(state.money)?state.money:[];
+    state.reminders=Array.isArray(state.reminders)?state.reminders:[];
+    state.attachments=Array.isArray(state.attachments)?state.attachments:[];
+    var notes=active(state.notes),projects=active(state.projects);
+    selectedNote=findBy(notes,keepNote)?keepNote:(notes[0]?notes[0].id:'');
+    selectedProject=findBy(projects,keepProject)?keepProject:(projects[0]?projects[0].id:'');
+    currentSection=keepSection;
+    updateStorageStatus();
+    renderCurrent();
+  }catch(e){showFatal(e)}
+}
+window.addEventListener('organizer:cloud-applied',refreshFromCloud);
 
 function renderNotes(){
   var root=el('notesSection'),notes=active(state.notes),cur=findBy(notes,selectedNote);
@@ -137,7 +159,7 @@ function updateMoneySummaryOnly(){var rows=active(state.money).filter(function(x
 
 function renderSettings(){
   var root=el('settingsSection');
-  root.innerHTML='<div class="single"><h2>Настройки веб-версии</h2><div class="settings-card"><b>Хранение данных</b><p>'+(storageOk?'<span class="ok">Данные сохраняются в браузере этого компьютера.</span>':'<span class="warn">Браузер запретил локальное хранение. Изменения сохраняются только до закрытия страницы.</span>')+'</p><p class="hint">Облачная синхронизация с Android будет подключена отдельным этапом после стабилизации локальной версии.</p></div><div class="settings-card"><b>Резервная копия веб-данных</b><div class="backup-row"><button id="exportData">Экспорт JSON</button><label class="accent" style="display:inline-block;cursor:pointer">Импорт JSON<input id="importData" type="file" accept="application/json,.json" style="display:none"></label></div><p class="hint">Экспорт сохраняет заметки, проекты, этапы и финансы веб-версии.</p></div><div class="settings-card"><b>Версия</b><p>Органайзер Про Web 0.2.0 Static</p></div></div>';
+  root.innerHTML='<div class="single"><h2>Настройки веб-версии</h2><div class="settings-card"><b>Хранение данных</b><p>'+(storageOk?'<span class="ok">Данные сохраняются в браузере этого компьютера.</span>':'<span class="warn">Браузер запретил локальное хранение. Изменения сохраняются только до закрытия страницы.</span>')+'</p><p class="hint">После входа данные синхронизируются с Android автоматически.</p></div><div class="settings-card"><b>Резервная копия веб-данных</b><div class="backup-row"><button id="exportData">Экспорт JSON</button><label class="accent" style="display:inline-block;cursor:pointer">Импорт JSON<input id="importData" type="file" accept="application/json,.json" style="display:none"></label></div><p class="hint">Экспорт сохраняет заметки, проекты, этапы и финансы веб-версии.</p></div><div class="settings-card"><b>Версия</b><p>Органайзер Про Web 0.5.1</p></div></div>';
   el('exportData').onclick=function(){var blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Organizer-Pro-Web-backup-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},0);};
   el('importData').onchange=function(){var f=this.files&&this.files[0];if(!f)return;var r=new FileReader();r.onload=function(){try{var parsed=JSON.parse(String(r.result||''));if(!parsed||typeof parsed!=='object')throw new Error('Неверный формат');state=Object.assign({notes:[],projects:[],stages:[],money:[],reminders:[],attachments:[],revision:1},parsed);save();selectedNote='';selectedProject='';alert('Резервная копия загружена');renderSettings();}catch(e){alert('Не удалось загрузить файл: '+e.message)}};r.readAsText(f);};
 }
@@ -163,7 +185,10 @@ function init(){
   el('nextMonth').onclick=function(){calendarCursor=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth()+1,1);renderCalendar();};
   el('calendarToday').onclick=function(){calendarCursor=new Date();renderCalendar();};
   document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!el('calendarView').hidden)closeCalendar();});
-  switchSection('notes');
+  var first='notes';
+  try{first=sessionStorage.getItem('organizer-current-section')||'notes'}catch(e){}
+  if(['notes','projects','money','settings'].indexOf(first)<0)first='notes';
+  switchSection(first);
 }
 
 try{init();}catch(e){showFatal(e);}
