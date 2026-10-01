@@ -1,0 +1,72 @@
+name: Test Organizer Pro Live Service
+
+on:
+  push:
+    branches:
+      - personal-organizer-web-v1
+    paths:
+      - '.github/workflows/organizer-live-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check live web and API
+        shell: bash
+        env:
+          BASE_URL: https://organizer-pro.onrender.com
+        run: |
+          set -euo pipefail
+          for i in {1..30}; do
+            if curl -fsS "$BASE_URL/health" >/tmp/health.json; then break; fi
+            sleep 2
+          done
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/health.json'))
+          assert j.get('ok') is True, j
+          PY
+          curl -fsS "$BASE_URL/api/version" >/tmp/version.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/version.json'))
+          assert j.get('service')=='organizer-pro-sync', j
+          assert j.get('web')=='0.5.0', j
+          PY
+          curl -fsS "$BASE_URL/" >/tmp/index.html
+          grep -q 'Органайзер Про' /tmp/index.html
+          grep -q 'sync.js' /tmp/index.html
+
+      - name: Test production registration and sync roundtrip
+        shell: bash
+        env:
+          BASE_URL: https://organizer-pro.onrender.com
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, urllib.request, time
+          base=os.environ['BASE_URL']
+          email=f"live-ci-{int(time.time())}@organizer-pro.app"
+          password='LiveTest-' + str(int(time.time())) + '-A9'
+          def req(path, method='GET', body=None, token=None):
+              data=None if body is None else json.dumps(body).encode()
+              headers={'Accept':'application/json','Content-Type':'application/json'}
+              if token: headers['Authorization']='Bearer '+token
+              r=urllib.request.Request(base+path,data=data,headers=headers,method=method)
+              with urllib.request.urlopen(r,timeout=30) as x:
+                  return json.loads(x.read().decode())
+          reg=req('/api/auth/register','POST',{'email':email,'password':password})
+          token=reg['token']
+          assert token
+          login=req('/api/auth/login','POST',{'email':email,'password':password})
+          token=login['token']
+          empty=req('/api/sync',token=token)
+          assert empty['exists'] is False and empty['rev']==0, empty
+          payload=json.dumps({'format':'my-organizer-backup','version':7,'createdAt':0,'cloudSchema':'organizer-sync-v3','notes':[{'id':1,'title':'LIVE','body':'ok','createdAt':1,'updatedAt':1,'colorKey':'blue'}],'tasks':[],'projects':[],'projectStages':[],'projectJournal':[],'projectNoteLinks':[],'money':[],'reminders':[]},separators=(',',':'))
+          put=req('/api/sync','PUT',{'payload':payload,'baseRev':0},token)
+          assert put['ok'] is True and put['rev']==1, put
+          got=req('/api/sync',token=token)
+          assert got['exists'] is True and got['rev']==1 and got['payload']==payload, got
+          print('LIVE ORGANIZER PRO API ROUNDTRIP OK')
+          PY
