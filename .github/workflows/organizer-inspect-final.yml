@@ -1,0 +1,37 @@
+name: Inspect Organizer Pro Final UI
+
+on:
+  push:
+    branches:
+      - personal-organizer-v1-final-temp
+    paths:
+      - '.github/workflows/organizer-inspect-final.yml'
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: personal-organizer-v1-final-temp
+      - name: Reconstruct v0.9.30 source
+        shell: bash
+        run: |
+          head -n -1 organizer/build_v0930.sh > /tmp/reconstruct.sh
+          bash /tmp/reconstruct.sh
+      - name: Show settings backup and account context
+        shell: bash
+        run: |
+          ROOT=organizer/buildsrc0106/Organizer-Pro-v0.9.30-source
+          UI="$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
+          CLOUD="$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
+          echo '=== SAVE FILE ==='
+          grep -n -B 20 -A 35 -E 'Сохранить в файл|save_backup|backup_save|Google Drive' "$UI" || true
+          echo '=== RESTORE ==='
+          grep -n -B 20 -A 35 -E 'Восстановить из файла|restore_backup|backup_restore' "$UI" || true
+          echo '=== SEND ==='
+          grep -n -B 20 -A 35 -E 'Отправить по почте|share_backup|через приложение' "$UI" || true
+          echo '=== CLOUD CARD CALL ==='
+          grep -n -B 30 -A 30 'CloudSyncSettingsCard' "$UI" || true
+          echo '=== CLOUD CARD IMPLEMENTATION ==='
+          grep -n -B 10 -A 90 '@Composable fun CloudSyncSettingsCard' "$CLOUD" || true
