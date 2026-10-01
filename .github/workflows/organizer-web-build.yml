@@ -1,4 +1,4 @@
-name: Build Organizer Pro Web v0.5.0
+name: Build Organizer Pro Web v0.5.1
 
 on:
   push:
@@ -46,7 +46,7 @@ jobs:
           test -f organizer-sync-server/server.js
           test -f organizer-sync-server/package.json
           test -f render.yaml
-          grep -q 'WEB 0.5.0' organizer-web/static/index.html
+          grep -q 'WEB 0.5.1' organizer-web/static/index.html
           grep -q 'manifest.webmanifest' organizer-web/static/index.html
           grep -q 'serviceWorker' organizer-web/static/index.html
           grep -q '<script src="sync.js"></script>' organizer-web/static/index.html
@@ -55,6 +55,10 @@ jobs:
           ! grep -q 'Project ID' organizer-web/static/sync.js
           ! grep -q 'Web API key' organizer-web/static/sync.js
           ! grep -q 'Firebase' organizer-web/static/sync.js
+          ! grep -q 'location.reload' organizer-web/static/sync.js
+          grep -q 'organizer:cloud-applied' organizer-web/static/app.js
+          grep -q 'organizer:local-change' organizer-web/static/app.js
+          grep -q 'organizer:local-change' organizer-web/static/sync.js
           grep -q "'/api/auth/'" organizer-web/static/sync.js
           grep -q "create?'register':'login'" organizer-web/static/sync.js
           grep -q "'/api/sync'" organizer-web/static/sync.js
@@ -143,10 +147,10 @@ jobs:
           ! grep -q 'Firebase' /tmp/organizer-dom.html
           ! grep -q 'Ошибка запуска веб-версии' /tmp/organizer-dom.html
 
-      - name: Upload web fallback
+      - name: Upload web package
         uses: actions/upload-artifact@v4
         with:
-          name: Organizer-Pro-Web-v0.5.0
+          name: Organizer-Pro-Web-v0.5.1
           path: organizer-web/static/
           if-no-files-found: error
           retention-days: 7
