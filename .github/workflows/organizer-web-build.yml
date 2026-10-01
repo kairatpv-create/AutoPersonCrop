@@ -1,4 +1,4 @@
-name: Build Organizer Pro Web v0.3.0 Sync
+name: Build Organizer Pro Web v0.4.0 PWA
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
       - 'organizer-web/static/**'
       - 'organizer-web/firestore.rules'
       - '.github/workflows/organizer-web-build.yml'
+      - '.github/workflows/organizer-web-pages.yml'
   workflow_dispatch:
 
 jobs:
@@ -17,7 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Verify static and sync files
+      - name: Verify public-ready web files
         shell: bash
         run: |
           test -f organizer-web/static/index.html
@@ -25,21 +26,30 @@ jobs:
           test -f organizer-web/static/style.css
           test -f organizer-web/static/sync.js
           test -f organizer-web/static/sync.css
-          test -f organizer-web/static/FIREBASE_SETUP.txt
+          test -f organizer-web/static/cloud-config.js
+          test -f organizer-web/static/manifest.webmanifest
+          test -f organizer-web/static/sw.js
+          test -f organizer-web/static/icon.svg
           test -f organizer-web/firestore.rules
-          grep -q 'WEB 0.3.0' organizer-web/static/index.html
-          grep -q '<script src="app.js"></script>' organizer-web/static/index.html
+          grep -q 'WEB 0.4.0' organizer-web/static/index.html
+          grep -q 'manifest.webmanifest' organizer-web/static/index.html
+          grep -q 'serviceWorker' organizer-web/static/index.html
+          grep -q '<script src="cloud-config.js"></script>' organizer-web/static/index.html
           grep -q '<script src="sync.js"></script>' organizer-web/static/index.html
-          grep -q '<link rel="stylesheet" href="style.css">' organizer-web/static/index.html
-          grep -q '<link rel="stylesheet" href="sync.css">' organizer-web/static/index.html
           ! grep -q 'type="module"' organizer-web/static/index.html
-          ! grep -q 'import ' organizer-web/static/app.js
-          ! grep -q 'import ' organizer-web/static/sync.js
+          ! grep -q 'Project ID' organizer-web/static/sync.js
+          ! grep -q 'Web API key' organizer-web/static/sync.js
+          ! grep -q 'Сервер Firebase' organizer-web/static/sync.js
+          grep -q 'autoSync' organizer-web/static/sync.js
+          grep -q 'beforeinstallprompt' organizer-web/static/sync.js
           grep -q 'identitytoolkit.googleapis.com' organizer-web/static/sync.js
           grep -q 'firestore.googleapis.com' organizer-web/static/sync.js
           grep -q 'request.auth.uid == userId' organizer-web/firestore.rules
           node --check organizer-web/static/app.js
+          node --check organizer-web/static/cloud-config.js
           node --check organizer-web/static/sync.js
+          node --check organizer-web/static/sw.js
+          python3 -m json.tool organizer-web/static/manifest.webmanifest >/dev/null
 
       - name: Test direct file opening in Chrome
         shell: bash
@@ -51,13 +61,16 @@ jobs:
           grep -q 'Органайзер Про' /tmp/organizer-dom.html
           grep -q 'Заметки' /tmp/organizer-dom.html
           grep -q 'Создать' /tmp/organizer-dom.html
-          grep -q 'Синхронизация' /tmp/organizer-dom.html
+          grep -q 'Войти' /tmp/organizer-dom.html
+          ! grep -q 'Project ID' /tmp/organizer-dom.html
+          ! grep -q 'Web API key' /tmp/organizer-dom.html
+          ! grep -q 'Сервер Firebase' /tmp/organizer-dom.html
           ! grep -q 'Ошибка запуска веб-версии' /tmp/organizer-dom.html
 
-      - name: Upload portable web folder
+      - name: Upload portable fallback
         uses: actions/upload-artifact@v4
         with:
-          name: Organizer-Pro-Web-v0.3.0-sync
+          name: Organizer-Pro-Web-v0.4.0-PWA
           path: organizer-web/static/
           if-no-files-found: error
           retention-days: 7
