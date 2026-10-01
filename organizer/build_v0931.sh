@@ -9,6 +9,7 @@ ROOT=organizer/buildsrc0106/Organizer-Pro-v0.9.30-source
 python3 organizer/v0121/apply.py "$ROOT"
 mv "$ROOT" organizer/buildsrc0106/Organizer-Pro-v0.9.31-source
 ROOT=organizer/buildsrc0106/Organizer-Pro-v0.9.31-source
+python3 organizer/v0121/fix_sync_card_style.py "$ROOT"
 
 UI="$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
 CLOUD="$ROOT/app/src/main/java/kz/kairat/organizer/CloudSync.kt"
@@ -23,7 +24,8 @@ grep -Fq 'https://organizer-pro.onrender.com' "$CLOUD"
 grep -Fq 'openBackup.launch(arrayOf("application/json","text/plain","*/*"))' "$UI"
 ! grep -Fq 'saveBackup.launch(BackupManager.suggestedFileName())' "$UI"
 ! grep -Fq 'BackupManager.shareBackup(context,BackupManager.createBackup(db,settings)' "$UI"
-grep -Fq 'CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)' "$CLOUD"
+grep -Fq 'CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.primaryContainer)' "$CLOUD"
+! grep -Fq 'CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)' "$CLOUD"
 ! grep -Fq 'syncText(lang,"hint")' "$CLOUD"
 grep -q 'connectTimeout=70000' "$CLOUD"
 grep -q 'readTimeout=90000' "$CLOUD"
