@@ -21,7 +21,7 @@ jobs:
       - name: Collect tools
         shell: bash
         run: |
-          mkdir -p /tmp/android-signing-tools/lib64
+          mkdir -p /tmp/android-signing-tools/lib
           cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" /tmp/android-signing-tools/
           cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" /tmp/android-signing-tools/
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" /tmp/android-signing-tools/lib/
