@@ -35,16 +35,27 @@ grep -q 'android.permission.INTERNET' "$ROOT/app/src/main/AndroidManifest.xml"
 grep -q 'android.permission.READ_CALENDAR' "$ROOT/app/src/main/AndroidManifest.xml"
 ! grep -q 'android.permission.WRITE_CALENDAR' "$ROOT/app/src/main/AndroidManifest.xml"
 
+# Ensure a known debug-key location exists before AGP signs the debug APK.
+DEBUG_KS="$HOME/.android/debug.keystore"
+mkdir -p "$(dirname "$DEBUG_KS")"
+if [ ! -f "$DEBUG_KS" ]; then
+  keytool -genkeypair -noprompt \
+    -keystore "$DEBUG_KS" \
+    -storepass android \
+    -alias androiddebugkey \
+    -keypass android \
+    -dname "CN=Android Debug,O=Android,C=US" \
+    -keyalg RSA -keysize 2048 -validity 10000
+fi
+
 gradle --no-daemon --build-cache -p "$ROOT" assembleDebug
 
 APK="$ROOT/app/build/outputs/apk/debug/app-debug.apk"
 test -f "$APK"
 APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
-DEBUG_KS="$HOME/.android/debug.keystore"
-test -f "$DEBUG_KS"
 
-# AGP debug signing currently emits v2 only. Re-sign the already aligned APK with
-# both v2 and v3 enabled, using the same debug key generated for this build.
+# AGP debug signing emits v2 for this project. Re-sign the already aligned APK
+# with the same build key and explicitly enable both required APK schemes.
 "$APKSIGNER" sign \
   --ks "$DEBUG_KS" \
   --ks-key-alias androiddebugkey \
