@@ -1,5 +1,6 @@
 'use strict';
 
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -12,7 +13,8 @@ const PORT = Number(process.env.PORT || 10000);
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const TOKEN_DAYS = Math.max(1, Number(process.env.TOKEN_DAYS || 30));
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://kairatpv-create.github.io').split(',').map(s => s.trim()).filter(Boolean);
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://organizer-pro.app,https://www.organizer-pro.app,https://kairatpv-create.github.io').split(',').map(s => s.trim()).filter(Boolean);
+const WEB_DIR = path.resolve(__dirname, '..', 'organizer-web', 'static');
 
 if (!DATABASE_URL) throw new Error('DATABASE_URL is required');
 if (!JWT_SECRET || JWT_SECRET.length < 32) throw new Error('JWT_SECRET must be at least 32 characters');
@@ -72,11 +74,25 @@ function auth(req, res, next) {
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
-app.use(helmet({ crossOriginResourcePolicy: false }));
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      frameAncestors: ["'none'"]
+    }
+  }
+}));
 app.use(cors({
   origin(origin, cb) {
     if (!origin) return cb(null, true); // Android/native clients have no browser Origin.
-    if (ALLOWED_ORIGINS.some(x => origin === x || origin.startsWith(x + '/'))) return cb(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
     return cb(new Error('Origin not allowed'));
   },
   methods: ['GET', 'POST', 'PUT', 'OPTIONS'],
@@ -86,14 +102,19 @@ app.use(cors({
 app.use(express.json({ limit: '1mb' }));
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: 'draft-7', legacyHeaders: false });
+const syncLimiter = rateLimit({ windowMs: 60 * 1000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false });
 
 app.get('/health', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ ok: true, service: 'organizer-pro-sync', version: 1 });
+    res.json({ ok: true, service: 'organizer-pro-sync', version: 2 });
   } catch (_) {
     res.status(503).json({ ok: false });
   }
+});
+
+app.get('/api/version', (_req, res) => {
+  res.json({ service: 'organizer-pro-sync', version: 2, web: '0.5.0', android: '0.9.29' });
 });
 
 app.post('/api/auth/register', authLimiter, async (req, res) => {
@@ -135,7 +156,7 @@ app.get('/api/account', auth, (req, res) => {
   res.json({ email: req.userEmail });
 });
 
-app.get('/api/sync', auth, async (req, res) => {
+app.get('/api/sync', syncLimiter, auth, async (req, res) => {
   try {
     const q = await pool.query('SELECT payload,rev,updated_at FROM organizer_sync WHERE user_id=$1', [req.userId]);
     if (!q.rows[0]) return res.json({ exists: false, rev: 0, updatedAt: 0, payload: null });
@@ -147,7 +168,7 @@ app.get('/api/sync', auth, async (req, res) => {
   }
 });
 
-app.put('/api/sync', auth, async (req, res) => {
+app.put('/api/sync', syncLimiter, auth, async (req, res) => {
   const payload = typeof req.body?.payload === 'string' ? req.body.payload : '';
   const baseRev = Number(req.body?.baseRev || 0);
   if (!payload) return publicError(res, 400, 'PAYLOAD_REQUIRED', 'Нет данных для синхронизации');
@@ -183,13 +204,23 @@ app.put('/api/sync', auth, async (req, res) => {
   }
 });
 
+// Unknown API routes return JSON, never the web shell.
+app.use('/api', (_req, res) => publicError(res, 404, 'NOT_FOUND', 'Метод не найден'));
+
+// The same service hosts Organizer Pro Web. This keeps login/sync on one origin.
+app.use(express.static(WEB_DIR, { index: false, maxAge: '1h' }));
+app.get('*', (req, res, next) => {
+  if (req.method !== 'GET') return next();
+  res.sendFile(path.join(WEB_DIR, 'index.html'));
+});
+
 app.use((err, _req, res, _next) => {
   console.error('request', err && err.message ? err.message : err);
   publicError(res, 400, 'REQUEST_ERROR', 'Ошибка запроса');
 });
 
 initDb().then(() => {
-  app.listen(PORT, '0.0.0.0', () => console.log(`Organizer Pro Sync listening on ${PORT}`));
+  app.listen(PORT, '0.0.0.0', () => console.log(`Organizer Pro listening on ${PORT}`));
 }).catch(err => {
   console.error(err);
   process.exit(1);
