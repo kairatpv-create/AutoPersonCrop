@@ -4,38 +4,39 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
- * Crop planner for controlled material that contains only the wanted person/people.
+ * Crop planner for controlled material that contains only the wanted one person or two wrestlers.
  *
  * The detector geometry is the only anchor. We never stretch, squeeze, rotate or force-centre the
  * picture. We only move crop boundaries.
  *
- * Portrait (standing / sitting / kneeling):
- *  - normally leave 5% of the FINAL crop as empty space above and below the detected people;
- *  - crop left/right as tightly as possible while keeping a natural portrait and the complete body.
+ * Portrait rule (standing / sitting / kneeling):
+ *  - leave about 5% of the FINAL crop as empty space above and below the people;
+ *  - crop left/right by the actual people envelope, adding only enough width to avoid a cramped strip.
  *
- * Landscape (lying / wrestling / clearly horizontal action):
- *  - normally leave 5% of the FINAL crop as empty space left and right of the detected people;
- *  - crop top/bottom as tightly as possible while keeping a natural landscape and the complete body.
+ * Landscape rule (lying / wrestling / clearly horizontal action):
+ *  - leave about 5% of the FINAL crop as empty space left and right of the people;
+ *  - crop top/bottom by the actual action envelope, adding only enough height to avoid a cramped strip.
  *
- * Edge rule:
- *  - 5% is a target, never a reason to cut a person;
- *  - when the group is too close to one real source edge, that side may have less than 5%;
- *  - part of the missing breathing room is moved to the opposite side so the composition does not
- *    feel crushed, but the group is never artificially centred.
+ * The important detail is that posture chooses the 5% axis. Two standing people do NOT become a
+ * landscape scene merely because they are standing far apart and their combined envelope is wide.
  */
 object WrestlingCropPlanner {
     private const val FINAL_MARGIN_FRACTION = 0.05
-    private const val SECONDARY_AXIS_SAFETY = 0.04
+    private const val SECONDARY_AXIS_SAFETY = 0.07
     private const val MIN_IMAGE_SAFETY = 0.003
 
-    // When one primary-axis margin is blocked by a source edge, move only part of the missing space
-    // to the opposite side. Full compensation would visually centre the subject, which is forbidden.
+    // If a real source edge blocks one requested 5% margin, move only part of the missing breathing
+    // room to the opposite side. Full transfer would visually re-centre the people, which is forbidden.
     private const val EDGE_MISSING_MARGIN_TRANSFER = 0.60
 
-    // Prevents an unnaturally thin strip. It is only a crop-shape guard, never image scaling.
-    private const val MAX_LONG_TO_SHORT_RATIO = 2.0
+    // This is deliberately a SOFT guide, not a fixed output aspect ratio. The old implementation
+    // expanded many frames exactly to 2:1 / 1:2. That created repeated artificial formats. Here only
+    // part of the extra room needed for a 2:1 guide is added, so final shape still follows the people.
+    private const val SOFT_LONG_TO_SHORT_GUIDE = 2.0
+    private const val SOFT_SHAPE_BLEND = 0.65
 
     private enum class Orientation { PORTRAIT, LANDSCAPE }
 
@@ -58,18 +59,31 @@ object WrestlingCropPlanner {
     }
 
     private fun chooseOrientation(subjects: List<RectD>, group: RectD): Orientation {
-        // A clearly horizontal combined action is always landscape, even if one partial detector box
-        // happens to look vertical.
-        if (group.width >= group.height * 1.30) return Orientation.LANDSCAPE
+        // Decide by HUMAN POSTURE first, not by the width of the combined group. This fixes the common
+        // case from the real test batch where two standing people were spread horizontally and the old
+        // code incorrectly switched to landscape, removing the requested 5% above/below them.
+        var portraitEvidence = 0.0
+        var landscapeEvidence = 0.0
+        for (subject in subjects) {
+            val weight = sqrt(subject.area.coerceAtLeast(1.0))
+            when {
+                subject.height >= subject.width * 1.10 -> portraitEvidence += weight
+                subject.width >= subject.height * 1.18 -> landscapeEvidence += weight
+                subject.height >= subject.width -> portraitEvidence += weight * 0.35
+                else -> landscapeEvidence += weight * 0.35
+            }
+        }
 
-        // Standing, sitting and kneeling detections are normally taller than wide. One convincing
-        // vertical observation is enough because the source is guaranteed to contain no bystanders.
-        if (subjects.any { it.height >= it.width * 1.05 }) return Orientation.PORTRAIT
+        if (portraitEvidence > 0.0 && portraitEvidence >= landscapeEvidence * 0.85) {
+            return Orientation.PORTRAIT
+        }
+        if (landscapeEvidence > portraitEvidence * 1.10) {
+            return Orientation.LANDSCAPE
+        }
 
-        // Near-square human groups look more natural as portrait. Only clearly wider action becomes
-        // landscape.
-        return if (group.height >= group.width * 0.90) Orientation.PORTRAIT
-        else Orientation.LANDSCAPE
+        // Ambiguous compact action: use the combined envelope only as a tie-breaker.
+        return if (group.width >= group.height * 1.18) Orientation.LANDSCAPE
+        else Orientation.PORTRAIT
     }
 
     private fun portraitCrop(image: ImageSize, group: RectD): RectD {
@@ -87,9 +101,11 @@ object WrestlingCropPlanner {
         val requiredRight = (group.right + sideSafety).coerceAtMost(image.width.toDouble())
         val requiredWidth = (requiredRight - requiredLeft).coerceAtLeast(1.0)
 
-        // A portrait may be tight around the body, but never a pencil-thin strip.
-        val targetWidth = max(requiredWidth, height / MAX_LONG_TO_SHORT_RATIO)
-            .coerceAtMost(image.width.toDouble())
+        // Soft anti-strip guide only. Unlike the old max(height/2) rule this does NOT force every
+        // narrow portrait to exactly 1:2. It keeps most of the detector-driven width and adds only a
+        // fraction of the missing room when the crop would otherwise look unnaturally thin.
+        val guideWidth = (height / SOFT_LONG_TO_SHORT_GUIDE).coerceAtMost(image.width.toDouble())
+        val targetWidth = softExpand(requiredWidth, guideWidth).coerceAtMost(image.width.toDouble())
 
         val horizontal = placeSecondaryWindow(
             sourceSize = image.width.toDouble(),
@@ -116,10 +132,10 @@ object WrestlingCropPlanner {
         val requiredBottom = (group.bottom + verticalSafety).coerceAtMost(image.height.toDouble())
         val requiredHeight = (requiredBottom - requiredTop).coerceAtLeast(1.0)
 
-        // Keep enough height for a normal landscape photograph, but do not inflate it to a rigid
-        // 16:9 or other fixed aspect ratio.
-        val targetHeight = max(requiredHeight, width / MAX_LONG_TO_SHORT_RATIO)
-            .coerceAtMost(image.height.toDouble())
+        // Same soft guide for a horizontal action. It prevents a pencil-thin panorama but no longer
+        // inflates every such frame to an exact 2:1 rectangle.
+        val guideHeight = (width / SOFT_LONG_TO_SHORT_GUIDE).coerceAtMost(image.height.toDouble())
+        val targetHeight = softExpand(requiredHeight, guideHeight).coerceAtMost(image.height.toDouble())
 
         val vertical = placeSecondaryWindow(
             sourceSize = image.height.toDouble(),
@@ -129,6 +145,11 @@ object WrestlingCropPlanner {
             requiredMax = requiredBottom,
         )
         return RectD(left, vertical.first, right, vertical.second)
+    }
+
+    private fun softExpand(required: Double, guide: Double): Double {
+        if (required >= guide) return required
+        return required + (guide - required) * SOFT_SHAPE_BLEND
     }
 
     /**

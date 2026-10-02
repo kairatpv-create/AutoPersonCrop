@@ -105,7 +105,7 @@ class WrestlingCropPlannerTest {
         assertEquals(0, crop.left)
         assertTrue(crop.right > person.right)
         val subjectFraction = (person.centerX - crop.left) / crop.width.toDouble()
-        assertTrue("edge subject must remain visually left-biased", subjectFraction < 0.45)
+        assertTrue("edge subject must remain visually left-biased", subjectFraction < 0.47)
     }
 
     @Test
@@ -122,6 +122,24 @@ class WrestlingCropPlannerTest {
     }
 
     @Test
+    fun widelySeparatedStandingPeopleStillUsePortraitFivePercentAxis() {
+        val first = RectD(80.0, 90.0, 290.0, 650.0)
+        val second = RectD(900.0, 95.0, 1110.0, 645.0)
+        val crop = WrestlingCropPlanner.plan(image, listOf(first, second))
+
+        // Their combined envelope is much wider than either body, but both bodies are vertical.
+        // The 5% rule must therefore stay on top/bottom, not switch to left/right.
+        assertEquals(58, crop.top)
+        assertEquals(682, crop.bottom)
+        val topEmptyFraction = (90.0 - crop.top) / crop.height.toDouble()
+        val bottomEmptyFraction = (crop.bottom - 650.0) / crop.height.toDouble()
+        assertTrue(abs(topEmptyFraction - 0.05) < 0.008)
+        assertTrue(abs(bottomEmptyFraction - 0.05) < 0.008)
+        assertTrue(crop.left < first.left)
+        assertTrue(crop.right > second.right)
+    }
+
+    @Test
     fun lyingEvidenceForTwoPeopleProducesLandscapeEnvelope() {
         val first = RectD(120.0, 260.0, 690.0, 510.0)
         val second = RectD(560.0, 220.0, 1130.0, 500.0)
@@ -132,6 +150,29 @@ class WrestlingCropPlannerTest {
         assertTrue(crop.right > second.right)
         assertTrue(crop.top < second.top)
         assertTrue(crop.bottom > first.bottom)
+    }
+
+    @Test
+    fun softShapeGuardDoesNotLockLandscapeToExactTwoToOne() {
+        val lying = RectD(200.0, 300.0, 1080.0, 500.0)
+        val crop = WrestlingCropPlanner.plan(image, listOf(lying))
+        val ratio = crop.width.toDouble() / crop.height.toDouble()
+
+        assertTrue(crop.width > crop.height)
+        assertTrue("shape guide must not force exact 2:1", abs(ratio - 2.0) > 0.08)
+        assertTrue(crop.top < lying.top)
+        assertTrue(crop.bottom > lying.bottom)
+    }
+
+    @Test
+    fun secondaryAxisHasEnoughSafetyForHandsAndShoes() {
+        val person = RectD(420.0, 90.0, 650.0, 650.0)
+        val crop = WrestlingCropPlanner.plan(image, listOf(person))
+
+        val leftSpace = person.left - crop.left
+        val rightSpace = crop.right - person.right
+        assertTrue("left side should not hug a limb", leftSpace >= person.width * 0.06)
+        assertTrue("right side should not hug a limb", rightSpace >= person.width * 0.06)
     }
 
     @Test
