@@ -6,7 +6,7 @@ var SESSION_KEY='organizer-pro-session-v3';
 var META_KEY='organizer-pro-sync-meta-v3';
 var SAFETY_PREFIX='organizer-pro-safety-';
 var API_BASE=(location.protocol==='file:'?'https://organizer-pro.onrender.com':'');
-var busy=false,timer=null,installPrompt=null,suppress=false;
+var busy=false,timer=null,installPrompt=null,suppress=false,lastLocalChangeAt=0;
 
 function q(s){return document.querySelector(s)}
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -21,6 +21,7 @@ function sig(text){var h=2166136261;for(var i=0;i<text.length;i++){h^=text.charC
 function activeCount(st){return ['notes','projects','stages','money','reminders'].reduce(function(n,k){var a=Array.isArray(st[k])?st[k]:[];return n+a.filter(function(x){return !x.deletedAt}).length},0)}
 function safety(st,why){try{localStorage.setItem(SAFETY_PREFIX+Date.now(),JSON.stringify({reason:why,state:st}))}catch(e){}}
 function friendly(data,status){if(data&&data.message)return data.message;if(status===401)return 'Сессия завершена. Войдите снова.';if(status===409)return 'Данные изменились на другом устройстве';if(status>=500)return 'Сервер временно недоступен';return 'Ошибка соединения'}
+function recentLocalChange(){return lastLocalChangeAt>0&&(Date.now()-lastLocalChangeAt)<15000}
 
 async function api(path,opts,allowConflict){
   var r=await fetch(API_BASE+path,opts||{}),text=await r.text(),data={};
@@ -53,11 +54,11 @@ function toBackup(st){
     notes:(st.notes||[]).filter(function(x){return !x.deletedAt}).map(function(x){return {id:x.id,title:x.title||'',body:x.body||'',createdAt:Number(x.createdAt||0),updatedAt:Number(x.updatedAt||x.createdAt||0),colorKey:x.colorKey||'blue'}}),
     tasks:Array.isArray(p.tasks)?p.tasks:[],
     projects:(st.projects||[]).filter(function(x){return !x.deletedAt}).map(function(x){return {id:x.id,name:x.name||'',description:x.description||'',status:x.status||'planned',progress:Number(x.progress||0),startAt:Number(x.startAt||0),dueAt:Number(x.dueAt||0),budget:Number(x.budget||0),client:x.client||'',address:x.address||'',contact:x.contact||'',createdAt:Number(x.createdAt||0),updatedAt:Number(x.updatedAt||x.createdAt||0),colorKey:x.colorKey||'blue'}}),
-    projectStages:(st.stages||[]).filter(function(x){return !x.deletedAt}).map(function(x){return {id:x.id,projectId:x.projectId,title:x.title||'',done:!!x.done,dueAt:Number(x.dueAt||0),createdAt:Number(x.createdAt||0)}}),
+    projectStages:(st.stages||[]).filter(function(x){return !x.deletedAt}).map(function(x){return {id:x.id,projectId:x.projectId,title:x.title||'',done:!!x.done,dueAt:Number(x.dueAt||0),createdAt:Number(x.createdAt||0),updatedAt:Number(x.updatedAt||x.createdAt||0)}}),
     projectJournal:Array.isArray(p.projectJournal)?p.projectJournal:[],
     projectNoteLinks:Array.isArray(p.projectNoteLinks)?p.projectNoteLinks:[],
-    money:(st.money||[]).filter(function(x){return !x.deletedAt}).map(function(x){var y={id:x.id,type:x.type||'expense',amount:Number(x.amount||0),category:x.category||'',projectName:x.projectName||'',note:x.note||'',createdAt:Number(x.createdAt||0),colorKey:x.colorKey||'blue'};if(x.projectId!=null)y.projectId=x.projectId;return y}),
-    reminders:(st.reminders||[]).filter(function(x){return !x.deletedAt}).map(function(x){return {id:x.id,targetType:x.targetType||'note',targetId:Number(x.targetId||0),triggerAt:Number(x.triggerAt||0),sound:x.sound!==false,vibrate:x.vibrate!==false,soundKey:x.soundKey||'system',createdAt:Number(x.createdAt||0),scheduleType:x.scheduleType||'once',daysMask:Number(x.daysMask||0),dayMode:x.dayMode||'single',baseMinutes:Number(x.baseMinutes||540)}})
+    money:(st.money||[]).filter(function(x){return !x.deletedAt}).map(function(x){var y={id:x.id,type:x.type||'expense',amount:Number(x.amount||0),category:x.category||'',projectName:x.projectName||'',note:x.note||'',createdAt:Number(x.createdAt||0),updatedAt:Number(x.updatedAt||x.createdAt||0),colorKey:x.colorKey||'blue'};if(x.projectId!=null)y.projectId=x.projectId;return y}),
+    reminders:(st.reminders||[]).filter(function(x){return !x.deletedAt}).map(function(x){return {id:x.id,targetType:x.targetType||'note',targetId:Number(x.targetId||0),triggerAt:Number(x.triggerAt||0),sound:x.sound!==false,vibrate:x.vibrate!==false,soundKey:x.soundKey||'system',createdAt:Number(x.createdAt||0),updatedAt:Number(x.updatedAt||x.createdAt||0),scheduleType:x.scheduleType||'once',daysMask:Number(x.daysMask||0),dayMode:x.dayMode||'single',baseMinutes:Number(x.baseMinutes||540)}})
   };
 }
 function fromBackup(b){
@@ -72,14 +73,47 @@ function canonicalLocal(){var payload=JSON.stringify(toBackup(loadState()));retu
 function payloadTime(payload){
   try{
     var r=JSON.parse(payload||'{}'),max=0;
-    function scan(arr,keys){(Array.isArray(arr)?arr:[]).forEach(function(o){keys.forEach(function(k){max=Math.max(max,Number(o&&o[k]||0))})})}
-    scan(r.notes,['updatedAt','createdAt']);scan(r.projects,['updatedAt','createdAt','dueAt']);scan(r.projectStages,['createdAt','dueAt']);scan(r.money,['createdAt']);scan(r.reminders,['createdAt','triggerAt']);
+    function scan(arr){(Array.isArray(arr)?arr:[]).forEach(function(o){max=Math.max(max,Number(o&&o.updatedAt||0),Number(o&&o.createdAt||0))})}
+    scan(r.notes);scan(r.projects);scan(r.projectStages);scan(r.money);scan(r.reminders);
     return max;
   }catch(e){return 0}
+}
+function itemTime(o){return Math.max(Number(o&&o.updatedAt||0),Number(o&&o.createdAt||0))}
+function mergeRecords(localArr,remoteArr){
+  var out=[],byId={};
+  (Array.isArray(remoteArr)?remoteArr:[]).forEach(function(x){var k=String(x&&x.id);byId[k]=Object.assign({},x)});
+  (Array.isArray(localArr)?localArr:[]).forEach(function(x){var k=String(x&&x.id),old=byId[k];if(!old||itemTime(x)>=itemTime(old))byId[k]=Object.assign({},x)});
+  Object.keys(byId).forEach(function(k){out.push(byId[k])});
+  out.sort(function(a,b){return itemTime(b)-itemTime(a)});return out;
+}
+function mergeLoose(localArr,remoteArr){
+  var out=[],seen={};
+  (Array.isArray(remoteArr)?remoteArr:[]).concat(Array.isArray(localArr)?localArr:[]).forEach(function(x){var k=JSON.stringify(x);if(!seen[k]){seen[k]=1;out.push(x)}});return out;
+}
+function mergePayloads(localPayload,remotePayload){
+  try{
+    var l=JSON.parse(localPayload||'{}'),r=JSON.parse(remotePayload||'{}');
+    var m=Object.assign({},r,l);
+    m.notes=mergeRecords(l.notes,r.notes);
+    m.projects=mergeRecords(l.projects,r.projects);
+    m.projectStages=mergeRecords(l.projectStages,r.projectStages);
+    m.money=mergeRecords(l.money,r.money);
+    m.reminders=mergeRecords(l.reminders,r.reminders);
+    m.tasks=mergeLoose(l.tasks,r.tasks);
+    m.projectJournal=mergeLoose(l.projectJournal,r.projectJournal);
+    m.projectNoteLinks=mergeLoose(l.projectNoteLinks,r.projectNoteLinks);
+    m.format='my-organizer-backup';m.version=7;m.cloudSchema='organizer-sync-v3';m.createdAt=0;
+    return JSON.stringify(m);
+  }catch(e){return localPayload}
 }
 function applyRemote(payload,rev,remoteSig){
   var local=loadState();if(activeCount(local)>0)safety(local,'Перед получением данных из облака');
   var b=JSON.parse(payload);saveState(fromBackup(b));setMeta({rev:Number(rev||0),lastSig:remoteSig,lastSyncAt:Date.now()});
+}
+function applyMerged(payload,rev){
+  var mergedSig=sig(payload),current=canonicalLocal();
+  if(current.sig!==mergedSig){saveState(fromBackup(JSON.parse(payload)));notifyCloudApplied()}
+  setMeta({rev:Number(rev||0),lastSig:mergedSig,lastSyncAt:Date.now()});
 }
 function notifyCloudApplied(){try{window.dispatchEvent(new CustomEvent('organizer:cloud-applied'))}catch(e){}}
 
@@ -90,9 +124,18 @@ async function login(email,password,create){
 }
 function logout(){localStorage.removeItem(SESSION_KEY);localStorage.removeItem(META_KEY);renderAccount();updateTop('Выполнен выход')}
 
-async function upload(local,baseRev){
-  var data=await api('/api/sync',{method:'PUT',headers:authHeaders(),body:JSON.stringify({payload:local.payload,baseRev:Number(baseRev||0)})},true);
+async function putPayload(payload,baseRev){
+  return api('/api/sync',{method:'PUT',headers:authHeaders(),body:JSON.stringify({payload:payload,baseRev:Number(baseRev||0)})},true);
+}
+async function upload(local,baseRev,protectLocal){
+  var data=await putPayload(local.payload,baseRev);
   if(data.__conflict){
+    if(protectLocal&&data.payload){
+      var mergedPayload=mergePayloads(local.payload,data.payload),mergedSig=sig(mergedPayload);
+      var retry=await putPayload(mergedPayload,Number(data.rev||0));
+      if(!retry.__conflict){applyMerged(mergedPayload,retry.rev);return true}
+      updateTop('Изменения сохранены локально. Повтор синхронизации…');scheduleSync();return false;
+    }
     if(data.payload){var rs=sig(data.payload);applyRemote(data.payload,data.rev,rs);notifyCloudApplied();}
     return false;
   }
@@ -104,19 +147,23 @@ async function autoSync(force){
   busy=true;if(force)updateTop('Синхронизация…');
   try{
     var local=canonicalLocal(),m=meta(),remote=await api('/api/sync',{headers:authHeaders()});
-    if(!remote.exists){await upload(local,0);updateTop('Синхронизировано');return}
+    if(!remote.exists){await upload(local,0,true);updateTop('Синхронизировано');return}
     var remotePayload=remote.payload||'',remoteSig=sig(remotePayload),remoteRev=Number(remote.rev||0);
     if(!m.lastSig){
       if(activeCount(loadState())===0&&remotePayload){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные получены');notifyCloudApplied();return}
       if(local.sig===remoteSig){setMeta({rev:remoteRev,lastSig:local.sig,lastSyncAt:Date.now()});updateTop('Синхронизировано');return}
-      if(!remotePayload||payloadTime(local.payload)>payloadTime(remotePayload)){await upload(local,remoteRev);updateTop('Синхронизировано');return}
+      if(recentLocalChange()||!remotePayload||payloadTime(local.payload)>=payloadTime(remotePayload)){await upload(local,remoteRev,true);updateTop('Синхронизировано');return}
       applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные получены');notifyCloudApplied();return
     }
     var localDirty=local.sig!==m.lastSig,remoteDirty=remoteRev!==Number(m.rev||0)||remoteSig!==m.lastSig;
-    if(localDirty&&!remoteDirty){await upload(local,remoteRev);updateTop('Синхронизировано');return}
+    if(localDirty&&!remoteDirty){await upload(local,remoteRev,true);updateTop('Синхронизировано');return}
     if(!localDirty&&remoteDirty){applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные обновлены');notifyCloudApplied();return}
     if(localDirty&&remoteDirty){
-      if(payloadTime(local.payload)>payloadTime(remotePayload)){await upload(local,remoteRev);updateTop('Синхронизировано');return}
+      if(recentLocalChange()){
+        var mergedPayload=mergePayloads(local.payload,remotePayload),merged={payload:mergedPayload,sig:sig(mergedPayload)};
+        var ok=await upload(merged,remoteRev,true);if(ok)applyMerged(mergedPayload,meta().rev);updateTop('Синхронизировано');return
+      }
+      if(payloadTime(local.payload)>=payloadTime(remotePayload)){await upload(local,remoteRev,true);updateTop('Синхронизировано');return}
       applyRemote(remotePayload,remoteRev,remoteSig);updateTop('Данные обновлены');notifyCloudApplied();return
     }
     setMeta({rev:remoteRev,lastSig:local.sig,lastSyncAt:Date.now()});updateTop('Синхронизировано');
@@ -165,7 +212,7 @@ function buildUi(){
 window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();installPrompt=e;renderInstallButton()});
 window.addEventListener('online',function(){updateTop();autoSync(false)});window.addEventListener('offline',function(){updateTop()});
 document.addEventListener('visibilitychange',function(){if(!document.hidden)autoSync(false)});
-window.addEventListener('organizer:local-change',function(){if(!suppress)scheduleSync()});
+window.addEventListener('organizer:local-change',function(){if(!suppress){lastLocalChangeAt=Date.now();scheduleSync()}});
 var settings=q('#settingsSection');if(settings)new MutationObserver(function(){ensureSettingsCard()}).observe(settings,{childList:true,subtree:false});
 
 buildUi();setInterval(function(){autoSync(false)},30000);setTimeout(function(){autoSync(false)},1200);
