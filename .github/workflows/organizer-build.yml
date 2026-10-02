@@ -1,4 +1,4 @@
-name: Build Organizer Pro v0.9.32
+name: Build Organizer Pro v0.9.33
 
 on:
   push:
@@ -8,6 +8,10 @@ on:
       - 'organizer/**'
       - '.github/workflows/organizer-build.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
 
 env:
   ANDROID_HOME: /usr/local/lib/android/sdk
@@ -38,11 +42,53 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Build and verify Organizer Pro v0.9.32
+      - name: Restore or create stable Organizer Pro signing key
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p organizer/signing
+          KEY="organizer/signing/organizer-pro-stable.jks"
+          PASS="OrganizerProTest2026"
+          ALIAS="organizerpro"
+
+          API="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=Organizer-Pro-stable-signing-key&per_page=100"
+          JSON=$(curl -fsSL \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$API")
+          URL=$(printf '%s' "$JSON" | python3 -c 'import json,sys; a=[x for x in json.load(sys.stdin).get("artifacts",[]) if not x.get("expired")]; a.sort(key=lambda x:x.get("created_at", "")); print(a[-1]["archive_download_url"] if a else "")')
+
+          if [ -n "$URL" ]; then
+            echo "Restoring stable signing key from previous Organizer Pro build artifact"
+            curl -fsSL \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$URL" -o /tmp/organizer-signing-key.zip
+            unzip -qo /tmp/organizer-signing-key.zip -d organizer/signing
+          fi
+
+          if [ ! -f "$KEY" ]; then
+            echo "No previous stable key artifact found; creating Organizer Pro stable TEST signing key"
+            keytool -genkeypair -noprompt \
+              -keystore "$KEY" \
+              -storepass "$PASS" \
+              -alias "$ALIAS" \
+              -keypass "$PASS" \
+              -dname "CN=Organizer Pro Test,O=Kairat,C=KZ" \
+              -keyalg RSA -keysize 2048 -validity 10000
+          fi
+
+          keytool -list -v -keystore "$KEY" -storepass "$PASS" -alias "$ALIAS" | grep -E 'Alias name:|SHA256:'
+
+      - name: Build and verify Organizer Pro v0.9.33
         shell: bash
         run: |
           for attempt in 1 2 3; do
-            if bash organizer/build_v0932.sh; then
+            if bash organizer/build_v0933.sh; then
               exit 0
             fi
             echo "Gradle attempt $attempt failed; waiting before retry..."
@@ -53,7 +99,16 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Organizer-Pro-v0.9.32-debug
-          path: organizer/buildsrc0106/Organizer-Pro-v0.9.32-source/app/build/outputs/apk/debug/app-debug.apk
+          name: Organizer-Pro-v0.9.33-debug
+          path: organizer/buildsrc0106/Organizer-Pro-v0.9.33-source/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
+
+      - name: Preserve stable Organizer Pro signing key
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Organizer-Pro-stable-signing-key
+          path: organizer/signing/organizer-pro-stable.jks
+          if-no-files-found: error
+          retention-days: 90
