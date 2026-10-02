@@ -23,14 +23,10 @@ jobs:
           bash /tmp/reconstruct_v0935.sh
           ROOT=organizer/buildsrc0106/Organizer-Pro-v0.9.35-source
           UI="$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
-          echo '=== SCALE REFERENCES ==='
-          grep -nE 'LocalContentTextScale|fontScale|buttonScale|CompositionLocalProvider|MoneyOverview|MoneySummary|Summary|TextField|OutlinedTextField' "$UI" || true
-          echo '=== MONEY REGION ==='
-          LINE=$(grep -n 'fun MoneyOverview' "$UI" | head -1 | cut -d: -f1 || true)
-          if [ -n "$LINE" ]; then
-            START=$((LINE-80)); [ $START -lt 1 ] && START=1
-            END=$((LINE+180))
-            sed -n "${START},${END}p" "$UI"
-          fi
-          echo '=== APP/THEME REGION ==='
-          grep -nE 'MaterialTheme|LocalContentTextScale|CompositionLocalProvider' "$UI" | head -80 || true
+          echo '=== TOP 55-215 ==='
+          sed -n '55,215p' "$UI"
+          echo '=== MONEY TAB PILL ==='
+          LINE=$(grep -n 'fun MoneyTabPill' "$UI" | head -1 | cut -d: -f1 || true)
+          if [ -n "$LINE" ]; then START=$((LINE-20)); END=$((LINE+70)); sed -n "${START},${END}p" "$UI"; fi
+          echo '=== TEXT SCALE HELPERS ==='
+          grep -nE 'LocalContentTextScale|CompositionLocalProvider|ProvideTextStyle|copy\(fontSize|fontScale|buttonScale|buttonFont' "$UI" || true
