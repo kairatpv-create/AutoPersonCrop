@@ -1,4 +1,4 @@
-name: Build Organizer Pro Web v0.5.2
+name: Build Organizer Pro Web v0.5.3
 
 on:
   push:
@@ -37,6 +37,7 @@ jobs:
         run: |
           test -f organizer-web/static/index.html
           test -f organizer-web/static/app.js
+          test -f organizer-web/static/ui-fix.js
           test -f organizer-web/static/style.css
           test -f organizer-web/static/sync.js
           test -f organizer-web/static/sync.css
@@ -46,8 +47,15 @@ jobs:
           test -f organizer-sync-server/server.js
           test -f organizer-sync-server/package.json
           test -f render.yaml
-          grep -q 'WEB 0.5.2' organizer-web/static/index.html
-          grep -q "organizer-pro-web-0.5.2" organizer-web/static/sw.js
+          grep -q 'WEB 0.5.3' organizer-web/static/index.html
+          grep -q "organizer-pro-web-0.5.3" organizer-web/static/sw.js
+          grep -q '<script src="ui-fix.js"></script>' organizer-web/static/index.html
+          grep -q "'./ui-fix.js'" organizer-web/static/sw.js
+          grep -q "data-note" organizer-web/static/ui-fix.js
+          grep -q "data-project" organizer-web/static/ui-fix.js
+          grep -q "saveNote" organizer-web/static/ui-fix.js
+          grep -q "saveProject" organizer-web/static/ui-fix.js
+          grep -q "Сохранить" organizer-web/static/ui-fix.js
           grep -q 'manifest.webmanifest' organizer-web/static/index.html
           grep -q 'serviceWorker' organizer-web/static/index.html
           grep -q '<script src="sync.js"></script>' organizer-web/static/index.html
@@ -76,6 +84,7 @@ jobs:
           grep -q 'express.static' organizer-sync-server/server.js
           grep -q 'organizer-pro.app' organizer-sync-server/server.js
           node --check organizer-web/static/app.js
+          node --check organizer-web/static/ui-fix.js
           node --check organizer-web/static/sync.js
           node --check organizer-web/static/sw.js
           node --check organizer-sync-server/server.js
@@ -144,8 +153,10 @@ jobs:
           test -n "$CHROME"
           "$CHROME" --headless --no-sandbox --disable-gpu --virtual-time-budget=3000 --dump-dom http://127.0.0.1:10000/ > /tmp/organizer-dom.html
           grep -q 'Органайзер Про' /tmp/organizer-dom.html
+          grep -q 'WEB 0.5.3' /tmp/organizer-dom.html
           grep -q 'Заметки' /tmp/organizer-dom.html
           grep -q 'Создать' /tmp/organizer-dom.html
+          grep -q 'Сохранить' /tmp/organizer-dom.html
           grep -q 'Войти' /tmp/organizer-dom.html
           ! grep -q 'Project ID' /tmp/organizer-dom.html
           ! grep -q 'Web API key' /tmp/organizer-dom.html
@@ -155,7 +166,7 @@ jobs:
       - name: Upload web package
         uses: actions/upload-artifact@v4
         with:
-          name: Organizer-Pro-Web-v0.5.2
+          name: Organizer-Pro-Web-v0.5.3
           path: organizer-web/static/
           if-no-files-found: error
           retention-days: 7
