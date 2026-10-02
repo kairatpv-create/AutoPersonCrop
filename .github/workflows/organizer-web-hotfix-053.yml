@@ -1,0 +1,44 @@
+name: Verify Organizer Pro Web v0.5.3 Hotfix
+
+on:
+  push:
+    branches:
+      - personal-organizer-web-v1
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Web 0.5.3 hotfix files
+        shell: bash
+        run: |
+          test -f organizer-web/static/index.html
+          test -f organizer-web/static/app.js
+          test -f organizer-web/static/ui-fix.js
+          test -f organizer-web/static/sync.js
+          test -f organizer-web/static/sw.js
+          grep -q 'WEB 0.5.3' organizer-web/static/index.html
+          grep -q '<script src="ui-fix.js"></script>' organizer-web/static/index.html
+          grep -q "organizer-pro-web-0.5.3" organizer-web/static/sw.js
+          grep -q "'./ui-fix.js'" organizer-web/static/sw.js
+          grep -q "data-note" organizer-web/static/ui-fix.js
+          grep -q "data-project" organizer-web/static/ui-fix.js
+          grep -q "saveNote" organizer-web/static/ui-fix.js
+          grep -q "saveProject" organizer-web/static/ui-fix.js
+          grep -q "Сохранить" organizer-web/static/ui-fix.js
+          node --check organizer-web/static/app.js
+          node --check organizer-web/static/ui-fix.js
+          node --check organizer-web/static/sync.js
+          node --check organizer-web/static/sw.js
+
+      - name: Upload Web package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Organizer-Pro-Web-v0.5.3-hotfix
+          path: organizer-web/static/
+          if-no-files-found: error
+          retention-days: 7
