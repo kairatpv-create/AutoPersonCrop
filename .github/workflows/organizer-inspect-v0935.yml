@@ -22,11 +22,10 @@ jobs:
           awk '/^gradle --no-daemon/{exit} {print}' organizer/build_v0935_ci.sh > /tmp/reconstruct_v0935.sh
           bash /tmp/reconstruct_v0935.sh
           ROOT=organizer/buildsrc0106/Organizer-Pro-v0.9.35-source
-          UI="$ROOT/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt"
-          echo '=== TOP 55-215 ==='
-          sed -n '55,215p' "$UI"
-          echo '=== MONEY TAB PILL ==='
-          LINE=$(grep -n 'fun MoneyTabPill' "$UI" | head -1 | cut -d: -f1 || true)
-          if [ -n "$LINE" ]; then START=$((LINE-20)); END=$((LINE+70)); sed -n "${START},${END}p" "$UI"; fi
-          echo '=== TEXT SCALE HELPERS ==='
-          grep -nE 'LocalContentTextScale|CompositionLocalProvider|ProvideTextStyle|copy\(fontSize|fontScale|buttonScale|buttonFont' "$UI" || true
+          BASE="$ROOT/app/src/main/java/kz/kairat/organizer"
+          echo '=== THEME FILE MATCHES ==='
+          grep -Rnl 'fun OrganizerTheme\|LocalContentTextScale\|LocalButtonTextScale' "$BASE" || true
+          for f in $(grep -Rl 'fun OrganizerTheme\|LocalContentTextScale\|LocalButtonTextScale' "$BASE" || true); do
+            echo "=== FILE $f ==="
+            cat "$f"
+          done
