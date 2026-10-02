@@ -86,6 +86,8 @@ jobs:
 
       - name: Build and verify Organizer Pro v0.9.33
         shell: bash
+        env:
+          EXPECTED_SIGNER_SHA256: 452d32c7a6cce6ee4c3b1d52a6a1cf80b1b625eebe9eb72a38ceed0c22b989c5
         run: |
           for attempt in 1 2 3; do
             if bash organizer/build_v0933.sh; then
