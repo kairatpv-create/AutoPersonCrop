@@ -206,7 +206,7 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
     }
 
     companion object {
-        private const val CROP_ALGORITHM_VERSION = 714
+        private const val CROP_ALGORITHM_VERSION = 715
 
         const val PENDING = 0
         const val DONE = 1
