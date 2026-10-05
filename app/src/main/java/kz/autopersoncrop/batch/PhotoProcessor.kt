@@ -34,9 +34,9 @@ sealed class ProcessResult {
 
 /**
  * Direct processor for controlled material: every source contains only the wanted one person or two
- * wrestlers. The robust detector orders its evidence by confidence/relevance. Only the first two
- * physical person envelopes are allowed to influence crop geometry; extra detector duplicates must
- * never widen the crop and reintroduce empty background.
+ * wrestlers. The robust detector may return several overlapping evidence boxes from different views;
+ * they all belong to the wanted action. Crop planning therefore uses their combined envelope instead
+ * of trying to re-decide which box is "person #1" or "person #2" a second time.
  *
  * There is no successful full-frame copy. A valid result must be an actual crop. If reliable person
  * geometry cannot be produced, the batch service records an ERROR instead of hiding the failure as
@@ -73,7 +73,6 @@ class PhotoProcessor(
         val previewSubjects = try {
             detector.detect(preview)
                 .filterNot { it.left < 0.0 || it.top < 0.0 || it.right <= it.left || it.bottom <= it.top }
-                .take(MAX_DETECTOR_EVIDENCE_BOXES)
         } finally {
             if (!preview.isRecycled) preview.recycle()
         }
@@ -287,6 +286,6 @@ class PhotoProcessor(
 
     companion object {
         private const val TAG = "AutoPersonCropDirect"
-        private const val MAX_DETECTOR_EVIDENCE_BOXES = 2
+        private const val MAX_DETECTOR_EVIDENCE_BOXES = 4
     }
 }
