@@ -1,6 +1,5 @@
 package kz.autopersoncrop.core
 
-import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -8,27 +7,30 @@ import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
- * Tight people-first crop planner for controlled material with only one wanted person or two wrestlers.
+ * Crop planner for controlled material that contains only the wanted one person or two wrestlers.
  *
- * Every crop side is calculated independently from the confirmed people envelope. There is no
- * balancing, centring, opposite-side compensation or target aspect ratio. Empty background is removed
- * unless it is the small breathing room requested around the people.
+ * The detector geometry is the only anchor. We never stretch, squeeze, rotate or force-centre the
+ * picture. We only move crop boundaries.
  *
- * Portrait posture (standing / sitting / kneeling):
- *  - about 5% of the FINAL crop above and below the people;
- *  - only a small safety margin left and right.
+ * Portrait rule (standing / sitting / kneeling):
+ *  - leave about 5% of the FINAL crop as empty space above and below the people;
+ *  - crop left/right by the actual people envelope, adding only enough width to avoid a cramped strip.
  *
- * Landscape posture (lying / wrestling / clearly horizontal action):
- *  - about 5% of the FINAL crop left and right of the people;
- *  - only a small safety margin top and bottom.
+ * Landscape rule (lying / wrestling / clearly horizontal action):
+ *  - leave about 5% of the FINAL crop as empty space left and right of the people;
+ *  - crop top/bottom by the actual action envelope, adding only enough height to avoid a cramped strip.
  *
- * If a real image edge prevents a requested margin, that side simply uses the pixels that exist.
- * Missing margin is NEVER transferred to the opposite side.
+ * The important detail is that posture chooses the 5% axis. Two standing people do NOT become a
+ * landscape scene merely because they are standing far apart and their combined envelope is wide.
  */
 object WrestlingCropPlanner {
     private const val FINAL_MARGIN_FRACTION = 0.05
-    private const val SECONDARY_FINAL_MARGIN_FRACTION = 0.03
-    private const val EDGE_TOUCH_FRACTION = 0.012
+    private const val SECONDARY_AXIS_SAFETY = 0.07
+    private const val MIN_IMAGE_SAFETY = 0.003
+
+    private const val EDGE_MISSING_MARGIN_TRANSFER = 0.60
+    private const val SOFT_LONG_TO_SHORT_GUIDE = 2.0
+    private const val SOFT_SHAPE_BLEND = 0.65
 
     private enum class Orientation { PORTRAIT, LANDSCAPE }
 
@@ -36,68 +38,18 @@ object WrestlingCropPlanner {
         require(subjects.isNotEmpty()) { "At least one person is required" }
 
         val clean = subjects
-            .take(2)
             .map { it.clampTo(image) }
             .filter { it.width >= 2.0 && it.height >= 2.0 }
         require(clean.isNotEmpty()) { "Не удалось построить рамку по человеку" }
 
-        val physical = selectPhysicalSubjects(image, clean)
-        val group = union(physical).clampTo(image)
+        val group = union(clean).clampTo(image)
         require(group.width >= 2.0 && group.height >= 2.0) { "Пустая область людей" }
 
-        val crop = when (chooseOrientation(physical, group)) {
+        val crop = when (chooseOrientation(clean, group)) {
             Orientation.PORTRAIT -> portraitCrop(image, group)
             Orientation.LANDSCAPE -> landscapeCrop(image, group)
         }
         return crop.clampTo(image).toPixelRect(image)
-    }
-
-    /**
-     * PhotoProcessor passes detector candidates in ranked order. The first one is the main physical
-     * person/action. A second candidate is kept unless it has the geometry of a weak duplicate/edge
-     * fragment. This prevents one stray detector box from stretching one crop side to the source edge.
-     */
-    private fun selectPhysicalSubjects(image: ImageSize, clean: List<RectD>): List<RectD> {
-        if (clean.size == 1) return clean
-        val primary = clean[0]
-        val second = clean[1]
-        return if (likelyDuplicateOrEdgeFragment(image, primary, second)) listOf(primary)
-        else listOf(primary, second)
-    }
-
-    private fun likelyDuplicateOrEdgeFragment(image: ImageSize, primary: RectD, second: RectD): Boolean {
-        val areaRatio = min(primary.area, second.area) / max(primary.area, second.area).coerceAtLeast(1.0)
-        if (areaRatio < 0.07) return true
-
-        val overlap = overlapFractionOfSmaller(primary, second)
-        val dx = abs(primary.centerX - second.centerX) / max(primary.width, second.width).coerceAtLeast(1.0)
-        val dy = abs(primary.centerY - second.centerY) / max(primary.height, second.height).coerceAtLeast(1.0)
-
-        // Same person found by two passes with slightly different outer bounds.
-        if (overlap >= 0.68 && dx <= 0.35 && dy <= 0.35 && areaRatio < 0.78) return true
-
-        val secondTouchesEdge = touchesAnyEdge(second, image)
-        if (!secondTouchesEdge) return false
-
-        val primaryTouchesSameEdge = touchesSameSourceEdge(primary, second, image)
-        if (primaryTouchesSameEdge) return false
-
-        // Small edge fragments are the most common reason one whole side remains uncut.
-        if (areaRatio < 0.32) return true
-
-        val primaryPortrait = primary.height >= primary.width * 1.20
-        val primaryLandscape = primary.width >= primary.height * 1.25
-        val secondPortrait = second.height >= second.width * 1.20
-        val secondLandscape = second.width >= second.height * 1.25
-        val strongShapeMismatch = (primaryPortrait && secondLandscape) || (primaryLandscape && secondPortrait)
-        if (strongShapeMismatch && areaRatio < 0.72) return true
-
-        val secondCenterInsidePrimary =
-            second.centerX in primary.left..primary.right && second.centerY in primary.top..primary.bottom
-        if (secondCenterInsidePrimary && areaRatio < 0.80) return true
-
-        if (overlap >= 0.25 && areaRatio < 0.55) return true
-        return false
     }
 
     private fun chooseOrientation(subjects: List<RectD>, group: RectD): Orientation {
@@ -106,100 +58,134 @@ object WrestlingCropPlanner {
         for (subject in subjects) {
             val weight = sqrt(subject.area.coerceAtLeast(1.0))
             when {
-                subject.height >= subject.width * 1.08 -> portraitEvidence += weight
-                subject.width >= subject.height * 1.15 -> landscapeEvidence += weight
-                subject.height >= subject.width -> portraitEvidence += weight * 0.40
-                else -> landscapeEvidence += weight * 0.40
+                subject.height >= subject.width * 1.10 -> portraitEvidence += weight
+                subject.width >= subject.height * 1.18 -> landscapeEvidence += weight
+                subject.height >= subject.width -> portraitEvidence += weight * 0.35
+                else -> landscapeEvidence += weight * 0.35
             }
         }
 
-        if (portraitEvidence > 0.0 && portraitEvidence >= landscapeEvidence * 0.85) {
-            return Orientation.PORTRAIT
-        }
-        if (landscapeEvidence > portraitEvidence * 1.08) {
-            return Orientation.LANDSCAPE
-        }
-        return if (group.width >= group.height * 1.16) Orientation.LANDSCAPE
-        else Orientation.PORTRAIT
+        if (portraitEvidence > 0.0 && portraitEvidence >= landscapeEvidence * 0.85) return Orientation.PORTRAIT
+        if (landscapeEvidence > portraitEvidence * 1.10) return Orientation.LANDSCAPE
+        return if (group.width >= group.height * 1.18) Orientation.LANDSCAPE else Orientation.PORTRAIT
     }
 
     private fun portraitCrop(image: ImageSize, group: RectD): RectD {
-        val vertical = independentAxisBounds(
-            subjectMin = group.top,
-            subjectMax = group.bottom,
-            sourceSize = image.height.toDouble(),
-            fraction = FINAL_MARGIN_FRACTION,
-        )
-        val horizontal = independentAxisBounds(
-            subjectMin = group.left,
-            subjectMax = group.right,
+        val vertical = primaryAxisBounds(group.top, group.bottom, image.height.toDouble())
+        val top = vertical.first
+        val bottom = vertical.second
+        val height = (bottom - top).coerceAtLeast(1.0)
+
+        val sideSafety = max(group.width * SECONDARY_AXIS_SAFETY, image.width * MIN_IMAGE_SAFETY)
+        val requiredLeft = (group.left - sideSafety).coerceAtLeast(0.0)
+        val requiredRight = (group.right + sideSafety).coerceAtMost(image.width.toDouble())
+        val requiredWidth = (requiredRight - requiredLeft).coerceAtLeast(1.0)
+
+        val guideWidth = (height / SOFT_LONG_TO_SHORT_GUIDE).coerceAtMost(image.width.toDouble())
+        val targetWidth = softExpand(requiredWidth, guideWidth).coerceAtMost(image.width.toDouble())
+
+        val horizontal = placeSecondaryWindow(
             sourceSize = image.width.toDouble(),
-            fraction = SECONDARY_FINAL_MARGIN_FRACTION,
+            targetSize = targetWidth,
+            anchorCenter = group.centerX,
+            requiredMin = requiredLeft,
+            requiredMax = requiredRight,
         )
-        return RectD(horizontal.first, vertical.first, horizontal.second, vertical.second)
+        return RectD(horizontal.first, top, horizontal.second, bottom)
     }
 
     private fun landscapeCrop(image: ImageSize, group: RectD): RectD {
-        val horizontal = independentAxisBounds(
-            subjectMin = group.left,
-            subjectMax = group.right,
-            sourceSize = image.width.toDouble(),
-            fraction = FINAL_MARGIN_FRACTION,
-        )
-        val vertical = independentAxisBounds(
-            subjectMin = group.top,
-            subjectMax = group.bottom,
+        val horizontal = primaryAxisBounds(group.left, group.right, image.width.toDouble())
+        val left = horizontal.first
+        val right = horizontal.second
+        val width = (right - left).coerceAtLeast(1.0)
+
+        val verticalSafety = max(group.height * SECONDARY_AXIS_SAFETY, image.height * MIN_IMAGE_SAFETY)
+        val requiredTop = (group.top - verticalSafety).coerceAtLeast(0.0)
+        val requiredBottom = (group.bottom + verticalSafety).coerceAtMost(image.height.toDouble())
+        val requiredHeight = (requiredBottom - requiredTop).coerceAtLeast(1.0)
+
+        val guideHeight = (width / SOFT_LONG_TO_SHORT_GUIDE).coerceAtMost(image.height.toDouble())
+        val targetHeight = softExpand(requiredHeight, guideHeight).coerceAtMost(image.height.toDouble())
+
+        val vertical = placeSecondaryWindow(
             sourceSize = image.height.toDouble(),
-            fraction = SECONDARY_FINAL_MARGIN_FRACTION,
+            targetSize = targetHeight,
+            anchorCenter = group.centerY,
+            requiredMin = requiredTop,
+            requiredMax = requiredBottom,
         )
-        return RectD(horizontal.first, vertical.first, horizontal.second, vertical.second)
+        return RectD(left, vertical.first, right, vertical.second)
     }
 
-    /** Each side is calculated independently. No missing margin is moved to the opposite side. */
-    private fun independentAxisBounds(
-        subjectMin: Double,
-        subjectMax: Double,
-        sourceSize: Double,
-        fraction: Double,
-    ): Pair<Double, Double> {
+    private fun softExpand(required: Double, guide: Double): Double {
+        if (required >= guide) return required
+        return required + (guide - required) * SOFT_SHAPE_BLEND
+    }
+
+    private fun primaryAxisBounds(subjectMin: Double, subjectMax: Double, sourceSize: Double): Pair<Double, Double> {
         val subjectSize = (subjectMax - subjectMin).coerceAtLeast(1.0)
-        val desired = finalMargin(subjectSize, fraction)
-        val before = min(desired, subjectMin.coerceAtLeast(0.0))
-        val after = min(desired, (sourceSize - subjectMax).coerceAtLeast(0.0))
-        return (subjectMin - before).coerceAtLeast(0.0) to
-            (subjectMax + after).coerceAtMost(sourceSize)
+        val desired = finalFivePercentMargin(subjectSize)
+        val availableBefore = subjectMin.coerceAtLeast(0.0)
+        val availableAfter = (sourceSize - subjectMax).coerceAtLeast(0.0)
+
+        var before = min(desired, availableBefore)
+        var after = min(desired, availableAfter)
+
+        val missingBefore = (desired - before).coerceAtLeast(0.0)
+        val missingAfter = (desired - after).coerceAtLeast(0.0)
+
+        if (missingBefore > 0.0) {
+            val extraRoom = (availableAfter - after).coerceAtLeast(0.0)
+            after += min(extraRoom, missingBefore * EDGE_MISSING_MARGIN_TRANSFER)
+        }
+        if (missingAfter > 0.0) {
+            val extraRoom = (availableBefore - before).coerceAtLeast(0.0)
+            before += min(extraRoom, missingAfter * EDGE_MISSING_MARGIN_TRANSFER)
+        }
+
+        return (subjectMin - before).coerceAtLeast(0.0) to (subjectMax + after).coerceAtMost(sourceSize)
     }
 
-    /**
-     * If people occupy S and each normal margin is fraction P of final crop F:
-     * F = S + 2*P*F, therefore one margin = S*P/(1-2P).
-     */
-    private fun finalMargin(subjectSize: Double, fraction: Double): Double =
-        subjectSize * fraction / (1.0 - 2.0 * fraction)
+    private fun finalFivePercentMargin(subjectSize: Double): Double =
+        subjectSize * FINAL_MARGIN_FRACTION / (1.0 - 2.0 * FINAL_MARGIN_FRACTION)
 
-    private fun touchesAnyEdge(r: RectD, image: ImageSize): Boolean {
-        val x = image.width * EDGE_TOUCH_FRACTION
-        val y = image.height * EDGE_TOUCH_FRACTION
-        return r.left <= x || r.right >= image.width - x || r.top <= y || r.bottom >= image.height - y
-    }
+    private fun placeSecondaryWindow(
+        sourceSize: Double,
+        targetSize: Double,
+        anchorCenter: Double,
+        requiredMin: Double,
+        requiredMax: Double,
+    ): Pair<Double, Double> {
+        if (targetSize >= sourceSize) return 0.0 to sourceSize
 
-    private fun touchesSameSourceEdge(a: RectD, b: RectD, image: ImageSize): Boolean {
-        val x = image.width * EDGE_TOUCH_FRACTION
-        val y = image.height * EDGE_TOUCH_FRACTION
-        return (a.left <= x && b.left <= x) ||
-            (a.right >= image.width - x && b.right >= image.width - x) ||
-            (a.top <= y && b.top <= y) ||
-            (a.bottom >= image.height - y && b.bottom >= image.height - y)
-    }
+        val availableBefore = requiredMin.coerceAtLeast(0.0)
+        val availableAfter = (sourceSize - requiredMax).coerceAtLeast(0.0)
+        val extra = (targetSize - (requiredMax - requiredMin)).coerceAtLeast(0.0)
+        val edgeThreshold = max(sourceSize * 0.025, extra * 0.35)
 
-    private fun overlapFractionOfSmaller(a: RectD, b: RectD): Double {
-        val left = max(a.left, b.left)
-        val top = max(a.top, b.top)
-        val right = min(a.right, b.right)
-        val bottom = min(a.bottom, b.bottom)
-        if (right <= left || bottom <= top) return 0.0
-        val intersection = (right - left) * (bottom - top)
-        return intersection / min(a.area, b.area).coerceAtLeast(1.0)
+        if (availableBefore <= edgeThreshold) return 0.0 to targetSize.coerceAtMost(sourceSize)
+        if (availableAfter <= edgeThreshold) return (sourceSize - targetSize).coerceAtLeast(0.0) to sourceSize
+
+        val sourceFraction = (anchorCenter / sourceSize).coerceIn(0.0, 1.0)
+        var start = anchorCenter - sourceFraction * targetSize
+        start = start.coerceIn(0.0, sourceSize - targetSize)
+        var end = start + targetSize
+
+        if (start > requiredMin) {
+            start = requiredMin.coerceAtLeast(0.0)
+            end = start + targetSize
+        }
+        if (end < requiredMax) {
+            end = requiredMax.coerceAtMost(sourceSize)
+            start = end - targetSize
+        }
+
+        start = start.coerceIn(0.0, sourceSize - targetSize)
+        end = (start + targetSize).coerceAtMost(sourceSize)
+        if (start > requiredMin) start = requiredMin.coerceAtLeast(0.0)
+        if (end < requiredMax) end = requiredMax.coerceAtMost(sourceSize)
+        return start to end
     }
 
     private fun RectD.toPixelRect(image: ImageSize): PixelRect {
