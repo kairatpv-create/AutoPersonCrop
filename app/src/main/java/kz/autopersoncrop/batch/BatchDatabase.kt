@@ -28,32 +28,21 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion < 2) {
-            runCatching { db.execSQL("ALTER TABLE queue ADD COLUMN seen INTEGER NOT NULL DEFAULT 1") }
-        }
+        if (oldVersion < 2) runCatching { db.execSQL("ALTER TABLE queue ADD COLUMN seen INTEGER NOT NULL DEFAULT 1") }
         if (oldVersion < 4) {
             runCatching { db.execSQL("ALTER TABLE queue ADD COLUMN sort_index INTEGER NOT NULL DEFAULT 0") }
             runCatching { db.execSQL("CREATE INDEX idx_queue_folder_sort ON queue(folder, sort_index)") }
         }
-        if (oldVersion < 5) {
-            runCatching { db.execSQL("ALTER TABLE queue ADD COLUMN algo_version INTEGER NOT NULL DEFAULT 0") }
-        }
+        if (oldVersion < 5) runCatching { db.execSQL("ALTER TABLE queue ADD COLUMN algo_version INTEGER NOT NULL DEFAULT 0") }
     }
 
-    /**
-     * Sync source files and invalidate results made by an older crop algorithm.
-     * PROCESSING is used for stale entries because BatchProcessingService treats it as recoverable
-     * and overwrites any old output file in CROP.
-     */
     fun sync(folder: String, photos: List<SourcePhoto>) {
         val db = writableDatabase
         db.beginTransaction()
         try {
             db.execSQL("UPDATE queue SET seen=0 WHERE folder=?", arrayOf(folder))
-
             val insert = db.compileStatement(
-                "INSERT OR IGNORE INTO queue(folder,uri,name,rel,status,message,seen,sort_index,algo_version) " +
-                    "VALUES(?,?,?,?,?,'',1,?,?)"
+                "INSERT OR IGNORE INTO queue(folder,uri,name,rel,status,message,seen,sort_index,algo_version) VALUES(?,?,?,?,?,'',1,?,?)"
             )
             val update = db.compileStatement(
                 """UPDATE queue SET
@@ -91,22 +80,15 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
                     }
                 }
             } finally {
-                insert.close()
-                update.close()
+                insert.close(); update.close()
             }
-
             db.delete("queue", "folder=? AND seen=0", arrayOf(folder))
             db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
+        } finally { db.endTransaction() }
     }
 
     fun resetFolder(folder: String) {
-        val v = ContentValues().apply {
-            put("status", PENDING)
-            put("message", "")
-        }
+        val v = ContentValues().apply { put("status", PENDING); put("message", "") }
         writableDatabase.update("queue", v, "folder=?", arrayOf(folder))
     }
 
@@ -124,9 +106,7 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
 
     fun statuses(folder: String): HashMap<String, Int> {
         val result = HashMap<String, Int>()
-        readableDatabase.query(
-            "queue", arrayOf("uri", "status"), "folder=?", arrayOf(folder), null, null, "sort_index ASC"
-        ).use { c ->
+        readableDatabase.query("queue", arrayOf("uri", "status"), "folder=?", arrayOf(folder), null, null, "sort_index ASC").use { c ->
             while (c.moveToNext()) result[c.getString(0)] = c.getInt(1)
         }
         return result
@@ -136,78 +116,34 @@ class BatchDatabase(context: Context) : SQLiteOpenHelper(context, "autocrop_queu
         if (folder.isBlank()) return emptyList()
         val result = ArrayList<QueueItem>()
         readableDatabase.query(
-            "queue",
-            arrayOf("name", "rel", "status", "message", "sort_index"),
-            "folder=?",
-            arrayOf(folder),
-            null,
-            null,
-            "sort_index ASC",
+            "queue", arrayOf("name", "rel", "status", "message", "sort_index"), "folder=?", arrayOf(folder), null, null, "sort_index ASC",
         ).use { c ->
-            while (c.moveToNext()) {
-                result += QueueItem(
-                    name = c.getString(0),
-                    relativeDir = c.getString(1),
-                    status = c.getInt(2),
-                    message = c.getString(3).orEmpty(),
-                    sortIndex = c.getInt(4),
-                )
-            }
+            while (c.moveToNext()) result += QueueItem(c.getString(0), c.getString(1), c.getInt(2), c.getString(3).orEmpty(), c.getInt(4))
         }
         return result
     }
 
     fun mark(folder: String, uri: String, status: Int, message: String = "") {
-        val v = ContentValues().apply {
-            put("status", status)
-            put("message", message.take(1000))
-        }
+        val v = ContentValues().apply { put("status", status); put("message", message.take(1000)) }
         writableDatabase.update("queue", v, "folder=? AND uri=?", arrayOf(folder, uri))
     }
 
     fun counts(folder: String): Counts {
         val counts = IntArray(6)
-        readableDatabase.rawQuery(
-            "SELECT status, COUNT(*) FROM queue WHERE folder=? GROUP BY status", arrayOf(folder)
-        ).use { c ->
-            while (c.moveToNext()) {
-                val s = c.getInt(0)
-                if (s in counts.indices) counts[s] = c.getInt(1)
-            }
+        readableDatabase.rawQuery("SELECT status, COUNT(*) FROM queue WHERE folder=? GROUP BY status", arrayOf(folder)).use { c ->
+            while (c.moveToNext()) { val s = c.getInt(0); if (s in counts.indices) counts[s] = c.getInt(1) }
         }
-        return Counts(
-            pending = counts[PENDING],
-            done = counts[DONE],
-            noPeople = counts[NO_PEOPLE],
-            errors = counts[ERROR],
-            existing = counts[EXISTING],
-            processing = counts[PROCESSING],
-        )
+        return Counts(counts[PENDING], counts[DONE], counts[NO_PEOPLE], counts[ERROR], counts[EXISTING], counts[PROCESSING])
     }
 
-    data class QueueItem(
-        val name: String,
-        val relativeDir: String,
-        val status: Int,
-        val message: String,
-        val sortIndex: Int,
-    )
-
-    data class Counts(
-        val pending: Int,
-        val done: Int,
-        val noPeople: Int,
-        val errors: Int,
-        val existing: Int,
-        val processing: Int,
-    ) {
+    data class QueueItem(val name: String, val relativeDir: String, val status: Int, val message: String, val sortIndex: Int)
+    data class Counts(val pending: Int, val done: Int, val noPeople: Int, val errors: Int, val existing: Int, val processing: Int) {
         val finished: Int get() = done + noPeople + existing
         val unresolved: Int get() = pending + processing + errors
     }
 
     companion object {
-        private const val CROP_ALGORITHM_VERSION = 715
-
+        private const val CROP_ALGORITHM_VERSION = 716
         const val PENDING = 0
         const val DONE = 1
         const val NO_PEOPLE = 2
