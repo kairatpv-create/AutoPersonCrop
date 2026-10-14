@@ -148,6 +148,7 @@ object TemporalActionLocator {
         val anchor = ranked.firstOrNull() ?: return null
         var best = anchor.bounds
         var bestCells = anchor.cells
+        var bestEnergy = anchor.energy
         for (part in ranked.drop(1)) {
             val other = part.bounds
             val gapX = max(0.0, max(best.left, other.left) - min(best.right, other.right))
@@ -159,6 +160,7 @@ object TemporalActionLocator {
                     max(best.right, other.right), max(best.bottom, other.bottom),
                 )
                 bestCells += part.cells
+                bestEnergy += part.energy
             }
         }
         if (bestCells < 3 || best.width < w * 0.09 || best.height < h * 0.09) return null
