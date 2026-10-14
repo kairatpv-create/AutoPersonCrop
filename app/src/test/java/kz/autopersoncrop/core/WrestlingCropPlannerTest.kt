@@ -16,7 +16,7 @@ class WrestlingCropPlannerTest {
         assertEquals(682, crop.bottom)
         assertTrue(crop.left < person.left)
         assertTrue(crop.right > person.right)
-        assertTrue("portrait must stay compact", crop.width < 380)
+        assertTrue("portrait must follow a natural tight standing-person shape", crop.width < crop.height * 0.73)
         val topEmptyFraction = (person.top - crop.top) / crop.height.toDouble()
         val bottomEmptyFraction = (crop.bottom - person.bottom) / crop.height.toDouble()
         assertTrue(abs(topEmptyFraction - 0.05) < 0.006)

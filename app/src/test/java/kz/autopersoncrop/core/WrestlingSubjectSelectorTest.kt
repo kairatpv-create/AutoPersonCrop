@@ -29,6 +29,15 @@ class WrestlingSubjectSelectorTest {
     }
 
     @Test
+    fun closerActualPartnerBeatsEarlierRefereeObservation() {
+        val first = RectD(245.0, 95.0, 515.0, 660.0)
+        val referee = RectD(780.0, 110.0, 1030.0, 650.0)
+        val second = RectD(490.0, 115.0, 770.0, 655.0)
+        val selected = WrestlingSubjectSelector.select(image, listOf(first, referee, second))
+        assertEquals(listOf(first, second), selected)
+    }
+
+    @Test
     fun failureMarkerRaisesInsteadOfBecomingFullFrameCrop() {
         var thrown = false
         try {

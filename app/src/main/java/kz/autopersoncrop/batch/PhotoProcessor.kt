@@ -15,6 +15,7 @@ import kz.autopersoncrop.core.ImageSize
 import kz.autopersoncrop.core.PixelRect
 import kz.autopersoncrop.core.RectD
 import kz.autopersoncrop.core.WrestlingCropPlanner
+import kz.autopersoncrop.core.WrestlingSubjectSelector
 import kz.autopersoncrop.io.ImageFrameLoader
 import kz.autopersoncrop.io.PhotoFrame
 import kz.autopersoncrop.io.SourcePhoto
@@ -34,9 +35,9 @@ sealed class ProcessResult {
 
 /**
  * Direct processor for controlled material: every source contains only the wanted one person or two
- * wrestlers. The robust detector may return several overlapping evidence boxes from different views;
- * they all belong to the wanted action. Crop planning therefore uses their combined envelope instead
- * of trying to re-decide which box is "person #1" or "person #2" a second time.
+ * wrestlers. The robust detector can return several overlapping evidence boxes from different
+ * views. Select the principal people before computing their joint envelope, rather than allowing
+ * unrelated low-confidence boxes to expand the crop.
  *
  * There is no successful full-frame copy. A valid result must be an actual crop. If reliable person
  * geometry cannot be produced, the batch service records an ERROR instead of hiding the failure as
@@ -96,8 +97,12 @@ class PhotoProcessor(
         }
 
         val imageSize = ImageSize(frame.uprightWidth, frame.uprightHeight)
-        val uprightCrop = WrestlingCropPlanner.plan(imageSize, subjects)
-        validateCrop(uprightCrop, imageSize, subjects, photo.name)
+        // The multi-view detector returns several evidence boxes, including possible
+        // low-confidence bystanders or duplicates. Never blindly union all evidence:
+        // choose the principal one/two people first, then keep strict containment checks.
+        val principalSubjects = WrestlingSubjectSelector.select(imageSize, subjects)
+        val uprightCrop = WrestlingCropPlanner.plan(imageSize, principalSubjects)
+        validateCrop(uprightCrop, imageSize, principalSubjects, photo.name)
 
         val raw = ExifCropMapper.uprightToRaw(
             uprightCrop,
@@ -109,7 +114,7 @@ class PhotoProcessor(
 
         Log.i(
             TAG,
-            "${photo.name}: evidence=${subjects.size} " +
+            "${photo.name}: evidence=${subjects.size} principal=${principalSubjects.size} " +
                 "upright=${imageSize.width}x${imageSize.height} " +
                 "crop=${uprightCrop.left},${uprightCrop.top}-${uprightCrop.right},${uprightCrop.bottom} " +
                 "raw=${raw.left},${raw.top}-${raw.right},${raw.bottom}",

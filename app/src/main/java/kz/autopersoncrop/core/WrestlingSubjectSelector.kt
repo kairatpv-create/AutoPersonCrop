@@ -29,7 +29,7 @@ object WrestlingSubjectSelector {
             .filter { !sameObservation(primary, it) }
             .filter { it.area >= primary.area * MIN_SECOND_AREA_RATIO }
             .filter { plausiblePartner(primary, it, image) }
-            .firstOrNull()
+            .maxByOrNull { partnerScore(primary, it, image) }
 
         return if (second != null) listOf(primary, second) else listOf(primary)
     }
@@ -67,6 +67,25 @@ object WrestlingSubjectSelector {
                 (verticalGap / image.height.toDouble()).let { it * it }
         )
         return normalizedGap <= MAX_PARTNER_GAP
+    }
+
+    private fun partnerScore(primary: RectD, candidate: RectD, image: ImageSize): Double {
+        // Rank by anatomical proximity and overlap instead of taking the first later
+        // detector observation, which might be a referee or an unrelated spectator.
+        val overlap = overlapFractionOfSmaller(primary, candidate)
+        val areaBalance = min(primary.area, candidate.area) / max(primary.area, candidate.area).coerceAtLeast(1.0)
+        val gapX = when {
+            primary.right < candidate.left -> candidate.left - primary.right
+            candidate.right < primary.left -> primary.left - candidate.right
+            else -> 0.0
+        }
+        val gapY = when {
+            primary.bottom < candidate.top -> candidate.top - primary.bottom
+            candidate.bottom < primary.top -> primary.top - candidate.bottom
+            else -> 0.0
+        }
+        val distance = sqrt((gapX / image.width).let { it * it } + (gapY / image.height).let { it * it })
+        return overlap * 2.0 + areaBalance * 0.35 - distance * 2.5
     }
 
     private fun sameObservation(a: RectD, b: RectD): Boolean {

@@ -14,11 +14,13 @@ import kotlin.math.sqrt
  *
  * Portrait rule (standing / sitting / kneeling):
  *  - leave about 5% of the FINAL crop as empty space above and below the people;
- *  - crop left/right by the actual people envelope, adding only enough width to avoid a cramped strip.
+ *  - crop left/right by the actual people envelope, guided by the natural manual reference
+ *    shape without enforcing one aspect ratio.
  *
  * Landscape rule (lying / wrestling / clearly horizontal action):
  *  - leave about 5% of the FINAL crop as empty space left and right of the people;
- *  - crop top/bottom by the actual action envelope, adding only enough height to avoid a cramped strip.
+ *  - crop top/bottom by the actual action envelope, with a soft landscape shape guide
+ *    capped so a nearly full-width action does not force the full image height.
  *
  * The important detail is that posture chooses the 5% axis. Two standing people do NOT become a
  * landscape scene merely because they are standing far apart and their combined envelope is wide.
@@ -29,8 +31,12 @@ object WrestlingCropPlanner {
     private const val MIN_IMAGE_SAFETY = 0.003
 
     private const val EDGE_MISSING_MARGIN_TRANSFER = 0.60
-    private const val SOFT_LONG_TO_SHORT_GUIDE = 2.0
-    private const val SOFT_SHAPE_BLEND = 0.65
+    // Measured manual references favor a natural portrait ~2:3, and flexible landscape
+    // framing around 1.6:1. These are minimum breathing-room guides, NOT fixed ratios.
+    private const val PORTRAIT_MIN_WIDTH_TO_HEIGHT = 0.67
+    private const val LANDSCAPE_MAX_WIDTH_TO_HEIGHT_GUIDE = 1.60
+    private const val MAX_SOFT_HEIGHT_SHARE_OF_SOURCE = 0.85
+    private const val SOFT_SHAPE_BLEND = 1.0
 
     private enum class Orientation { PORTRAIT, LANDSCAPE }
 
@@ -81,7 +87,7 @@ object WrestlingCropPlanner {
         val requiredRight = (group.right + sideSafety).coerceAtMost(image.width.toDouble())
         val requiredWidth = (requiredRight - requiredLeft).coerceAtLeast(1.0)
 
-        val guideWidth = (height / SOFT_LONG_TO_SHORT_GUIDE).coerceAtMost(image.width.toDouble())
+        val guideWidth = (height * PORTRAIT_MIN_WIDTH_TO_HEIGHT).coerceAtMost(image.width.toDouble())
         val targetWidth = softExpand(requiredWidth, guideWidth).coerceAtMost(image.width.toDouble())
 
         val horizontal = placeSecondaryWindow(
@@ -105,7 +111,7 @@ object WrestlingCropPlanner {
         val requiredBottom = (group.bottom + verticalSafety).coerceAtMost(image.height.toDouble())
         val requiredHeight = (requiredBottom - requiredTop).coerceAtLeast(1.0)
 
-        val guideHeight = (width / SOFT_LONG_TO_SHORT_GUIDE).coerceAtMost(image.height.toDouble())
+        val guideHeight = min(width / LANDSCAPE_MAX_WIDTH_TO_HEIGHT_GUIDE, image.height * MAX_SOFT_HEIGHT_SHARE_OF_SOURCE)
         val targetHeight = softExpand(requiredHeight, guideHeight).coerceAtMost(image.height.toDouble())
 
         val vertical = placeSecondaryWindow(
@@ -167,8 +173,9 @@ object WrestlingCropPlanner {
         if (availableBefore <= edgeThreshold) return 0.0 to targetSize.coerceAtMost(sourceSize)
         if (availableAfter <= edgeThreshold) return (sourceSize - targetSize).coerceAtLeast(0.0) to sourceSize
 
-        val sourceFraction = (anchorCenter / sourceSize).coerceIn(0.0, 1.0)
-        var start = anchorCenter - sourceFraction * targetSize
+        // Align around the real action, not its fraction of the entire image. Near-edge
+        // cases above remain pinned to the source boundary instead of being forced central.
+        var start = anchorCenter - targetSize / 2.0
         start = start.coerceIn(0.0, sourceSize - targetSize)
         var end = start + targetSize
 
