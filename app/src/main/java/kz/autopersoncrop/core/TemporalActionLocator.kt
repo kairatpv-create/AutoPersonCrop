@@ -98,9 +98,11 @@ object TemporalActionLocator {
 
         val active = BooleanArray(energy.size) { i -> energy[i] >= 2.0 }
         val visited = BooleanArray(active.size)
-        var bestCells = 0
-        var bestEnergy = 0.0
-        var best = RectD(0.0, 0.0, 0.0, 0.0)
+        // A moving body often leaves TWO disjoint difference silhouettes (old and new
+        // positions). Merge nearby components on the same action plane before selecting
+        // a focus; otherwise the crop would lock onto a hand or a single shoe.
+        data class Component(val bounds: RectD, val energy: Double, val cells: Int)
+        val components = mutableListOf<Component>()
         for (sy in 0 until gridH) for (sx in 0 until gridW) {
             val start = sy * gridW + sx
             if (!active[start] || visited[start]) continue
@@ -138,14 +140,28 @@ object TemporalActionLocator {
                 (minX * cellW).toDouble(), (minY * cellH).toDouble(),
                 ((maxX + 1) * cellW).toDouble(), ((maxY + 1) * cellH).toDouble(),
             )
-            if (cells >= 3 && totalEnergy > bestEnergy &&
-                candidate.width >= w * 0.09 && candidate.height >= h * 0.09) {
-                bestEnergy = totalEnergy
-                bestCells = cells
-                best = candidate
+            if (cells >= 2 && totalEnergy >= 3.0) {
+                components += Component(candidate, totalEnergy, cells)
             }
         }
-        if (bestCells < 3) return null
+        val ranked = components.sortedByDescending { it.energy }
+        val anchor = ranked.firstOrNull() ?: return null
+        var best = anchor.bounds
+        var bestCells = anchor.cells
+        for (part in ranked.drop(1)) {
+            val other = part.bounds
+            val gapX = max(0.0, max(best.left, other.left) - min(best.right, other.right))
+            val gapY = max(0.0, max(best.top, other.top) - min(best.bottom, other.bottom))
+            if (gapX <= w * 0.32 && gapY <= h * 0.20 &&
+                abs(best.centerY - other.centerY) <= h * 0.26) {
+                best = RectD(
+                    min(best.left, other.left), min(best.top, other.top),
+                    max(best.right, other.right), max(best.bottom, other.bottom),
+                )
+                bestCells += part.cells
+            }
+        }
+        if (bestCells < 3 || best.width < w * 0.09 || best.height < h * 0.09) return null
         // Broad components usually mean panning / lighting changes, not moving wrestlers.
         if (best.width > w * 0.85 || best.height > h * 0.85) return null
         val marginX = max(best.width * 0.20, w * 0.02)
