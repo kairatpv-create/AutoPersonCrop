@@ -7,8 +7,9 @@ import kotlin.math.sqrt
 
 /**
  * Selector for controlled input: only one person or two wrestlers can be present.
- * Detector order is reliability order. Frame-like boxes are rejected and one real person remains
- * one subject; we no longer duplicate a single box just to satisfy legacy sequence logic.
+ * Detector order is only a weak reliability hint. Referee-like tall boxes must not override
+ * a compact wrestling pair. Frame-like boxes are rejected and one real person remains one
+ * subject; never duplicate a box to satisfy legacy sequence logic.
  */
 object WrestlingSubjectSelector {
     fun select(image: ImageSize, people: List<RectD>): List<RectD> {
@@ -23,15 +24,61 @@ object WrestlingSubjectSelector {
 
         require(valid.isNotEmpty()) { "Не удалось получить надёжную рамку человека" }
 
-        val primary = valid.first()
-        val second = valid.asSequence()
-            .drop(1)
-            .filter { !sameObservation(primary, it) }
+        // In grappling photos a referee can be a much easier YOLO detection than wrestlers:
+        // standing upright, extending from the top of the frame to the mat. If independent
+        // lower horizontal athlete evidence exists, do not let that incidental standing
+        // person determine the crop height. This is a scene-geometry rule, never a
+        // filename- or pixel-coordinate-specific exception.
+        val actionCandidates = valid.filterNot { incidentalStandingBystander(it, valid, image) }
+            .ifEmpty { valid }
+
+        val primary = actionCandidates.withIndex().maxByOrNull { (index, rect) ->
+            anchorScore(rect, index, actionCandidates)
+        }!!.value
+        val second = actionCandidates.asSequence()
+            .filter { it !== primary && !sameObservation(primary, it) }
             .filter { it.area >= primary.area * MIN_SECOND_AREA_RATIO }
             .filter { plausiblePartner(primary, it, image) }
             .maxByOrNull { partnerScore(primary, it, image) }
 
         return if (second != null) listOf(primary, second) else listOf(primary)
+    }
+
+    private fun anchorScore(subject: RectD, index: Int, all: List<RectD>): Double {
+        // Cross-view detector order is useful, but the overlapping fighting group is a
+        // stronger cue than the first tall bystander that a generic detector recognizes.
+        val bestInteraction = all.asSequence()
+            .filter { it !== subject && !sameObservation(subject, it) }
+            .map { overlapFractionOfSmaller(subject, it) }
+            .maxOrNull() ?: 0.0
+        return 1.0 - index * 0.08 + bestInteraction * 1.8
+    }
+
+    private fun incidentalStandingBystander(
+        candidate: RectD,
+        all: List<RectD>,
+        image: ImageSize,
+    ): Boolean {
+        if (all.size < 2) return false
+        val h = image.height.toDouble()
+        val w = image.width.toDouble()
+        // Never reject a sole standing person. The tall shape must start high in the
+        // source and be relatively narrow, unlike the horizontal ground-level action.
+        if (candidate.top > h * 0.13 ||
+            candidate.height < h * 0.62 ||
+            candidate.width > candidate.height * 0.72 ||
+            candidate.width > w * 0.42
+        ) return false
+        return all.any { other ->
+            other !== candidate &&
+                !sameObservation(candidate, other) &&
+                other.area >= candidate.area * 0.12 &&
+                other.width >= other.height * 1.08 &&
+                other.centerY >= h * 0.52 &&
+                other.height < candidate.height * 0.80 &&
+                overlapFractionOfSmaller(candidate, other) < 0.15 &&
+                abs(candidate.centerX - other.centerX) > max(candidate.width, other.width) * 0.40
+        }
     }
 
     fun isFullyVisible(image: ImageSize, r: RectD): Boolean {

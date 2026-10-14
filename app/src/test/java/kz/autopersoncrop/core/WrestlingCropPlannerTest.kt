@@ -159,6 +159,15 @@ class WrestlingCropPlannerTest {
     }
 
     @Test
+    fun landscapeTightGuideRemovesUnnecessaryCeiling() {
+        val athletes = RectD(250.0, 390.0, 980.0, 690.0)
+        val crop = WrestlingCropPlanner.plan(image, listOf(athletes))
+        assertTrue(crop.width > crop.height)
+        assertTrue("crop must not include the entire empty hall", crop.top > 200)
+        assertTrue(crop.bottom >= athletes.bottom)
+    }
+
+    @Test
     fun fullWidthLandscapeDoesNotForceFullSourceHeight() {
         val wideAction = RectD(0.0, 210.0, 1280.0, 520.0)
         val crop = WrestlingCropPlanner.plan(image, listOf(wideAction))

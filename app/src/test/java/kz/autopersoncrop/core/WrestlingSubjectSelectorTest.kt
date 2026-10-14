@@ -38,6 +38,35 @@ class WrestlingSubjectSelectorTest {
     }
 
     @Test
+    fun tallRefereeFirstCannotStretchGroundWrestlersToFullHeight() {
+        val referee = RectD(70.0, 0.0, 340.0, 700.0)
+        val lowerFirst = RectD(475.0, 420.0, 840.0, 685.0)
+        val lowerSecond = RectD(610.0, 405.0, 1010.0, 680.0)
+        val selected = WrestlingSubjectSelector.select(image, listOf(referee, lowerFirst, lowerSecond))
+        assertEquals(2, selected.size)
+        assertTrue(selected.contains(lowerFirst))
+        assertTrue(selected.contains(lowerSecond))
+        val crop = WrestlingCropPlanner.plan(image, selected)
+        assertTrue("the empty gym above the wrestlers must be removed", crop.top > 250)
+        assertTrue("a referee must not make the crop nearly full height", crop.height < 450)
+    }
+
+    @Test
+    fun singleStandingNearUpperEdgeIsNotDiscardedAsReferee() {
+        val real = RectD(460.0, 3.0, 660.0, 675.0)
+        assertEquals(listOf(real), WrestlingSubjectSelector.select(image, listOf(real)))
+    }
+
+    @Test
+    fun standingAndLyingFightersWithStrongContactAreKeptTogether() {
+        val upper = RectD(460.0, 2.0, 740.0, 660.0)
+        val lower = RectD(590.0, 420.0, 1100.0, 705.0)
+        val selected = WrestlingSubjectSelector.select(image, listOf(upper, lower))
+        assertTrue(selected.contains(upper))
+        assertTrue(selected.contains(lower))
+    }
+
+    @Test
     fun failureMarkerRaisesInsteadOfBecomingFullFrameCrop() {
         var thrown = false
         try {
