@@ -168,16 +168,40 @@ class YoloLiteRtPersonDetector(
      * No source rotation occurs; all detector-view boxes map to original preview pixels.
      */
     fun detectForAction(bitmap: Bitmap, focus: RectD?): List<RectD> {
-        if (focus == null) return detect(bitmap)
+        val base = distinctDetections(detectOnceWithRetry(bitmap, confidence))
         val candidates = ArrayList<RectD>()
-        candidates += detectOnceWithRetry(bitmap, confidence)
-        candidates += detectFocusedZoom(bitmap, focus)
-        // A horizontal grapple is often invisible to upright-only whole-frame inference.
-        if (candidates.none { intersectsFocus(it, focus) }) {
+        // A temporal region is a SEARCH HINT, not a person detector. Prefer actual YOLO
+        // boxes found in that window, then fall back to full-frame evidence.
+        if (focus != null) candidates += detectFocusedZoom(bitmap, focus)
+        candidates += base
+
+        // The former early exit after two people was disastrous for wrestling: those
+        // people might be two upright spectators, while both fighters were missed.
+        // Search rotated views even when two people were already found in a landscape
+        // scene without a horizontal wrestler detection.
+        val landscapeScene = bitmap.width >= bitmap.height * 1.15
+        val hasHorizontalBody = base.any { it.width >= it.height * 1.08 }
+        val needsRecovery = landscapeScene && (!hasHorizontalBody || focus != null)
+        if (needsRecovery) {
             candidates += detectRotated(bitmap, 90)
             candidates += detectRotated(bitmap, -90)
+            // A close-up view of the activity is preferable to admitting background
+            // people simply because the global pass returned two boxes first.
+            if (focus == null && candidates.none { it.width >= it.height * 1.08 }) {
+                candidates += detectOverlappingStrips(bitmap)
+            }
         }
-        return distinctDetections(candidates).take(MAX_RECOVERY_BOXES)
+        if (candidates.size <= 1 && focus == null) {
+            candidates += usefulDetections(detectOnceWithRetry(bitmap, FULL_RECOVERY_CONFIDENCE), bitmap)
+        }
+        // Preserve independent-view reliability order instead of sorting by AREA:
+        // spectators are often much larger than distant wrestlers on the mat.
+        val result = ArrayList<RectD>()
+        for (box in candidates) {
+            if (result.none { isNearIdentical(it, box) }) result += box
+            if (result.size >= MAX_RECOVERY_BOXES) break
+        }
+        return result
     }
 
     private fun intersectsFocus(rect: RectD, focus: RectD): Boolean {
