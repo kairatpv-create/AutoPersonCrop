@@ -161,6 +161,55 @@ class YoloLiteRtPersonDetector(
         error("Неизвестный выход YOLO: $count float")
     }
 
+    /**
+     * Full-frame YOLO can confidently find TWO spectators and skip every recovery pass.
+     * A reliable temporal focus therefore triggers independent inference on a padded action
+     * window even when the full-frame output already has several people.
+     * No source rotation occurs; all detector-view boxes map to original preview pixels.
+     */
+    fun detectForAction(bitmap: Bitmap, focus: RectD?): List<RectD> {
+        if (focus == null) return detect(bitmap)
+        val candidates = ArrayList<RectD>()
+        candidates += detectOnceWithRetry(bitmap, confidence)
+        candidates += detectFocusedZoom(bitmap, focus)
+        // A horizontal grapple is often invisible to upright-only whole-frame inference.
+        if (candidates.none { intersectsFocus(it, focus) }) {
+            candidates += detectRotated(bitmap, 90)
+            candidates += detectRotated(bitmap, -90)
+        }
+        return distinctDetections(candidates).take(MAX_RECOVERY_BOXES)
+    }
+
+    private fun intersectsFocus(rect: RectD, focus: RectD): Boolean {
+        val l = max(rect.left, focus.left)
+        val t = max(rect.top, focus.top)
+        val r = min(rect.right, focus.right)
+        val b = min(rect.bottom, focus.bottom)
+        if (r <= l || b <= t) return false
+        return (r - l) * (b - t) / min(rect.area, focus.area).coerceAtLeast(1.0) >= 0.12
+    }
+
+    private fun detectFocusedZoom(src: Bitmap, focus: RectD): List<RectD> {
+        val paddingX = max(focus.width * 0.65, src.width * 0.13)
+        val paddingY = max(focus.height * 0.65, src.height * 0.13)
+        val left = (focus.left - paddingX).toInt().coerceIn(0, src.width - 1)
+        val top = (focus.top - paddingY).toInt().coerceIn(0, src.height - 1)
+        val right = kotlin.math.ceil(focus.right + paddingX).toInt().coerceIn(left + 1, src.width)
+        val bottom = kotlin.math.ceil(focus.bottom + paddingY).toInt().coerceIn(top + 1, src.height)
+        val crop = Bitmap.createBitmap(src, left, top, right - left, bottom - top)
+        return try {
+            val boxes = detectOnceWithRetry(crop, 0.075f)
+            boxes.mapNotNull { box ->
+                clampRect(
+                    RectD(box.left + left, box.top + top, box.right + left, box.bottom + top),
+                    src.width, src.height,
+                )
+            }.let { usefulDetections(it, src) }
+        } finally {
+            if (crop !== src && !crop.isRecycled) crop.recycle()
+        }
+    }
+
     override fun detect(bitmap: Bitmap): List<RectD> = detect(bitmap, confidence)
 
     override fun detect(bitmap: Bitmap, minConfidence: Float): List<RectD> {

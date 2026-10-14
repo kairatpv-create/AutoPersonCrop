@@ -151,7 +151,14 @@ class BatchProcessingService : Service() {
                     outputSettings,
                 )
 
-                for (photo in photos) {
+                for ((photoIndex, photo) in photos.withIndex()) {
+                    // Adjacent source frames are context, never additional output jobs.
+                    // Keep observations within the same SAF subfolder; cuts between scenes
+                    // are rejected separately by the temporal image-similarity guard.
+                    val adjacent = listOfNotNull(
+                        photos.getOrNull(photoIndex - 1)?.takeIf { it.relativeDir == photo.relativeDir },
+                        photos.getOrNull(photoIndex + 1)?.takeIf { it.relativeDir == photo.relativeDir },
+                    )
                     val uriKey = photo.uri.toString()
                     val prior = statusMap[uriKey] ?: BatchDatabase.PENDING
 
@@ -198,6 +205,7 @@ class BatchProcessingService : Service() {
                             processor = processor,
                             photo = photo,
                             outDir = outDir,
+                            adjacent = adjacent,
                             overwriteFromStart = forceReprocess || errorsOnly ||
                                 prior == BatchDatabase.NO_PEOPLE || prior == BatchDatabase.ERROR || prior == BatchDatabase.PROCESSING,
                         )
@@ -253,6 +261,7 @@ class BatchProcessingService : Service() {
         processor: PhotoProcessor,
         photo: SourcePhoto,
         outDir: androidx.documentfile.provider.DocumentFile,
+        adjacent: List<SourcePhoto>,
         overwriteFromStart: Boolean,
     ): ProcessResult {
         var last: Throwable? = null
@@ -263,6 +272,7 @@ class BatchProcessingService : Service() {
                 return processor.process(
                     photo = photo,
                     outputDir = outDir,
+                    neighboringPhotos = adjacent,
                     existingOutputUri = existing,
                     overwriteExisting = overwriteFromStart || attempt > 1,
                 )

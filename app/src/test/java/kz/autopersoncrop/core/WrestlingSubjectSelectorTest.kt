@@ -67,6 +67,35 @@ class WrestlingSubjectSelectorTest {
     }
 
     @Test
+    fun temporalFocusRejectsTwoHighConfidenceSpectatorsAndKeepsWrestlers() {
+        val spectatorA = RectD(60.0, 30.0, 280.0, 290.0)
+        val spectatorB = RectD(340.0, 20.0, 540.0, 250.0)
+        val wrestlerA = RectD(410.0, 420.0, 800.0, 681.0)
+        val wrestlerB = RectD(650.0, 400.0, 1150.0, 690.0)
+        val focus = RectD(460.0, 435.0, 1080.0, 660.0)
+        val selected = WrestlingSubjectSelector.select(
+            image, listOf(spectatorA, spectatorB, wrestlerA, wrestlerB), focus)
+        assertTrue(selected.contains(wrestlerA))
+        assertTrue(selected.contains(wrestlerB))
+        assertTrue(!selected.contains(spectatorA))
+        assertTrue(!selected.contains(spectatorB))
+    }
+
+    @Test
+    fun temporalFocusWithOnlySpectatorsRefusesWrongCrop() {
+        val a = RectD(60.0, 30.0, 280.0, 290.0)
+        val b = RectD(340.0, 20.0, 540.0, 250.0)
+        var rejected = false
+        try {
+            WrestlingSubjectSelector.select(image, listOf(a, b),
+                RectD(680.0, 430.0, 1080.0, 680.0))
+        } catch (_: IllegalArgumentException) {
+            rejected = true
+        }
+        assertTrue("uncertain recognition must not crop the spectators", rejected)
+    }
+
+    @Test
     fun failureMarkerRaisesInsteadOfBecomingFullFrameCrop() {
         var thrown = false
         try {

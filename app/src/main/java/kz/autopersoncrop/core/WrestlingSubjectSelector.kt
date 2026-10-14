@@ -12,7 +12,7 @@ import kotlin.math.sqrt
  * subject; never duplicate a box to satisfy legacy sequence logic.
  */
 object WrestlingSubjectSelector {
-    fun select(image: ImageSize, people: List<RectD>): List<RectD> {
+    fun select(image: ImageSize, people: List<RectD>, focus: RectD? = null): List<RectD> {
         require(people.isNotEmpty()) { "At least one person box is required" }
 
         val valid = people.asSequence()
@@ -29,19 +29,39 @@ object WrestlingSubjectSelector {
         // lower horizontal athlete evidence exists, do not let that incidental standing
         // person determine the crop height. This is a scene-geometry rule, never a
         // filename- or pixel-coordinate-specific exception.
-        val actionCandidates = valid.filterNot { incidentalStandingBystander(it, valid, image) }
-            .ifEmpty { valid }
+        val actionCandidates = if (focus != null) {
+            val near = valid.filter { motionRelevance(it, focus) >= 0.10 }
+            // If temporal evidence confidently locates the active action away from ALL YOLO
+            // detections, do not silently crop a spectator or an empty wall.
+            require(near.isNotEmpty()) { "Нет подтверждённой детекции людей в области движения; файл оставлен без обрезки" }
+            near.filterNot { incidentalStandingBystander(it, near, image) }.ifEmpty { near }
+        } else {
+            valid.filterNot { incidentalStandingBystander(it, valid, image) }.ifEmpty { valid }
+        }
 
         val primary = actionCandidates.withIndex().maxByOrNull { (index, rect) ->
-            anchorScore(rect, index, actionCandidates)
+            anchorScore(rect, index, actionCandidates) + (focus?.let { motionRelevance(rect, it) * 4.0 } ?: 0.0)
         }!!.value
         val second = actionCandidates.asSequence()
             .filter { it !== primary && !sameObservation(primary, it) }
             .filter { it.area >= primary.area * MIN_SECOND_AREA_RATIO }
             .filter { plausiblePartner(primary, it, image) }
-            .maxByOrNull { partnerScore(primary, it, image) }
+            .maxByOrNull { partnerScore(primary, it, image) +
+                (focus?.let { region -> motionRelevance(it, region) * 2.0 } ?: 0.0) }
 
         return if (second != null) listOf(primary, second) else listOf(primary)
+    }
+
+    private fun motionRelevance(box: RectD, focus: RectD): Double {
+        // Intersection over the smaller region works for overlapping wrestlers: a large
+        // reliable person box can cover the moving body without having its center inside it.
+        val left = max(box.left, focus.left)
+        val top = max(box.top, focus.top)
+        val right = min(box.right, focus.right)
+        val bottom = min(box.bottom, focus.bottom)
+        if (right <= left || bottom <= top) return 0.0
+        return ((right - left) * (bottom - top) /
+            min(box.area, focus.area).coerceAtLeast(1.0)).coerceIn(0.0, 1.0)
     }
 
     private fun anchorScore(subject: RectD, index: Int, all: List<RectD>): Double {

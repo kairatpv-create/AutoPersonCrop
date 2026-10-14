@@ -16,6 +16,9 @@ import kz.autopersoncrop.core.PixelRect
 import kz.autopersoncrop.core.RectD
 import kz.autopersoncrop.core.WrestlingCropPlanner
 import kz.autopersoncrop.core.WrestlingSubjectSelector
+import kz.autopersoncrop.core.TemporalActionLocator
+import kz.autopersoncrop.core.MotionFrame
+import kz.autopersoncrop.ml.YoloLiteRtPersonDetector
 import kz.autopersoncrop.io.ImageFrameLoader
 import kz.autopersoncrop.io.PhotoFrame
 import kz.autopersoncrop.io.SourcePhoto
@@ -58,22 +61,51 @@ class PhotoProcessor(
         outputDir: DocumentFile,
         existingOutputUri: Uri? = null,
         overwriteExisting: Boolean = false,
+        neighboringPhotos: List<SourcePhoto> = emptyList(),
     ): ProcessResult {
-        if (existingOutputUri != null) {
-            if (!overwriteExisting) return ProcessResult.AlreadyExists
-            check(DocumentsContract.deleteDocument(context.contentResolver, existingOutputUri)) {
-                "Не удалось заменить старый результат ${photo.name}"
-            }
-        }
+        if (existingOutputUri != null && !overwriteExisting) return ProcessResult.AlreadyExists
 
         val frame = loader.load(photo.uri)
         val preview = frame.preview
         val previewWidth = preview.width
         val previewHeight = preview.height
 
+        val motion = try {
+            val previousFrames = neighboringPhotos.take(2).mapNotNull { neighbor ->
+                runCatching {
+                    val nearby = loader.load(neighbor.uri, detectorTargetSide = 256)
+                    try {
+                        // Refuse interpolation between incompatible EXIF orientations or scenes.
+                        if (nearby.uprightWidth != frame.uprightWidth ||
+                            nearby.uprightHeight != frame.uprightHeight) null
+                        else MotionFrame.fromArgb(previewSize = 96, previewHeight = 54, image = nearby.preview)
+                    } finally {
+                        if (!nearby.preview.isRecycled) nearby.preview.recycle()
+                    }
+                }.getOrNull()
+            }
+            TemporalActionLocator.locate(
+                MotionFrame.fromArgb(previewSize = 96, previewHeight = 54, image = preview),
+                previousFrames,
+            )
+        } catch (t: Throwable) {
+            Log.w(TAG, "Temporal analysis skipped for ${photo.name}: ${t.message}")
+            null
+        }
+        val motionAtPreview = motion?.rect?.let { box ->
+            RectD(
+                box.left * previewWidth / 96.0,
+                box.top * previewHeight / 54.0,
+                box.right * previewWidth / 96.0,
+                box.bottom * previewHeight / 54.0,
+            )
+        }
         val previewSubjects = try {
-            detector.detect(preview)
-                .filterNot { it.left < 0.0 || it.top < 0.0 || it.right <= it.left || it.bottom <= it.top }
+            val found = if (detector is YoloLiteRtPersonDetector) {
+                detector.detectForAction(preview, motionAtPreview)
+            } else detector.detect(preview)
+            found.filterNot { it.left < 0.0 || it.top < 0.0 ||
+                it.right <= it.left || it.bottom <= it.top }
         } finally {
             if (!preview.isRecycled) preview.recycle()
         }
@@ -100,7 +132,10 @@ class PhotoProcessor(
         // The multi-view detector returns several evidence boxes, including possible
         // low-confidence bystanders or duplicates. Never blindly union all evidence:
         // choose the principal one/two people first, then keep strict containment checks.
-        val principalSubjects = WrestlingSubjectSelector.select(imageSize, subjects)
+        val focalRegion = motionAtPreview?.let { m ->
+            RectD(m.left * sx, m.top * sy, m.right * sx, m.bottom * sy)
+        }
+        val principalSubjects = WrestlingSubjectSelector.select(imageSize, subjects, focalRegion)
         val uprightCrop = WrestlingCropPlanner.plan(imageSize, principalSubjects)
         validateCrop(uprightCrop, imageSize, principalSubjects, photo.name)
 
@@ -115,11 +150,18 @@ class PhotoProcessor(
         Log.i(
             TAG,
             "${photo.name}: evidence=${subjects.size} principal=${principalSubjects.size} " +
+                "temporal=${motion?.supportingFrames ?: 0} focus=${focalRegion} " +
                 "upright=${imageSize.width}x${imageSize.height} " +
                 "crop=${uprightCrop.left},${uprightCrop.top}-${uprightCrop.right},${uprightCrop.bottom} " +
                 "raw=${raw.left},${raw.top}-${raw.right},${raw.bottom}",
         )
 
+        if (existingOutputUri != null) {
+            // Do not destroy an earlier output while recognition is still uncertain.
+            check(DocumentsContract.deleteDocument(context.contentResolver, existingOutputUri)) {
+                "Не удалось заменить старый результат ${photo.name}"
+            }
+        }
         if (outputSettings.strictLossless) {
             transformer.crop(photo.uri, outputDir, photo.name, raw)
         } else {
@@ -291,6 +333,6 @@ class PhotoProcessor(
 
     companion object {
         private const val TAG = "AutoPersonCropDirect"
-        private const val MAX_DETECTOR_EVIDENCE_BOXES = 4
+        private const val MAX_DETECTOR_EVIDENCE_BOXES = 16
     }
 }
