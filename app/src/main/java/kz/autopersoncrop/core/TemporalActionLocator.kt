@@ -170,6 +170,10 @@ object TemporalActionLocator {
             best.left - marginX, best.top - marginY,
             best.right + marginX, best.bottom + marginY,
         ).clamp(w.toDouble(), h.toDouble())
+        // Empirical guard: a motion envelope spanning most of the scene can be camera
+        // movement, a cut, or a crowd. It is not a trustworthy target for cropping.
+        if (expanded.area > w * h * 0.52 ||
+            expanded.width > w * 0.82 || expanded.height > h * 0.80) return null
         return expanded to bestEnergy
     }
 
