@@ -34,7 +34,7 @@ object WrestlingCropPlanner {
     // Measured manual references favor a natural portrait ~2:3, and flexible landscape
     // framing around 1.6:1. These are minimum breathing-room guides, NOT fixed ratios.
     private const val PORTRAIT_MIN_WIDTH_TO_HEIGHT = 0.62
-    private const val LANDSCAPE_MAX_WIDTH_TO_HEIGHT_GUIDE = 1.78
+    private const val LANDSCAPE_MAX_WIDTH_TO_HEIGHT_GUIDE = 1.60
     private const val MAX_SOFT_HEIGHT_SHARE_OF_SOURCE = 0.78
     private const val SOFT_SHAPE_BLEND = 1.0
 
