@@ -13,30 +13,31 @@ import kotlin.math.sqrt
  * picture. We only move crop boundaries.
  *
  * Portrait rule (standing / sitting / kneeling):
- *  - leave about 5% of the FINAL crop as empty space above and below the people;
+ *  - leave about 4–5% of the FINAL crop above and below the people;
  *  - crop left/right by the actual people envelope, guided by the natural manual reference
- *    shape without enforcing one aspect ratio.
+ *    shape without enforcing one aspect ratio or a minimum crop area.
  *
  * Landscape rule (lying / wrestling / clearly horizontal action):
- *  - leave about 5% of the FINAL crop as empty space left and right of the people;
+ *  - leave about 4–5% of the FINAL crop left and right of the people;
  *  - crop top/bottom by the actual action envelope, with a soft landscape shape guide
- *    capped so a nearly full-width action does not force the full image height.
+ *    capped by body height. The nearer source side anchors the composition.
  *
- * The important detail is that posture chooses the 5% axis. Two standing people do NOT become a
+ * Posture chooses the main margin axis. Two standing people do NOT become a
  * landscape scene merely because they are standing far apart and their combined envelope is wide.
  */
 object WrestlingCropPlanner {
-    private const val FINAL_MARGIN_FRACTION = 0.05
-    private const val SECONDARY_AXIS_SAFETY = 0.07
+    // Across the 29 registered manual crops, unobstructed top/bottom space
+    // clusters around 3–5% of the final frame. Keep this once, in the planner.
+    private const val FINAL_MARGIN_FRACTION = 0.04
+    private const val SECONDARY_AXIS_SAFETY = 0.06
     private const val MIN_IMAGE_SAFETY = 0.003
 
-    private const val EDGE_MISSING_MARGIN_TRANSFER = 0.60
-    // Measured manual references favor a natural portrait ~2:3, and flexible landscape
-    // framing around 1.6:1. These are minimum breathing-room guides, NOT fixed ratios.
-    private const val PORTRAIT_MIN_WIDTH_TO_HEIGHT = 0.62
-    private const val LANDSCAPE_MAX_WIDTH_TO_HEIGHT_GUIDE = 1.60
-    private const val MAX_SOFT_HEIGHT_SHARE_OF_SOURCE = 0.78
-    private const val SOFT_SHAPE_BLEND = 1.0
+    // A slender upright body needs a little lateral balance, but a shape hint
+    // may add at most half its detected width. There is no fixed output ratio.
+    private const val SLENDER_PORTRAIT_SHAPE = 0.57
+    private const val MAX_PORTRAIT_WIDTH_SCALE = 1.50
+    private const val LANDSCAPE_SHAPE_HINT = 1.60
+    private const val MAX_LANDSCAPE_HEIGHT_SCALE = 1.25
 
     private enum class Orientation { PORTRAIT, LANDSCAPE }
 
@@ -87,8 +88,8 @@ object WrestlingCropPlanner {
         val requiredRight = (group.right + sideSafety).coerceAtMost(image.width.toDouble())
         val requiredWidth = (requiredRight - requiredLeft).coerceAtLeast(1.0)
 
-        val guideWidth = (height * PORTRAIT_MIN_WIDTH_TO_HEIGHT).coerceAtMost(image.width.toDouble())
-        val targetWidth = softExpand(requiredWidth, guideWidth).coerceAtMost(image.width.toDouble())
+        val guideWidth = min(height * SLENDER_PORTRAIT_SHAPE, group.width * MAX_PORTRAIT_WIDTH_SCALE)
+        val targetWidth = max(requiredWidth, guideWidth).coerceAtMost(image.width.toDouble())
 
         val horizontal = placeSecondaryWindow(
             sourceSize = image.width.toDouble(),
@@ -111,8 +112,8 @@ object WrestlingCropPlanner {
         val requiredBottom = (group.bottom + verticalSafety).coerceAtMost(image.height.toDouble())
         val requiredHeight = (requiredBottom - requiredTop).coerceAtLeast(1.0)
 
-        val guideHeight = min(width / LANDSCAPE_MAX_WIDTH_TO_HEIGHT_GUIDE, image.height * MAX_SOFT_HEIGHT_SHARE_OF_SOURCE)
-        val targetHeight = softExpand(requiredHeight, guideHeight).coerceAtMost(image.height.toDouble())
+        val guideHeight = min(width / LANDSCAPE_SHAPE_HINT, group.height * MAX_LANDSCAPE_HEIGHT_SCALE)
+        val targetHeight = max(requiredHeight, guideHeight).coerceAtMost(image.height.toDouble())
 
         val vertical = placeSecondaryWindow(
             sourceSize = image.height.toDouble(),
@@ -120,40 +121,19 @@ object WrestlingCropPlanner {
             anchorCenter = group.centerY,
             requiredMin = requiredTop,
             requiredMax = requiredBottom,
+            anchorNearestEdge = true,
         )
         return RectD(left, vertical.first, right, vertical.second)
     }
 
-    private fun softExpand(required: Double, guide: Double): Double {
-        if (required >= guide) return required
-        return required + (guide - required) * SOFT_SHAPE_BLEND
-    }
-
     private fun primaryAxisBounds(subjectMin: Double, subjectMax: Double, sourceSize: Double): Pair<Double, Double> {
-        val subjectSize = (subjectMax - subjectMin).coerceAtLeast(1.0)
-        val desired = finalFivePercentMargin(subjectSize)
-        val availableBefore = subjectMin.coerceAtLeast(0.0)
-        val availableAfter = (sourceSize - subjectMax).coerceAtLeast(0.0)
-
-        var before = min(desired, availableBefore)
-        var after = min(desired, availableAfter)
-
-        val missingBefore = (desired - before).coerceAtLeast(0.0)
-        val missingAfter = (desired - after).coerceAtLeast(0.0)
-
-        if (missingBefore > 0.0) {
-            val extraRoom = (availableAfter - after).coerceAtLeast(0.0)
-            after += min(extraRoom, missingBefore * EDGE_MISSING_MARGIN_TRANSFER)
-        }
-        if (missingAfter > 0.0) {
-            val extraRoom = (availableBefore - before).coerceAtLeast(0.0)
-            before += min(extraRoom, missingAfter * EDGE_MISSING_MARGIN_TRANSFER)
-        }
-
-        return (subjectMin - before).coerceAtLeast(0.0) to (subjectMax + after).coerceAtMost(sourceSize)
+        val desired = finalMargin((subjectMax - subjectMin).coerceAtLeast(1.0))
+        // A source-clipped side cannot supply its margin. Do not transfer that
+        // missing space to the opposite side and bring the background back.
+        return max(0.0, subjectMin - desired) to min(sourceSize, subjectMax + desired)
     }
 
-    private fun finalFivePercentMargin(subjectSize: Double): Double =
+    private fun finalMargin(subjectSize: Double): Double =
         subjectSize * FINAL_MARGIN_FRACTION / (1.0 - 2.0 * FINAL_MARGIN_FRACTION)
 
     private fun placeSecondaryWindow(
@@ -162,19 +142,24 @@ object WrestlingCropPlanner {
         anchorCenter: Double,
         requiredMin: Double,
         requiredMax: Double,
+        anchorNearestEdge: Boolean = false,
     ): Pair<Double, Double> {
         if (targetSize >= sourceSize) return 0.0 to sourceSize
 
-        val availableBefore = requiredMin.coerceAtLeast(0.0)
-        val availableAfter = (sourceSize - requiredMax).coerceAtLeast(0.0)
-        val extra = (targetSize - (requiredMax - requiredMin)).coerceAtLeast(0.0)
-        val edgeThreshold = max(sourceSize * 0.025, extra * 0.35)
+        if (anchorNearestEdge) {
+            // Start at the side with less unused source space. Keep the small
+            // safety margin there, then remove background on the other side.
+            // Never pin to an image edge when a valid subject margin fits.
+            val start = if (requiredMin <= sourceSize - requiredMax) {
+                requiredMin
+            } else {
+                requiredMax - targetSize
+            }.coerceIn(0.0, sourceSize - targetSize)
+            return start to start + targetSize
+        }
 
-        if (availableBefore <= edgeThreshold) return 0.0 to targetSize.coerceAtMost(sourceSize)
-        if (availableAfter <= edgeThreshold) return (sourceSize - targetSize).coerceAtLeast(0.0) to sourceSize
-
-        // Align around the real action, not its fraction of the entire image. Near-edge
-        // cases above remain pinned to the source boundary instead of being forced central.
+        // For an upright body, balance the small lateral slack about the body,
+        // then clamp to the source without transferring unavailable padding.
         var start = anchorCenter - targetSize / 2.0
         start = start.coerceIn(0.0, sourceSize - targetSize)
         var end = start + targetSize

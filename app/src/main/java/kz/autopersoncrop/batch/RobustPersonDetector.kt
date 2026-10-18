@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.util.Log
 import kz.autopersoncrop.core.RectD
+import kz.autopersoncrop.core.PersonEnvelopeRefiner
 import kz.autopersoncrop.ml.PersonDetector
 import kz.autopersoncrop.ml.YoloLiteRtPersonDetector
 import kotlin.math.abs
@@ -254,7 +255,10 @@ class RobustPersonDetector(
 
     private fun rankCluster(cluster: CandidateCluster, src: Bitmap): RankedCandidate? {
         if (cluster.observations.isEmpty()) return null
-        val rect = representative(cluster)
+        val rect = PersonEnvelopeRefiner.refine(
+            representative(cluster),
+            cluster.observations.filter { it.passId == PASS_WHOLE_STRONG }.map { it.rect },
+        )
         if (!usefulBox(rect, src)) return null
 
         val imageArea = src.width.toDouble() * src.height.toDouble()
@@ -414,7 +418,7 @@ class RobustPersonDetector(
         private const val MIN_RELATED_AREA_RATIO = 0.025
         private const val MIN_RELATED_SCORE_RATIO = 0.10
         private const val MAX_ACTION_GAP = 0.55
-        private const val DETECTOR_SAFETY = 0.010
+        private const val DETECTOR_SAFETY = 0.003
         private const val MAX_ACTION_BOXES = 4
 
         private const val PASS_WHOLE_STRONG = 0

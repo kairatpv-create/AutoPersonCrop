@@ -9,34 +9,34 @@ class WrestlingCropPlannerTest {
     private val image = ImageSize(1280, 720)
 
     @Test
-    fun portraitLeavesFivePercentAboveAndBelowPersonNotSource() {
+    fun portraitLeavesMeasuredMarginAboveAndBelowPersonNotSource() {
         val person = RectD(160.0, 80.0, 430.0, 650.0)
         val crop = WrestlingCropPlanner.plan(image, listOf(person))
-        assertEquals(48, crop.top)
-        assertEquals(682, crop.bottom)
+        assertEquals(55, crop.top)
+        assertEquals(675, crop.bottom)
         assertTrue(crop.left < person.left)
         assertTrue(crop.right > person.right)
         assertTrue("portrait must follow a natural tight standing-person shape", crop.width < crop.height * 0.73)
         val topEmptyFraction = (person.top - crop.top) / crop.height.toDouble()
         val bottomEmptyFraction = (crop.bottom - person.bottom) / crop.height.toDouble()
-        assertTrue(abs(topEmptyFraction - 0.05) < 0.006)
-        assertTrue(abs(bottomEmptyFraction - 0.05) < 0.006)
+        assertTrue(abs(topEmptyFraction - 0.04) < 0.006)
+        assertTrue(abs(bottomEmptyFraction - 0.04) < 0.006)
     }
 
     @Test
-    fun landscapeLeavesFivePercentLeftAndRightOfPeopleNotSource() {
+    fun landscapeLeavesMeasuredMarginLeftAndRightOfPeopleNotSource() {
         val lying = RectD(140.0, 250.0, 1100.0, 520.0)
         val crop = WrestlingCropPlanner.plan(image, listOf(lying))
-        assertEquals(86, crop.left)
-        assertEquals(1154, crop.right)
+        assertEquals(98, crop.left)
+        assertEquals(1142, crop.right)
         assertTrue(crop.top > 0)
         assertTrue(crop.bottom < image.height)
         assertTrue(crop.top < lying.top)
         assertTrue(crop.bottom > lying.bottom)
         val leftEmptyFraction = (lying.left - crop.left) / crop.width.toDouble()
         val rightEmptyFraction = (crop.right - lying.right) / crop.width.toDouble()
-        assertTrue(abs(leftEmptyFraction - 0.05) < 0.006)
-        assertTrue(abs(rightEmptyFraction - 0.05) < 0.006)
+        assertTrue(abs(leftEmptyFraction - 0.04) < 0.006)
+        assertTrue(abs(rightEmptyFraction - 0.04) < 0.006)
     }
 
     @Test
@@ -48,8 +48,8 @@ class WrestlingCropPlannerTest {
         assertTrue(crop.height < image.height)
         val leftEmpty = lyingAtLeft.left - crop.left
         val rightEmpty = crop.right - lyingAtLeft.right
-        assertTrue("blocked edge may have less than 5%", leftEmpty < rightEmpty)
-        assertTrue("opposite side must keep natural breathing room", rightEmpty > 50.0)
+        assertTrue("blocked edge keeps only available space", leftEmpty < rightEmpty)
+        assertTrue("opposite side must keep natural breathing room", rightEmpty in 39.0..43.0)
     }
 
     @Test
@@ -61,11 +61,11 @@ class WrestlingCropPlannerTest {
         val leftEmpty = lyingAtRight.left - crop.left
         val rightEmpty = crop.right - lyingAtRight.right
         assertTrue(rightEmpty < leftEmpty)
-        assertTrue(leftEmpty > 50.0)
+        assertTrue(leftEmpty in 40.0..44.0)
     }
 
     @Test
-    fun portraitNearTopEdgeUsesAvailableTopAndAddsBreathingRoomBelow() {
+    fun portraitNearTopEdgeDoesNotTransferMissingMarginBelow() {
         val person = RectD(430.0, 4.0, 690.0, 610.0)
         val crop = WrestlingCropPlanner.plan(image, listOf(person))
         assertEquals(0, crop.top)
@@ -73,11 +73,11 @@ class WrestlingCropPlannerTest {
         val topEmpty = person.top - crop.top
         val bottomEmpty = crop.bottom - person.bottom
         assertTrue(topEmpty < bottomEmpty)
-        assertTrue(bottomEmpty > 35.0)
+        assertTrue(bottomEmpty in 26.0..28.0)
     }
 
     @Test
-    fun portraitNearBottomEdgeUsesAvailableBottomAndAddsBreathingRoomAbove() {
+    fun portraitNearBottomEdgeDoesNotTransferMissingMarginAbove() {
         val person = RectD(400.0, 115.0, 675.0, 716.0)
         val crop = WrestlingCropPlanner.plan(image, listOf(person))
         assertEquals(720, crop.bottom)
@@ -85,7 +85,7 @@ class WrestlingCropPlannerTest {
         val topEmpty = person.top - crop.top
         val bottomEmpty = crop.bottom - person.bottom
         assertTrue(bottomEmpty < topEmpty)
-        assertTrue(topEmpty > 35.0)
+        assertTrue(topEmpty in 26.0..28.0)
     }
 
     @Test
@@ -103,24 +103,24 @@ class WrestlingCropPlannerTest {
         val first = RectD(250.0, 90.0, 500.0, 660.0)
         val second = RectD(520.0, 100.0, 780.0, 650.0)
         val crop = WrestlingCropPlanner.plan(image, listOf(first, second))
-        assertEquals(58, crop.top)
-        assertEquals(692, crop.bottom)
+        assertEquals(65, crop.top)
+        assertEquals(685, crop.bottom)
         assertTrue(crop.width < crop.height)
         assertTrue(crop.left < first.left)
         assertTrue(crop.right > second.right)
     }
 
     @Test
-    fun widelySeparatedStandingPeopleStillUsePortraitFivePercentAxis() {
+    fun widelySeparatedStandingPeopleStillUsePortraitMeasuredMarginAxis() {
         val first = RectD(80.0, 90.0, 290.0, 650.0)
         val second = RectD(900.0, 95.0, 1110.0, 645.0)
         val crop = WrestlingCropPlanner.plan(image, listOf(first, second))
-        assertEquals(58, crop.top)
-        assertEquals(682, crop.bottom)
+        assertEquals(65, crop.top)
+        assertEquals(675, crop.bottom)
         val topEmptyFraction = (90.0 - crop.top) / crop.height.toDouble()
         val bottomEmptyFraction = (crop.bottom - 650.0) / crop.height.toDouble()
-        assertTrue(abs(topEmptyFraction - 0.05) < 0.008)
-        assertTrue(abs(bottomEmptyFraction - 0.05) < 0.008)
+        assertTrue(abs(topEmptyFraction - 0.04) < 0.008)
+        assertTrue(abs(bottomEmptyFraction - 0.04) < 0.008)
         assertTrue(crop.left < first.left)
         assertTrue(crop.right > second.right)
     }
@@ -154,8 +154,8 @@ class WrestlingCropPlannerTest {
         val crop = WrestlingCropPlanner.plan(image, listOf(person))
         val leftSpace = person.left - crop.left
         val rightSpace = crop.right - person.right
-        assertTrue("left side should not hug a limb", leftSpace >= person.width * 0.06)
-        assertTrue("right side should not hug a limb", rightSpace >= person.width * 0.06)
+        assertTrue("left side should not hug a limb", leftSpace >= person.width * 0.059)
+        assertTrue("right side should not hug a limb", rightSpace >= person.width * 0.059)
     }
 
     @Test

@@ -135,7 +135,9 @@ class PhotoProcessor(
         val focalRegion = motionAtPreview?.let { m ->
             RectD(m.left * sx, m.top * sy, m.right * sx, m.bottom * sy)
         }
-        val principalSubjects = WrestlingSubjectSelector.select(imageSize, subjects, focalRegion)
+        val principalSubjects = WrestlingSubjectSelector.select(
+            imageSize, subjects, focalRegion, controlledInput = true,
+        )
         val uprightCrop = WrestlingCropPlanner.plan(imageSize, principalSubjects)
         validateCrop(uprightCrop, imageSize, principalSubjects, photo.name)
 

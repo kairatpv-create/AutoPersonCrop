@@ -112,4 +112,27 @@ class WrestlingSubjectSelectorTest {
         val selected = WrestlingSubjectSelector.select(image, listOf(RectD(-10.0, -10.0, -9.0, -9.0), real))
         assertEquals(listOf(real), selected)
     }
+
+    @Test
+    fun duplicateTorsoCannotDisplaceTheActualSecondPerson() {
+        val first = RectD(420.0, 120.0, 775.0, 695.0)
+        val duplicate = RectD(405.0, 122.0, 700.0, 692.0)
+        val second = RectD(260.0, 325.0, 550.0, 715.0)
+        val selected = WrestlingSubjectSelector.select(image,
+            listOf(first, duplicate, second), controlledInput = true)
+        val crop = WrestlingCropPlanner.plan(image, selected)
+        assertTrue(crop.left <= second.left)
+        assertTrue(crop.right >= first.right)
+        assertTrue(crop.bottom >= second.bottom)
+    }
+
+    @Test
+    fun controlledInputKeepsTheStationaryPartnerOutsideMotionFocus() {
+        val upper = RectD(220.0, 30.0, 440.0, 550.0)
+        val lower = RectD(465.0, 445.0, 1070.0, 694.0)
+        val selected = WrestlingSubjectSelector.select(image, listOf(upper, lower),
+            RectD(490.0, 450.0, 1040.0, 688.0), controlledInput = true)
+        assertTrue(selected.contains(upper))
+        assertTrue(selected.contains(lower))
+    }
 }

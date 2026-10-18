@@ -55,10 +55,11 @@ Java_kz_autopersoncrop_jpeg_LosslessJpegTransformer_00024NativeBridge_losslessCr
     const int desiredBottom = std::min(srcH, static_cast<int>(y) + static_cast<int>(height));
     const int ax = (x / mcuW) * mcuW;
     const int ay = (y / mcuH) * mcuH;
-    // Coefficient-domain crops operate on MCU blocks. Round the far edge OUTWARD too
-    // (except at the natural JPEG boundary), so the requested safe crop is fully contained.
-    const int aright = std::min(srcW, ((desiredRight + mcuW - 1) / mcuW) * mcuW);
-    const int abottom = std::min(srcH, ((desiredBottom + mcuH - 1) / mcuH) * mcuH);
+    // TurboJPEG requires only the origin to be iMCU-aligned (tjregion.x/y).
+    // Width and height may end inside a block. Retain the requested far edges
+    // instead of needlessly adding another strip of floor/background.
+    const int aright = desiredRight;
+    const int abottom = desiredBottom;
     const int aw = aright - ax;
     const int ah = abottom - ay;
     if (ax < 0 || ay < 0 || aw <= 0 || ah <= 0 || ax + aw > srcW || ay + ah > srcH) {
