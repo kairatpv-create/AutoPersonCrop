@@ -37,7 +37,9 @@ internal open class AttachmentRestoreFiles {
     }
     open fun syncDirectory(directory: File) {
         try {
-            val fd = Os.open(directory.absolutePath, OsConstants.O_RDONLY or OsConstants.O_DIRECTORY, 0)
+            if (!directory.isDirectory) throw IOException("Restore sync path is not a directory")
+            // O_DIRECTORY is not in Android's public SDK. Paths are private and held under the restore lock.
+            val fd = Os.open(directory.absolutePath, OsConstants.O_RDONLY, 0)
             try { Os.fsync(fd) } finally { Os.close(fd) }
         } catch (failure: Exception) { throw IOException("Cannot sync attachment restore directory", failure) }
     }

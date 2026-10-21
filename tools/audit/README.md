@@ -73,7 +73,7 @@ uncertain SQL commits, failed preference/metadata writes and unsafe recovery
 metadata. No Render requests or accounts are used.
 
 The host `Os` adapter fsyncs Linux directories with FileChannel; this does not
-validate Android storage durability. The SQLite adapter can halt immediately
+validate Android storage durability or the full Android SDK API surface. The SQLite adapter can halt immediately
 after a real commit or simulate loss of its acknowledgement. Another test uses
 a real deferred foreign-key constraint to make SQLite COMMIT fail. A schema-9
 copy without the new state table checks the additive open path.

@@ -353,7 +353,7 @@
     "mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "466f0d0ad114136e0873363927b64a9e31c9923b6fb1fdc6a9d6547426aedb07",
     "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "7744d113100696b5280bdd8bfe80adc6f2d94d51c6e140f17e0bd1fedea19fd7",
     "mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "4d008d76d614123b882f75d6bec42f0e0455c580ae500269a3543d96711f15e7",
-    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "88526c267929df377bb57159614f3dc8ee7634a518db3109c0fa393faa7138d1",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "d2572206b53321dda7322ac3f95be6d775a89ade6982d047d29510d328788bc9",
     "mobile/android/app/src/main/java/kz/kairat/organizer/RestoreJournal.kt": "b3392ec12106f8ab2f5d9212f1184705b06a549cad9f0c8e994bf0693de6e099"
   },
   "executed_source_sha256": {
@@ -364,11 +364,11 @@
     "mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "466f0d0ad114136e0873363927b64a9e31c9923b6fb1fdc6a9d6547426aedb07",
     "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "7744d113100696b5280bdd8bfe80adc6f2d94d51c6e140f17e0bd1fedea19fd7",
     "mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "4d008d76d614123b882f75d6bec42f0e0455c580ae500269a3543d96711f15e7",
-    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "88526c267929df377bb57159614f3dc8ee7634a518db3109c0fa393faa7138d1",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "d2572206b53321dda7322ac3f95be6d775a89ade6982d047d29510d328788bc9",
     "mobile/android/app/src/main/java/kz/kairat/organizer/RestoreJournal.kt": "b3392ec12106f8ab2f5d9212f1184705b06a549cad9f0c8e994bf0693de6e099",
     "tools/audit/jvm/AndroidContent.kt": "3d1c348987c3f94e81a07a6abd41eea20ebda74baec426820f0ada0da1bc3da9",
     "tools/audit/jvm/AndroidCursor.kt": "3d89a71e986b03097476573a37fc8c3cd52dec214e0b15e5246b045d3d8d1d95",
-    "tools/audit/jvm/AndroidOs.kt": "919cdb13cd4a99f23b64c1cc0c081ca24604e467435d8b360d4227baa6a69745",
+    "tools/audit/jvm/AndroidOs.kt": "cf4e6d466170130e414de4981389a942b12df3439732d159a8a433a06d0422fc",
     "tools/audit/jvm/AndroidProvider.kt": "be3a2dfa0d04583945a94cd1ba9e8bc009fd9b402efbf461c4029eb10c3ef0a9",
     "tools/audit/jvm/AndroidSQLite.kt": "0cb80b6578016b241beba51b335c3c5dfce92459a2d4839431137145fc97751f",
     "tools/audit/jvm/AndroidUri.kt": "c19c6b1ba5ec2a2fcd12ec44813782407467732c6a053bbf73e9f9c1ebfd515b",
@@ -382,12 +382,26 @@
     "workflow": ".github/workflows/organizer-mobile-readiness.yml",
     "command": "gradle --no-daemon --build-cache -p mobile/android assembleDebug",
     "result_location": "GitHub Actions run for this commit; reported separately after execution",
-    "apk_artifact": "disabled for this branch"
+    "apk_artifact": "disabled for this branch",
+    "first_attempt": {
+      "run_id": 39663473656,
+      "commit": "a7524375d32fbfb53bbb77eb2c09c3480aa79b82",
+      "conclusion": "failure",
+      "error": "Unresolved reference 'O_DIRECTORY' in Android SDK 35",
+      "correction": "Use public O_RDONLY with an explicit directory check; remove unsupported flag from the host adapter."
+    }
   },
   "limits": [
     "Synthetic host SQLite/files and separate JVM processes; no real user data or services.",
     "Directory fsync uses a host Linux adapter. Android lifecycle, SQLite locking and phone storage are not exercised.",
     "No physical power-loss tests or arbitrary byte-corruption guarantee.",
     "D14 remains partly open: whole-import/ZIP resource bounds and a separate pre-import database safety copy."
-  ]
+  ],
+  "host_retry": {
+    "suite": "attachment-validation",
+    "reason": "Host JVM SIGBUS at PerfMemory::alloc before test execution",
+    "retry_environment": "JAVA_TOOL_OPTIONS=-XX:-UsePerfData",
+    "passed": 64,
+    "total": 64
+  }
 }
