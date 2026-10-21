@@ -1,0 +1,29 @@
+{
+  "observedAtUTC": "2026-10-21T17:13:49Z",
+  "requests": [
+    {
+      "path": "/health",
+      "status": 200,
+      "seconds": 13.39,
+      "body": "{\"ok\":true,\"service\":\"organizer-pro-sync\",\"version\":2}"
+    },
+    {
+      "path": "/api/version",
+      "status": 200,
+      "seconds": 7.9,
+      "body": "{\"service\":\"organizer-pro-sync\",\"version\":2,\"web\":\"0.5.1\",\"android\":\"0.9.30\"}"
+    },
+    {
+      "path": "/api/account",
+      "status": 401,
+      "seconds": 7.98,
+      "body": "{\"error\":\"AUTH_REQUIRED\",\"message\":\"\u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f \u0432\u0445\u043e\u0434 \u0432 \u0430\u043a\u043a\u0430\u0443\u043d\u0442\"}"
+    },
+    {
+      "path": "/api/sync",
+      "status": 401,
+      "seconds": 8.76,
+      "body": "{\"error\":\"AUTH_REQUIRED\",\"message\":\"\u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f \u0432\u0445\u043e\u0434 \u0432 \u0430\u043a\u043a\u0430\u0443\u043d\u0442\"}"
+    }
+  ]
+}

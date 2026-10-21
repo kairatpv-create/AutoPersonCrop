@@ -1,0 +1,20 @@
+{
+  "source": "User-provided existing App Store Connect registration; not independently verified",
+  "developerDisplayName": "Kairat Kaliyev",
+  "bundleIdentifier": "com.organizerpro.mobile",
+  "appleAppId": "6825404169",
+  "sku": "ORGANIZER-PRO-IOS-001",
+  "displayNames": {
+    "ru": "Органайзер Про",
+    "en": "Organizer Pro: Smart Life"
+  },
+  "primaryLanguage": "ru",
+  "primaryCategory": "PRODUCTIVITY",
+  "secondaryCategory": "FINANCE",
+  "deviceFamily": ["iPhone"],
+  "initialReleasePrice": "free",
+  "paymentsEnabled": false,
+  "subscriptionsEnabled": false,
+  "teamId": null,
+  "reuseExistingRegistration": true
+}

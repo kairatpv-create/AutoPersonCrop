@@ -1,0 +1,50 @@
+[
+  {
+    "result": "PASS",
+    "name": "Fresh SQLite schema and note/finance CRUD"
+  },
+  {
+    "result": "PASS",
+    "name": "JSON and ZIP backup roundtrip preserves finance, project links, preferences and attachments"
+  },
+  {
+    "result": "PASS",
+    "name": "PIN verification and RU/EN labels"
+  },
+  {
+    "result": "RISK_REPRODUCED",
+    "name": "Incomplete notes-only JSON deletes unrelated finances"
+  },
+  {
+    "result": "RISK_REPRODUCED",
+    "name": "Duplicate restore IDs silently commit a partial replacement"
+  },
+  {
+    "result": "RISK_REPRODUCED",
+    "name": "Invalid attachment data removes old files without reporting failure"
+  },
+  {
+    "result": "RISK_REPRODUCED",
+    "name": "Attachment restore accepts a path outside its data directory"
+  },
+  {
+    "result": "RISK_REPRODUCED",
+    "name": "First sync selects old remote snapshot because of future project due date"
+  },
+  {
+    "result": "RISK_REPRODUCED",
+    "name": "Two dirty devices: newer local snapshot uploads without remote-only records"
+  },
+  {
+    "result": "RISK_REPRODUCED",
+    "name": "HTTP 409 replaces pending local records with remote snapshot"
+  },
+  {
+    "result": "RISK_REPRODUCED",
+    "name": "Logging into another account can upload the previous account's local records"
+  },
+  {
+    "result": "PASS",
+    "name": "SQL transaction rolls back an explicit exception"
+  }
+]

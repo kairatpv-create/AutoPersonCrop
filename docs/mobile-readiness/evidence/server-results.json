@@ -1,0 +1,65 @@
+{
+  "adapter": "in-memory PostgreSQL API test double; real Express, bcrypt and JWT",
+  "results": [
+    {
+      "name": "Health checks the supplied database adapter",
+      "result": "PASS"
+    },
+    {
+      "name": "Unauthenticated sync is rejected",
+      "result": "PASS"
+    },
+    {
+      "name": "Invalid email registration is rejected",
+      "result": "PASS"
+    },
+    {
+      "name": "Short password is rejected",
+      "result": "PASS"
+    },
+    {
+      "name": "Registration uses bcrypt and returns a JWT",
+      "result": "PASS"
+    },
+    {
+      "name": "Duplicate account is rejected",
+      "result": "PASS"
+    },
+    {
+      "name": "Wrong password is rejected",
+      "result": "PASS"
+    },
+    {
+      "name": "Existing-account password login succeeds",
+      "result": "PASS"
+    },
+    {
+      "name": "JWT expiration is 30 days",
+      "result": "PASS"
+    },
+    {
+      "name": "New account has no sync document",
+      "result": "PASS"
+    },
+    {
+      "name": "Snapshot PUT/GET and stale revision rejection",
+      "result": "PASS"
+    },
+    {
+      "name": "A forbidden browser Origin is rejected; native Origin omission works",
+      "result": "PASS"
+    },
+    {
+      "name": "Missing deletion endpoint returns 404",
+      "result": "RISK_REPRODUCED"
+    },
+    {
+      "name": "Server accepts malformed snapshot JSON",
+      "result": "RISK_REPRODUCED"
+    },
+    {
+      "name": "Unknown API endpoints return JSON 404",
+      "result": "PASS"
+    }
+  ]
+}

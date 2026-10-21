@@ -1,0 +1,31 @@
+{
+  "filename": "Organizer-Pro-v0.9.38-original-key.apk",
+  "sha256": "ae45e46bbc45a35c4353c3145f14f1a1703994dde8c6e3ae80d7e13811160019",
+  "bytes": 17423224,
+  "package": "kz.kairat.organizer",
+  "versionName": "0.9.38",
+  "versionCode": "71",
+  "minSdk": "26",
+  "targetSdk": "35",
+  "v2_block_present": true,
+  "v3_block_present": true,
+  "certificateSha256": [
+    "a0564fdcf4e365a0077cbb0f56cf4ddce9538a45ba772b1793ab3f549b8f90b2"
+  ],
+  "permissions": [
+    "android.permission.RECEIVE_BOOT_COMPLETED",
+    "android.permission.READ_CALENDAR",
+    "android.permission.VIBRATE",
+    "android.permission.RECORD_AUDIO",
+    "android.permission.USE_FULL_SCREEN_INTENT",
+    "android.permission.POST_NOTIFICATIONS",
+    "kz.kairat.organizer.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+    "android.permission.SCHEDULE_EXACT_ALARM",
+    "android.permission.INTERNET"
+  ],
+  "activities": [
+    "kz.kairat.organizer.MainActivity",
+    "kz.kairat.organizer.ReminderAlertActivity",
+    "androidx.compose.ui.tooling.PreviewActivity"
+  ]
+}

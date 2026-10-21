@@ -1,0 +1,4 @@
+verified=true
+v2=true
+v3=true
+certificateSha256=a0564fdcf4e365a0077cbb0f56cf4ddce9538a45ba772b1793ab3f549b8f90b2
