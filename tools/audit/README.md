@@ -21,6 +21,16 @@ new temporary directories. Notification/calendar scheduling is stubbed.
 This is not Android instrumentation and does not verify lifecycle, UI, system
 permissions, Android SQLite locking, notifications or iOS compatibility.
 
+### D04 regression suite
+
+Add `--suite backup-validation` to the command above to run only the backup
+preflight/restore tests. This suite does not compile CloudSync or start an HTTP
+server. It tests all eight collections, local preferences and binary attachments
+using temporary synthetic data. Every rejected input is checked against both
+exported data and SHA-256 hashes of the SQLite file, attachment files and index.
+It also tests complete empty/nonempty JSON/ZIP files, legacy file schemas 3–5,
+and empty/nonempty cloud schema 7 snapshots without local-only sections.
+
 Supplied JARs for the recorded run: Kotlin compiler 2.1.21 and its POM runtime
 dependencies, org.json 20240303, JetBrains annotations 13.0, SQLite JDBC
 3.46.1.0, slf4j-api/nop 2.0.13. Downloaded tools are not committed.

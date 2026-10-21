@@ -20,7 +20,7 @@ private fun backup(note:String="",updated:Long=1L,due:Long=0L):String{
     val r=JSONObject().put("format","my-organizer-backup").put("version",7).put("createdAt",0).put("cloudSchema","organizer-sync-v3")
     listOf("notes","tasks","projects","projectStages","projectJournal","projectNoteLinks","money","reminders").forEach{r.put(it,JSONArray())}
     if(note.isNotBlank())r.getJSONArray("notes").put(JSONObject().put("id",1).put("title",note).put("body",note).put("createdAt",updated).put("updatedAt",updated))
-    if(due>0)r.getJSONArray("projects").put(JSONObject().put("id",1).put("name","Remote future project").put("createdAt",1).put("updatedAt",1).put("dueAt",due))
+    if(due>0)r.getJSONArray("projects").put(JSONObject().put("id",1).put("name","Remote future project").put("description","").put("createdAt",1).put("updatedAt",1).put("dueAt",due))
     return r.toString()
 }
 private class Remote:AutoCloseable {
@@ -73,10 +73,10 @@ fun main(){
         check(AppStrings.t("ru","notes")=="Заметки")
         check(AppStrings.supportedLanguages.size==8)
     }
-    checkCase("Incomplete notes-only JSON deletes unrelated finances",true){
+    checkCase("Incomplete notes-only JSON is rejected without deleting finances"){
         val db=NoteDatabase(context());db.addMoneyEntry("income",99.0,"Keep",null,"Keep me")
-        BackupManager.restore("{\"notes\":[]}",db)
-        check(db.getMoneyEntries().isEmpty())
+        check(runCatching{BackupManager.restore("{\"notes\":[]}",db)}.isFailure)
+        check(db.getMoneyEntries().single().amount==99.0)
     }
     checkCase("Duplicate restore IDs silently commit a partial replacement",true){
         val db=NoteDatabase(context());db.save(null,"Original","Keep")

@@ -1,0 +1,947 @@
+{
+  "total": 235,
+  "suite": "D04 backup validation (synthetic host SQLite)",
+  "cases": [
+    {
+      "result": "PASS",
+      "name": "D04 notes-only JSON (RU)"
+    },
+    {
+      "result": "PASS",
+      "name": "Empty JSON object"
+    },
+    {
+      "result": "PASS",
+      "name": "Truncated JSON"
+    },
+    {
+      "result": "PASS",
+      "name": "Text instead of JSON"
+    },
+    {
+      "result": "PASS",
+      "name": "Array instead of root object"
+    },
+    {
+      "result": "PASS",
+      "name": "Null root"
+    },
+    {
+      "result": "PASS",
+      "name": "Trailing garbage"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required root section: format"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required root section: version"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required root section: createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required root section: notes"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required root section: tasks"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required root section: projects"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required root section: projectStages"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required root section: projectJournal"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required root section: projectNoteLinks"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required root section: money"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required root section: reminders"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required root section: settings"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required root section: attachments"
+    },
+    {
+      "result": "PASS",
+      "name": "Unsupported/overflowing version: 0"
+    },
+    {
+      "result": "PASS",
+      "name": "Unsupported/overflowing version: 8"
+    },
+    {
+      "result": "PASS",
+      "name": "Unsupported/overflowing version: 4294967302"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong format with otherwise complete structure"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: notes / Null"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: notes / JSONObject"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: notes / String"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: notes / Boolean"
+    },
+    {
+      "result": "PASS",
+      "name": "Non-object entry: notes"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing record fields: notes"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: tasks / Null"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: tasks / JSONObject"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: tasks / String"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: tasks / Boolean"
+    },
+    {
+      "result": "PASS",
+      "name": "Non-object entry: tasks"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing record fields: tasks"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: projects / Null"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: projects / JSONObject"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: projects / String"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: projects / Boolean"
+    },
+    {
+      "result": "PASS",
+      "name": "Non-object entry: projects"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing record fields: projects"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: projectStages / Null"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: projectStages / JSONObject"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: projectStages / String"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: projectStages / Boolean"
+    },
+    {
+      "result": "PASS",
+      "name": "Non-object entry: projectStages"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing record fields: projectStages"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: projectJournal / Null"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: projectJournal / JSONObject"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: projectJournal / String"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: projectJournal / Boolean"
+    },
+    {
+      "result": "PASS",
+      "name": "Non-object entry: projectJournal"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing record fields: projectJournal"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: projectNoteLinks / Null"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: projectNoteLinks / JSONObject"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: projectNoteLinks / String"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: projectNoteLinks / Boolean"
+    },
+    {
+      "result": "PASS",
+      "name": "Non-object entry: projectNoteLinks"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing record fields: projectNoteLinks"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: money / Null"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: money / JSONObject"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: money / String"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: money / Boolean"
+    },
+    {
+      "result": "PASS",
+      "name": "Non-object entry: money"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing record fields: money"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: reminders / Null"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: reminders / JSONObject"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: reminders / String"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: reminders / Boolean"
+    },
+    {
+      "result": "PASS",
+      "name": "Non-object entry: reminders"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing record fields: reminders"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: attachments / Null"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: attachments / JSONObject"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: attachments / String"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong section type: attachments / Boolean"
+    },
+    {
+      "result": "PASS",
+      "name": "Non-object entry: attachments"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing record fields: attachments"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong settings type: Null"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong settings type: JSONArray"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong settings type: String"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong settings type: Boolean"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: notes.createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: notes.colorKey"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: notes.id"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: notes.title"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: notes.body"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: notes.updatedAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: tasks.createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: tasks.details"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: tasks.id"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: tasks.title"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: tasks.done"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: tasks.updatedAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projects.address"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projects.description"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projects.dueAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projects.createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projects.contact"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projects.name"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projects.colorKey"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projects.progress"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projects.client"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projects.id"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projects.startAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projects.status"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projects.budget"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projects.updatedAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projectStages.dueAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projectStages.createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projectStages.id"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projectStages.title"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projectStages.projectId"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projectStages.done"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projectJournal.createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projectJournal.id"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projectJournal.text"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projectJournal.projectId"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projectNoteLinks.noteId"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: projectNoteLinks.projectId"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: money.note"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: money.createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: money.amount"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: money.colorKey"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: money.id"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: money.type"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: money.category"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: money.projectName"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: reminders.createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: reminders.targetId"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: reminders.scheduleType"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: reminders.daysMask"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: reminders.sound"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: reminders.baseMinutes"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: reminders.vibrate"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: reminders.targetType"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: reminders.id"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: reminders.dayMode"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: reminders.soundKey"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: reminders.triggerAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: attachments.createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: attachments.targetId"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: attachments.size"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: attachments.data"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: attachments.displayName"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: attachments.storedName"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: attachments.targetType"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: attachments.id"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: attachments.mimeType"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: attachments.durationMs"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: settings.contentFontScale"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: settings.buttonFontScale"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: settings.projectsEnabled"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: settings.backupMode"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: settings.darkTheme"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: settings.boldText"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: settings.language"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: settings.fontScale"
+    },
+    {
+      "result": "PASS",
+      "name": "Wrong field type: settings.email"
+    },
+    {
+      "result": "PASS",
+      "name": "Fractional record ID"
+    },
+    {
+      "result": "PASS",
+      "name": "Out-of-range record ID"
+    },
+    {
+      "result": "PASS",
+      "name": "Invalid attachment encoding before any database/file write"
+    },
+    {
+      "result": "PASS",
+      "name": "Incomplete attachment bytes"
+    },
+    {
+      "result": "PASS",
+      "name": "Font scale exceeds Float range"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: notes.id"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: notes.title"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: notes.body"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: notes.createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: notes.updatedAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: tasks.id"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: tasks.title"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: tasks.details"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: tasks.done"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: tasks.createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: tasks.updatedAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: projects.id"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: projects.name"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: projects.description"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: projects.createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: projectStages.id"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: projectStages.projectId"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: projectStages.title"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: projectStages.done"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: projectStages.dueAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: projectStages.createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: projectJournal.id"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: projectJournal.projectId"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: projectJournal.text"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: projectJournal.createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: projectNoteLinks.projectId"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: projectNoteLinks.noteId"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: money.id"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: money.type"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: money.amount"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: money.category"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: money.projectName"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: money.note"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: money.createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: reminders.id"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: reminders.targetType"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: reminders.targetId"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: reminders.triggerAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: reminders.createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: attachments.id"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: attachments.targetType"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: attachments.targetId"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: attachments.displayName"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: attachments.storedName"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: attachments.mimeType"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: attachments.size"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: attachments.createdAt"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: attachments.data"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: settings.darkTheme"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: settings.fontScale"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: settings.boldText"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: settings.backupMode"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: settings.email"
+    },
+    {
+      "result": "PASS",
+      "name": "Missing required field: settings.language"
+    },
+    {
+      "result": "PASS",
+      "name": "Incomplete JSON inside ZIP"
+    },
+    {
+      "result": "PASS",
+      "name": "Complete JSON restores all sections, preferences and binary attachment"
+    },
+    {
+      "result": "PASS",
+      "name": "Complete ZIP restores all sections, preferences and binary attachment"
+    },
+    {
+      "result": "PASS",
+      "name": "A complete empty backup is accepted and intentionally restores empty collections"
+    },
+    {
+      "result": "PASS",
+      "name": "Legacy file backup v3 retains optional-field defaults"
+    },
+    {
+      "result": "PASS",
+      "name": "Legacy file backup v4 retains optional-field defaults"
+    },
+    {
+      "result": "PASS",
+      "name": "Legacy file backup v5 retains optional-field defaults"
+    },
+    {
+      "result": "PASS",
+      "name": "Cloud v7 accepts all data sections without settings/attachments and preserves local files"
+    },
+    {
+      "result": "PASS",
+      "name": "Incomplete cloud v7: missing notes"
+    },
+    {
+      "result": "PASS",
+      "name": "Incomplete cloud v7: missing tasks"
+    },
+    {
+      "result": "PASS",
+      "name": "Incomplete cloud v7: missing projects"
+    },
+    {
+      "result": "PASS",
+      "name": "Incomplete cloud v7: missing projectStages"
+    },
+    {
+      "result": "PASS",
+      "name": "Incomplete cloud v7: missing projectJournal"
+    },
+    {
+      "result": "PASS",
+      "name": "Incomplete cloud v7: missing projectNoteLinks"
+    },
+    {
+      "result": "PASS",
+      "name": "Incomplete cloud v7: missing money"
+    },
+    {
+      "result": "PASS",
+      "name": "Incomplete cloud v7: missing reminders"
+    },
+    {
+      "result": "PASS",
+      "name": "Complete empty cloud v7 is accepted and preserves existing attachment files"
+    }
+  ],
+  "passed": 235
+}

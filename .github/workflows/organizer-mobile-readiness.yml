@@ -2,7 +2,7 @@ name: Verify Organizer Pro mobile preparation
 
 on:
   push:
-    branches: [organizer-mobile-readiness-20261021]
+    branches: [organizer-mobile-readiness-20261021, organizer-d04-backup-validation-20261021]
     paths:
       - 'mobile/android/**'
       - '.github/workflows/organizer-mobile-readiness.yml'
@@ -36,6 +36,7 @@ jobs:
       - name: Compile the recovered existing application
         run: gradle --no-daemon --build-cache -p mobile/android assembleDebug
       - name: Preserve internal build evidence
+        if: github.ref == 'refs/heads/organizer-mobile-readiness-20261021'
         uses: actions/upload-artifact@v4
         with:
           name: organizer-mobile-preparation-debug-INTERNAL-DO-NOT-INSTALL

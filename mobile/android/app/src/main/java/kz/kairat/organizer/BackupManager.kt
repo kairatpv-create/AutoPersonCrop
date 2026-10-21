@@ -32,7 +32,7 @@ object BackupManager {
         return root.toString(2)
     }
     fun restore(json:String,db:NoteDatabase,lang:String="en"):RestoredPreferences{
-        val root=JSONObject(json); require(root.optString("format")=="my-organizer-backup"||root.has("notes")){AppStrings.t(lang,"unknown_backup")}
+        val root=BackupValidation.parse(json,lang)
         fun JSONArray?.objs()=sequence{val a=this@objs?:return@sequence;for(i in 0 until a.length())yield(a.getJSONObject(i))}
         val notes=root.optJSONArray("notes").objs().map{o->Note(o.optLong("id"),o.optString("title"),o.optString("body"),o.optLong("createdAt"),o.optLong("updatedAt"),o.optString("colorKey","blue"))}.toList()
         val tasks=root.optJSONArray("tasks").objs().map{o->TaskItem(o.optLong("id"),o.optString("title"),o.optString("details"),o.optBoolean("done"),o.optLong("createdAt"),o.optLong("updatedAt"))}.toList()
@@ -45,7 +45,6 @@ object BackupManager {
         val links=root.optJSONArray("projectNoteLinks").objs().map{o->ProjectNoteLink(o.optLong("projectId"),o.optLong("noteId"))}.toList()
         val money=root.optJSONArray("money").objs().map{o->MoneyEntry(o.optLong("id"),o.optString("type"),o.optDouble("amount"),o.optString("category"),if(o.has("projectId"))o.optLong("projectId")else null,o.optString("projectName"),o.optString("note"),o.optLong("createdAt"),o.optString("colorKey","blue"))}.toList()
         val reminders=root.optJSONArray("reminders").objs().map{o->ReminderEntry(o.optLong("id"),o.optString("targetType"),o.optLong("targetId"),o.optLong("triggerAt"),o.optBoolean("sound",true),o.optBoolean("vibrate",true),o.optString("soundKey","system"),o.optLong("createdAt"),"","",o.optString("scheduleType","once"),o.optInt("daysMask",0),o.optString("dayMode","single"),o.optInt("baseMinutes",540))}.toList()
-        db.replaceAll(notes,tasks,projects,money,reminders,stages,journal,links); root.optJSONArray("attachments")?.let{AttachmentStore.restoreBackup(it)}
         val s=root.optJSONObject("settings")?:JSONObject()
         val restoredContentScale=when{
             s.has("contentFontScale")->s.optDouble("contentFontScale").toFloat()
@@ -57,7 +56,10 @@ object BackupManager {
             s.has("fontScale")->s.optDouble("fontScale").toFloat()
             else->null
         }
-        return RestoredPreferences(if(s.has("darkTheme"))s.optBoolean("darkTheme")else null,restoredContentScale,s.optString("backupMode","manual"),s.optString("email",""),if(s.has("boldText"))s.optBoolean("boldText")else null,s.optString("language",null),if(s.has("projectsEnabled"))s.optBoolean("projectsEnabled")else null,restoredButtonScale)
+        val preferences=RestoredPreferences(if(s.has("darkTheme"))s.optBoolean("darkTheme")else null,restoredContentScale,s.optString("backupMode","manual"),s.optString("email",""),if(s.has("boldText"))s.optBoolean("boldText")else null,s.optString("language",null),if(s.has("projectsEnabled"))s.optBoolean("projectsEnabled")else null,restoredButtonScale)
+        db.replaceAll(notes,tasks,projects,money,reminders,stages,journal,links)
+        root.optJSONArray("attachments")?.let{AttachmentStore.restoreBackup(it)}
+        return preferences
     }
     fun writeToUri(context:Context,uri:Uri,json:String){context.contentResolver.openOutputStream(uri,"wt")!!.bufferedWriter().use{it.write(json)}}
     fun writeArchiveToUri(context:Context,uri:Uri,json:String){
