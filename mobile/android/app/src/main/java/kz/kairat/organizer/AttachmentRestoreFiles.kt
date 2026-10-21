@@ -4,6 +4,12 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.FileVisitResult
+import java.nio.file.attribute.BasicFileAttributes
+import android.system.Os
+import android.system.OsConstants
 
 /** Filesystem operations kept separate so restore failures can be tested deterministically. */
 internal open class AttachmentRestoreFiles {
@@ -18,6 +24,21 @@ internal open class AttachmentRestoreFiles {
         if (to.exists() || !from.renameTo(to)) throw IOException("Cannot move attachment restore directory")
     }
     open fun remove(directory: File) {
-        if (directory.exists() && !directory.deleteRecursively()) throw IOException("Cannot remove attachment restore directory")
+        if (!Files.exists(directory.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) return
+        Files.walkFileTree(directory.toPath(), object : SimpleFileVisitor<Path>() {
+            override fun visitFile(file: Path, attributes: BasicFileAttributes): FileVisitResult {
+                Files.delete(file); return FileVisitResult.CONTINUE
+            }
+            override fun postVisitDirectory(dir: Path, failure: IOException?): FileVisitResult {
+                if (failure != null) throw failure
+                Files.delete(dir); return FileVisitResult.CONTINUE
+            }
+        })
+    }
+    open fun syncDirectory(directory: File) {
+        try {
+            val fd = Os.open(directory.absolutePath, OsConstants.O_RDONLY or OsConstants.O_DIRECTORY, 0)
+            try { Os.fsync(fd) } finally { Os.close(fd) }
+        } catch (failure: Exception) { throw IOException("Cannot sync attachment restore directory", failure) }
     }
 }

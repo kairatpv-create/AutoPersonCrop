@@ -6,6 +6,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 class NoteDatabase(context: Context) : SQLiteOpenHelper(context, "organizer.db", null, 9) {
+    private val appContext = context.applicationContext
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE notes(id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL DEFAULT '',body TEXT NOT NULL DEFAULT '',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,color_key TEXT NOT NULL DEFAULT 'blue')")
         createV2Tables(db); createV3Tables(db); createV4Tables(db); createV5Tables(db); createV6Tables(db); createV7Tables(db)
@@ -61,7 +62,12 @@ class NoteDatabase(context: Context) : SQLiteOpenHelper(context, "organizer.db",
         if (oldVersion < 8) createV8Tables(db)
         if (oldVersion < 9) createV9Tables(db)
     }
-    override fun onOpen(db: SQLiteDatabase) { super.onOpen(db); createV2Tables(db); createV3Tables(db); createV4Tables(db); createV5Tables(db); createV6Tables(db); createV7Tables(db); createV8Tables(db); createV9Tables(db) }
+    override fun onOpen(db: SQLiteDatabase) {
+        super.onOpen(db)
+        RestoreJournal.recover(appContext,db)
+        RestoreJournal.createStateTable(db)
+        createV2Tables(db); createV3Tables(db); createV4Tables(db); createV5Tables(db); createV6Tables(db); createV7Tables(db); createV8Tables(db); createV9Tables(db)
+    }
 
     fun save(id: Long?, title: String, body: String, colorKey: String = "blue"): Long {
         val now = System.currentTimeMillis()
@@ -155,9 +161,13 @@ class NoteDatabase(context: Context) : SQLiteOpenHelper(context, "organizer.db",
     fun getAllProjectStages():List<ProjectStage> = readableDatabase.rawQuery("SELECT id,project_id,title,done,due_at,created_at FROM project_stages",null).use{c->buildList{while(c.moveToNext())add(ProjectStage(c.getLong(0),c.getLong(1),c.getString(2),c.getInt(3)!=0,c.getLong(4),c.getLong(5)))}}
     fun getAllProjectJournal():List<ProjectJournalEntry> = readableDatabase.rawQuery("SELECT id,project_id,text,created_at FROM project_journal",null).use{c->buildList{while(c.moveToNext())add(ProjectJournalEntry(c.getLong(0),c.getLong(1),c.getString(2),c.getLong(3)))}}
 
-    fun replaceAll(notes:List<Note>,tasks:List<TaskItem>,projects:List<Project>,money:List<MoneyEntry>,reminders:List<ReminderEntry>,stages:List<ProjectStage> = emptyList(),journal:List<ProjectJournalEntry> = emptyList(),links:List<ProjectNoteLink> = emptyList(),beforeCommit:()->Unit = {}){
+    fun replaceAll(notes:List<Note>,tasks:List<TaskItem>,projects:List<Project>,money:List<MoneyEntry>,reminders:List<ReminderEntry>,stages:List<ProjectStage> = emptyList(),journal:List<ProjectJournalEntry> = emptyList(),links:List<ProjectNoteLink> = emptyList(),beforeCommit:()->Unit = {},restoreToken:String? = null){
+        // Open before taking the recovery lock: another thread may be inside SQLiteOpenHelper.onOpen.
+        val database=writableDatabase
+        synchronized(RestoreJournal.lock){
+        RestoreJournal.recover(appContext,database)
         // Every insert must succeed before committing; a failed row must roll back all deletions too.
-        writableDatabase.beginTransaction(); try {
+        database.beginTransaction(); try {
             listOf("project_stages","project_journal","project_note_links","notes","tasks","projects","money_entries","reminders").forEach{writableDatabase.delete(it,null,null)}
             notes.forEach{n->writableDatabase.insertOrThrow("notes",null,ContentValues().apply{put("id",n.id);put("title",n.title);put("body",n.body);put("created_at",n.createdAt);put("updated_at",n.updatedAt);put("color_key",n.colorKey)})}
             tasks.forEach{t->writableDatabase.insertOrThrow("tasks",null,ContentValues().apply{put("id",t.id);put("title",t.title);put("details",t.details);put("done",if(t.done)1 else 0);put("created_at",t.createdAt);put("updated_at",t.updatedAt)})}
@@ -167,8 +177,16 @@ class NoteDatabase(context: Context) : SQLiteOpenHelper(context, "organizer.db",
             stages.forEach{s->writableDatabase.insertOrThrow("project_stages",null,ContentValues().apply{put("id",s.id);put("project_id",s.projectId);put("title",s.title);put("done",if(s.done)1 else 0);put("due_at",s.dueAt);put("created_at",s.createdAt)})}
             journal.forEach{j->writableDatabase.insertOrThrow("project_journal",null,ContentValues().apply{put("id",j.id);put("project_id",j.projectId);put("text",j.text);put("created_at",j.createdAt)})}
             links.forEach{l->writableDatabase.insertOrThrow("project_note_links",null,ContentValues().apply{put("project_id",l.projectId);put("note_id",l.noteId)})}
+            restoreToken?.let{RestoreJournal.markCommitted(database,it)}
             beforeCommit()
-            writableDatabase.setTransactionSuccessful()
-        } finally { writableDatabase.endTransaction() }
+            database.setTransactionSuccessful()
+        } finally {
+            try{database.endTransaction()}catch(failure:Throwable){
+                // Reopening resolves a failed/uncertain COMMIT before the journal chooses a directory.
+                try{close()}catch(closeFailure:Throwable){failure.addSuppressed(closeFailure)}
+                throw RestoreJournal.TransactionEndFailed(failure)
+            }
+        }
+        }
     }
 }

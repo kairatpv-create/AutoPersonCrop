@@ -20,16 +20,16 @@ private class FaultFiles(private val phase: String) : AttachmentRestoreFiles() {
         super.makeDirectory(directory)
     }
     override fun write(file: File, bytes: ByteArray) {
-        writes++
-        if (phase == "write-$writes" || phase == "partial-$writes") {
+        if(file.parentFile.name=="data"||file.name=="index.json")writes++
+        if ((file.parentFile.name=="data"||file.name=="index.json")&&(phase == "write-$writes" || phase == "partial-$writes")) {
             if (phase.startsWith("partial")) file.writeBytes(bytes.take(1).toByteArray())
             throw IOException("D06 injected write failure")
         }
         super.write(file, bytes)
     }
     override fun move(from: File, to: File) {
-        moves++
-        if (phase == "move-$moves" || phase == "rollback-fails" && moves in 2..3) throw IOException("D06 injected rename failure")
+        if(from.isDirectory)moves++
+        if (from.isDirectory&&(phase == "move-$moves" || phase == "rollback-fails" && moves in 2..3)) throw IOException("D06 injected rename failure")
         super.move(from, to)
     }
     override fun remove(directory: File) {
@@ -73,11 +73,10 @@ fun main() {
         val target = D06Fixture("cleanup target")
         val original = d06Files(File(target.context.filesDir, "attachments"))
         BackupManager.restore(payload.toString(), target.db, "en", FaultFiles("cleanup"))
-        d06Restored(payload, target)
         val work = d06WorkDirectories(target).single()
         check(original == d06Files(File(work, "previous")))
-        // Synthetic test cleanup only; the production path deliberately retains the old copy.
-        work.deleteRecursively()
+        d06Restored(payload, target) // Reopen retries the journal cleanup.
+        check(d06WorkDirectories(target).isEmpty())
     }
     d06Test("A second rename failure during rollback retains all original files for recovery and rolls back SQLite") {
         val target = D06Fixture("rollback target")
@@ -89,8 +88,8 @@ fun main() {
         val work = d06WorkDirectories(target).single()
         val previous = File(work, "previous")
         check(originalFiles == d06Files(previous))
-        check(previous.renameTo(File(target.context.filesDir, "attachments"))) // Recover this synthetic fixture.
-        work.deleteRecursively()
+        target.activate() // Recovery uses the real persisted journal, without manual file moves.
+        check(d06WorkDirectories(target).isEmpty())
         check(originalFiles == d06Files(File(target.context.filesDir, "attachments")))
     }
     d06Test("Attachment readers wait during directory replacement and receive the complete committed index") {

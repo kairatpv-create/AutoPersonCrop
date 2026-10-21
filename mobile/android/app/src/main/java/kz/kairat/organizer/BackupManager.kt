@@ -48,7 +48,15 @@ object BackupManager {
         val links=root.optJSONArray("projectNoteLinks").objs().map{o->ProjectNoteLink(o.optLong("projectId"),o.optLong("noteId"))}.toList()
         val money=root.optJSONArray("money").objs().map{o->MoneyEntry(o.optLong("id"),o.optString("type"),o.optDouble("amount"),o.optString("category"),if(o.has("projectId"))o.optLong("projectId")else null,o.optString("projectName"),o.optString("note"),o.optLong("createdAt"),o.optString("colorKey","blue"))}.toList()
         val reminders=root.optJSONArray("reminders").objs().map{o->ReminderEntry(o.optLong("id"),o.optString("targetType"),o.optLong("targetId"),o.optLong("triggerAt"),o.optBoolean("sound",true),o.optBoolean("vibrate",true),o.optString("soundKey","system"),o.optLong("createdAt"),"","",o.optString("scheduleType","once"),o.optInt("daysMask",0),o.optString("dayMode","single"),o.optInt("baseMinutes",540))}.toList()
-        val s=root.optJSONObject("settings")?:JSONObject()
+        val preferences=preferences(root.optJSONObject("settings")?:JSONObject())
+        val attachments=root.optJSONArray("attachments")
+        if(attachments==null)db.replaceAll(notes,tasks,projects,money,reminders,stages,journal,links)
+        else AttachmentStore.withDatabaseBackup(attachments,lang,files,db,root.optJSONObject("settings")){install,token->
+            db.replaceAll(notes,tasks,projects,money,reminders,stages,journal,links,beforeCommit=install,restoreToken=token)
+        }
+        return preferences
+    }
+    internal fun preferences(s:JSONObject):RestoredPreferences{
         val restoredContentScale=when{
             s.has("contentFontScale")->s.optDouble("contentFontScale").toFloat()
             s.has("fontScale")->s.optDouble("fontScale").toFloat()
@@ -59,13 +67,7 @@ object BackupManager {
             s.has("fontScale")->s.optDouble("fontScale").toFloat()
             else->null
         }
-        val preferences=RestoredPreferences(if(s.has("darkTheme"))s.optBoolean("darkTheme")else null,restoredContentScale,s.optString("backupMode","manual"),s.optString("email",""),if(s.has("boldText"))s.optBoolean("boldText")else null,s.optString("language",null),if(s.has("projectsEnabled"))s.optBoolean("projectsEnabled")else null,restoredButtonScale)
-        val attachments=root.optJSONArray("attachments")
-        if(attachments==null)db.replaceAll(notes,tasks,projects,money,reminders,stages,journal,links)
-        else AttachmentStore.withPreparedBackup(attachments,lang,files){install->
-            db.replaceAll(notes,tasks,projects,money,reminders,stages,journal,links,beforeCommit=install)
-        }
-        return preferences
+        return RestoredPreferences(if(s.has("darkTheme"))s.optBoolean("darkTheme")else null,restoredContentScale,s.optString("backupMode","manual"),s.optString("email",""),if(s.has("boldText"))s.optBoolean("boldText")else null,s.optString("language",null),if(s.has("projectsEnabled"))s.optBoolean("projectsEnabled")else null,restoredButtonScale)
     }
     fun writeToUri(context:Context,uri:Uri,json:String){context.contentResolver.openOutputStream(uri,"wt")!!.bufferedWriter().use{it.write(json)}}
     fun writeArchiveToUri(context:Context,uri:Uri,json:String){

@@ -11,13 +11,13 @@ p=argparse.ArgumentParser()
 p.add_argument('--source',type=Path,required=True)
 p.add_argument('--jars',type=Path,required=True)
 p.add_argument('--output',type=Path,required=True)
-p.add_argument('--suite',choices=['audit','backup-validation','restore-integrity','attachment-validation','attachment-restore'],default='audit')
+p.add_argument('--suite',choices=['audit','backup-validation','restore-integrity','attachment-validation','attachment-restore','restore-recovery','restore-recovery-probe'],default='audit')
 a=p.parse_args()
 source=a.source.resolve()/'app/src/main/java/kz/kairat/organizer'
 out=a.output.resolve();out.mkdir(parents=True,exist_ok=True)
 stubdir=Path(__file__).resolve().parent/'jvm'
 files=[source/(n+'.kt') for n in ['Models','AppStrings','NoteDatabase','SettingsStore','BackupManager','AttachmentStore']]
-for optional in ['BackupValidation','AttachmentRestoreFiles']:
+for optional in ['BackupValidation','AttachmentRestoreFiles','RestoreJournal']:
     if (source/(optional+'.kt')).exists():
         files.append(source/(optional+'.kt'))
 if a.suite=='audit':
@@ -30,7 +30,8 @@ if a.suite=='audit':
     (out/'CloudSyncCore.kt').write_text(cloud)
     files.append(out/'CloudSyncCore.kt')
 main={'audit':'AuditMain','backup-validation':'BackupValidationMain','restore-integrity':'RestoreIntegrityMain',
-      'attachment-validation':'AttachmentValidationMain','attachment-restore':'AttachmentRestoreMain'}[a.suite]
+      'attachment-validation':'AttachmentValidationMain','attachment-restore':'AttachmentRestoreMain','restore-recovery':'RestoreRecoveryMain',
+      'restore-recovery-probe':'RecoveryProbeMain'}[a.suite]
 files += [f for f in sorted(stubdir.glob('*.kt')) if not f.name.endswith('Main.kt') or f.stem==main]
 classpath=os.pathsep.join(str(x.resolve()) for x in sorted(a.jars.glob('*.jar')))
 assert classpath,'No compiler jars supplied'

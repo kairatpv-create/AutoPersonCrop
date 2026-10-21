@@ -16,8 +16,10 @@ Compose imports/UI are omitted. All transformed inputs are hashed in output.
 
 The host adapter uses SQLite JDBC for the real SQL and approximates a small
 Android API surface. It matches Android `insert()` returning -1 on SQL failure.
-SharedPreferences are an in-memory implementation; filesystem operations use
-new temporary directories. Notification/calendar scheduling is stubbed.
+SharedPreferences use host JSON files under each synthetic Context, with atomic
+replacement and synchronous writes, so separate JVMs can reopen them. This
+approximates Android preferences; it does not reproduce Android's async apply().
+Filesystem operations use new temporary directories. Notification/calendar scheduling is stubbed.
 This is not Android instrumentation and does not verify lifecycle, UI, system
 permissions, Android SQLite locking, notifications or iOS compatibility.
 
@@ -57,6 +59,32 @@ failure at one operation. One test raises an exception after file promotion
 inside the actual SQLite transaction. Another verifies retention of the
 original directory if rollback itself fails. These are host tests, not power
 loss/process-death tests or Android instrumentation.
+
+### D14 process restart recovery
+
+Use `--suite restore-recovery` for hard process termination and reopening.
+Each crash uses `Runtime.halt(73)` in a separate JVM: no Kotlin finally blocks,
+SQLite close, or orderly application shutdown. A fresh JVM opens the same
+synthetic database/files through the application's startup recovery. Both
+SQLite DELETE and WAL modes are tested. Tests compare all eight collections,
+attachment/index bytes, preferences, PIN/account fields and an unrelated file.
+They also halt the recovery process itself, check complete empty backups,
+uncertain SQL commits, failed preference/metadata writes and unsafe recovery
+metadata. No Render requests or accounts are used.
+
+The host `Os` adapter fsyncs Linux directories with FileChannel; this does not
+validate Android storage durability. The SQLite adapter can halt immediately
+after a real commit or simulate loss of its acknowledgement. Another test uses
+a real deferred foreign-key constraint to make SQLite COMMIT fail. A schema-9
+copy without the new state table checks the additive open path.
+
+Use `--suite restore-recovery-probe` against D06 and D14 sources for the same
+regression: a halt after file promotion, before SQLite commit. It is expected
+to fail on D06 (old records/new files) and pass with D14 recovery. This uses the
+old API surface and is independent of the journal's internal state schema.
+
+These are host process-restart tests, not Android instrumentation, phone
+testing, power-cut testing or proof against arbitrary storage corruption.
 
 Supplied JARs for the recorded run: Kotlin compiler 2.1.21 and its POM runtime
 dependencies, org.json 20240303, JetBrains annotations 13.0, SQLite JDBC

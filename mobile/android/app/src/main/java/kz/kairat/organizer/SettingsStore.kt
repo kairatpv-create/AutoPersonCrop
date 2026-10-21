@@ -40,6 +40,18 @@ class SettingsStore(context: Context) {
             ?: AppStrings.normalizeLanguage(java.util.Locale.getDefault().toLanguageTag())
         set(v) = prefs.edit().putString("language", AppStrings.normalizeLanguage(v)).apply()
 
+    /** Only exported preferences; account credentials and PIN are deliberately untouched. */
+    internal fun applyRestoredPreferences(p: RestoredPreferences): Boolean {
+        val editor = prefs.edit().putString("backup_mode", p.backupMode).putString("backup_email", p.email)
+        p.darkTheme?.let { editor.putBoolean("dark_theme", it) }
+        p.fontScale?.coerceIn(.85f, 1.45f)?.let { editor.putFloat("content_font_scale", it).putFloat("font_scale", it) }
+        p.buttonFontScale?.let { editor.putFloat("button_font_scale", it.coerceIn(.85f, 1.45f)) }
+        p.boldText?.let { editor.putBoolean("bold_text", it) }
+        p.projectsEnabled?.let { editor.putBoolean("projects_enabled", it) }
+        p.language?.let { editor.putString("language", AppStrings.normalizeLanguage(it)) }
+        return editor.commit()
+    }
+
     var syncProjectId: String
         get() = prefs.getString("sync_project_id", "") ?: ""
         set(v) = prefs.edit().putString("sync_project_id", v.trim()).apply()

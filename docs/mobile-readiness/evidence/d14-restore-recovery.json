@@ -1,0 +1,393 @@
+{
+  "base_commit": "8aac1b82ae9d391fcfd169c4b9c3e5ca22fd5f70",
+  "branch": "organizer-d14-restore-recovery-20261022",
+  "passed": 452,
+  "total": 452,
+  "suites": {
+    "recovery": {
+      "total": 68,
+      "suite": "D14 journal recovery: isolated JVM halt/restart, real synthetic SQLite/files",
+      "cases": [
+        {
+          "result": "PASS",
+          "name": "DELETE process halt at stage-owner; restart selects complete old data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE process halt at stage-data; restart selects complete old data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE process halt at stage-index; restart selects complete old data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE process halt at intent; restart selects complete old data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE process halt at old-move; restart selects complete old data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE process halt at new-move; restart selects complete old data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE process halt at after-sql-commit; restart selects complete new data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE process halt at done; restart selects complete new data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE process halt at cleanup-partial; restart selects complete new data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE process halt at cleanup-work; restart selects complete new data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE process halt at cleanup-journal; restart selects complete new data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE process halt at cleanup-done; restart selects complete new data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL process halt at stage-owner; restart selects complete old data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL process halt at stage-data; restart selects complete old data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL process halt at stage-index; restart selects complete old data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL process halt at intent; restart selects complete old data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL process halt at old-move; restart selects complete old data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL process halt at new-move; restart selects complete old data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL process halt at after-sql-commit; restart selects complete new data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL process halt at done; restart selects complete new data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL process halt at cleanup-partial; restart selects complete new data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL process halt at cleanup-work; restart selects complete new data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL process halt at cleanup-journal; restart selects complete new data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL process halt at cleanup-done; restart selects complete new data and a second restart is unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE direct attachment restore process halt at intent preserves database/PIN and selects a complete file generation"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE direct attachment restore process halt at old-move preserves database/PIN and selects a complete file generation"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE direct attachment restore process halt at new-move preserves database/PIN and selects a complete file generation"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE direct attachment restore process halt at done preserves database/PIN and selects a complete file generation"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE direct attachment restore process halt at cleanup-partial preserves database/PIN and selects a complete file generation"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL direct attachment restore process halt at intent preserves database/PIN and selects a complete file generation"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL direct attachment restore process halt at old-move preserves database/PIN and selects a complete file generation"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL direct attachment restore process halt at new-move preserves database/PIN and selects a complete file generation"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL direct attachment restore process halt at done preserves database/PIN and selects a complete file generation"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL direct attachment restore process halt at cleanup-partial preserves database/PIN and selects a complete file generation"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE complete empty backup halted at new-move is distinguished from a missing backup"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE complete empty backup halted at after-sql-commit is distinguished from a missing backup"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL complete empty backup halted at new-move is distinguished from a missing backup"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL complete empty backup halted at after-sql-commit is distinguished from a missing backup"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE a second process halt during rollback-displace is idempotently recovered at the next launch"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE a second process halt during rollback-restore is idempotently recovered at the next launch"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE a second process halt during recovery-done is idempotently recovered at the next launch"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE a second process halt during recovery-cleanup is idempotently recovered at the next launch"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL a second process halt during rollback-displace is idempotently recovered at the next launch"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL a second process halt during rollback-restore is idempotently recovered at the next launch"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL a second process halt during recovery-done is idempotently recovered at the next launch"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL a second process halt during recovery-cleanup is idempotently recovered at the next launch"
+        },
+        {
+          "result": "PASS",
+          "name": "A second interrupted restore returns to the previous committed generation, not the original empty state"
+        },
+        {
+          "result": "PASS",
+          "name": "Opening a synthetic schema-9 copy without the additive state table preserves records, files and user_version"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe recovery metadata journal-json blocks opening and retains every recovery file"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe recovery metadata journal-work blocks opening and retains every recovery file"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe recovery metadata owner blocks opening and retains every recovery file"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe recovery metadata old-generation blocks opening and retains every recovery file"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe recovery metadata new-index blocks opening and retains every recovery file"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe recovery metadata missing-new-file blocks opening and retains every recovery file"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe recovery metadata unknown-previous blocks opening and retains every recovery file"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe recovery metadata work-symlink blocks opening and retains every recovery file"
+        },
+        {
+          "result": "PASS",
+          "name": "Durable completion retries cleanup without replaying preferences changed after a successful restore"
+        },
+        {
+          "result": "PASS",
+          "name": "An interrupted first owner-marker write preserves unused staging and does not block intact data"
+        },
+        {
+          "result": "PASS",
+          "name": "Failed preferences commit after SQLite commit remains recoverable without changing PIN/account fields"
+        },
+        {
+          "result": "PASS",
+          "name": "Preferences too large for a durable journal are rejected before replacing records or attachments"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE uncertain COMMIT deferred constraint failure is resolved from SQLite on a fresh open"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE uncertain COMMIT acknowledgement loss is resolved from SQLite on a fresh open"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL uncertain COMMIT deferred constraint failure is resolved from SQLite on a fresh open"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL uncertain COMMIT acknowledgement loss is resolved from SQLite on a fresh open"
+        },
+        {
+          "result": "PASS",
+          "name": "I/O failure intent-write retains a recoverable old/new pair and never reports an uncertain restore as unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "I/O failure after-old-move retains a recoverable old/new pair and never reports an uncertain restore as unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "I/O failure after-new-move retains a recoverable old/new pair and never reports an uncertain restore as unchanged"
+        },
+        {
+          "result": "PASS",
+          "name": "I/O failure done-write retains a recoverable old/new pair and never reports an uncertain restore as unchanged"
+        }
+      ],
+      "passed": 68
+    },
+    "probe": {
+      "total": 1,
+      "suite": "D14 process-death regression probe (also runs on unmodified D06 source)",
+      "cases": [
+        {
+          "result": "PASS",
+          "name": "Process death after new file promotion must restart with the complete old SQLite/attachment pair"
+        }
+      ],
+      "passed": 1
+    }
+  },
+  "regressions": {
+    "D04": {
+      "passed": 235,
+      "total": 235,
+      "result_sha256": "6a272aaf7b9dcca6ae68abafe10a642311be324cee09764e9998c4dee25dd1cc",
+      "previous_report": "evidence/d04-backup-validation.json"
+    },
+    "D05": {
+      "passed": 67,
+      "total": 67,
+      "result_sha256": "a543c8bd04f2bb844e6c6fdf8549f5aba116fcdfb5506daa29423c44dac87abc",
+      "previous_report": "evidence/d05-restore-integrity.json"
+    },
+    "D06_validation": {
+      "passed": 64,
+      "total": 64,
+      "result_sha256": "dc8ddb01e9c27512f5517ae5f34f317430ee437e6d696e7fb007a03fda65780e"
+    },
+    "D06_IO": {
+      "passed": 17,
+      "total": 17,
+      "result_sha256": "ec50c3d9ed8cb064a5c710763fd95858d6282dc50adddb0955e07dfcd760d8da"
+    }
+  },
+  "negative_control": {
+    "source_commit": "8aac1b82ae9d391fcfd169c4b9c3e5ca22fd5f70",
+    "expected_exit_code": 1,
+    "result": {
+      "total": 1,
+      "suite": "D14 process-death regression probe (also runs on unmodified D06 source)",
+      "cases": [
+        {
+          "result": "FAIL",
+          "name": "Process death after new file promotion must restart with the complete old SQLite/attachment pair",
+          "error": "java.lang.IllegalStateException: Reproduced: old SQLite records are paired with incoming attachment bytes after a process restart"
+        }
+      ],
+      "passed": 0
+    },
+    "production_sha256": {
+      "mobile/android/app/src/main/java/kz/kairat/organizer/Models.kt": "fa51ad21112e70d4d27b6e0774d8c8630581231335a17fd8e2fe63419ef89b2d",
+      "mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
+      "mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "59ae36419cf1ca89eb62658d530bddaf843242d10ddf20feb7194ac493fd6620",
+      "mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "cae7c296277144c517104a97f3f2beb002815168f6cd36dba0813fa3daf8853f",
+      "mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "a8cf11bc1d3290ad3f79ac3d6b1932dc3f4b7198bcc556900ff6bd3203bd36e7",
+      "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "076f2bf7c47b87b1954b6b772c91873a059da618199a77b1ef121f4c668b4112",
+      "mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "cf189cd671f1740b04ae28027343c9fa964b9f87fd9b6fdb7e04697b34ff2fbf",
+      "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "72b56165e4becf3be39d8bfb09e8b61c77666f15e850ce3be06d8d3459b37d72"
+    }
+  },
+  "production_sha256": {
+    "mobile/android/app/src/main/java/kz/kairat/organizer/Models.kt": "fa51ad21112e70d4d27b6e0774d8c8630581231335a17fd8e2fe63419ef89b2d",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "1d6d6e0b8836786dbdb2cc958cf0b142d4c92c6fcb4831b8e1ab301ef15b35f0",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "f09908dd2a4d135b888eb4fb4a3ad0ae97eff8a738ceff37984c5fd9f40aae94",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "466f0d0ad114136e0873363927b64a9e31c9923b6fb1fdc6a9d6547426aedb07",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "7744d113100696b5280bdd8bfe80adc6f2d94d51c6e140f17e0bd1fedea19fd7",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "4d008d76d614123b882f75d6bec42f0e0455c580ae500269a3543d96711f15e7",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "88526c267929df377bb57159614f3dc8ee7634a518db3109c0fa393faa7138d1",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/RestoreJournal.kt": "b3392ec12106f8ab2f5d9212f1184705b06a549cad9f0c8e994bf0693de6e099"
+  },
+  "executed_source_sha256": {
+    "mobile/android/app/src/main/java/kz/kairat/organizer/Models.kt": "fa51ad21112e70d4d27b6e0774d8c8630581231335a17fd8e2fe63419ef89b2d",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "1d6d6e0b8836786dbdb2cc958cf0b142d4c92c6fcb4831b8e1ab301ef15b35f0",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "f09908dd2a4d135b888eb4fb4a3ad0ae97eff8a738ceff37984c5fd9f40aae94",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "466f0d0ad114136e0873363927b64a9e31c9923b6fb1fdc6a9d6547426aedb07",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "7744d113100696b5280bdd8bfe80adc6f2d94d51c6e140f17e0bd1fedea19fd7",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "4d008d76d614123b882f75d6bec42f0e0455c580ae500269a3543d96711f15e7",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "88526c267929df377bb57159614f3dc8ee7634a518db3109c0fa393faa7138d1",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/RestoreJournal.kt": "b3392ec12106f8ab2f5d9212f1184705b06a549cad9f0c8e994bf0693de6e099",
+    "tools/audit/jvm/AndroidContent.kt": "3d1c348987c3f94e81a07a6abd41eea20ebda74baec426820f0ada0da1bc3da9",
+    "tools/audit/jvm/AndroidCursor.kt": "3d89a71e986b03097476573a37fc8c3cd52dec214e0b15e5246b045d3d8d1d95",
+    "tools/audit/jvm/AndroidOs.kt": "919cdb13cd4a99f23b64c1cc0c081ca24604e467435d8b360d4227baa6a69745",
+    "tools/audit/jvm/AndroidProvider.kt": "be3a2dfa0d04583945a94cd1ba9e8bc009fd9b402efbf461c4029eb10c3ef0a9",
+    "tools/audit/jvm/AndroidSQLite.kt": "0cb80b6578016b241beba51b335c3c5dfce92459a2d4839431137145fc97751f",
+    "tools/audit/jvm/AndroidUri.kt": "c19c6b1ba5ec2a2fcd12ec44813782407467732c6a053bbf73e9f9c1ebfd515b",
+    "tools/audit/jvm/AttachmentFixtures.kt": "f8dca297ded988a7000b81e5de3c44d59aae658867276bdafa0ddcf31eb226c9",
+    "tools/audit/jvm/FileProvider.kt": "3020b150a3880104842bbf38ecd10bda305fe6e2eba8eb659e0a2bcec3f4e576",
+    "tools/audit/jvm/RecoveryWorker.kt": "ebec9f314d149ddc51cb390b438d4a5be41057509dd9edabd07c8d948180972a",
+    "tools/audit/jvm/RestoreRecoveryMain.kt": "eb9e131648106ff8c132ab0e12f09d3fd7c42bd1d33a564e448306c76cbcdd65",
+    "tools/audit/jvm/Schedulers.kt": "f4af96d5abed34f4c2c87dd7fd35539b7a1ae559cc1d99974af4c1f6c1a0a7f5"
+  },
+  "android_build": {
+    "workflow": ".github/workflows/organizer-mobile-readiness.yml",
+    "command": "gradle --no-daemon --build-cache -p mobile/android assembleDebug",
+    "result_location": "GitHub Actions run for this commit; reported separately after execution",
+    "apk_artifact": "disabled for this branch"
+  },
+  "limits": [
+    "Synthetic host SQLite/files and separate JVM processes; no real user data or services.",
+    "Directory fsync uses a host Linux adapter. Android lifecycle, SQLite locking and phone storage are not exercised.",
+    "No physical power-loss tests or arbitrary byte-corruption guarantee.",
+    "D14 remains partly open: whole-import/ZIP resource bounds and a separate pre-import database safety copy."
+  ]
+}

@@ -9,14 +9,25 @@ import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.util.Base64
+import java.util.UUID
 
 object AttachmentStore {
     private const val MAX_FILE_SIZE = 25L * 1024L * 1024L
     private lateinit var app: Context
-    private val rootDir get() = File(app.filesDir, "attachments").apply{mkdirs()}
+    private val rootDir get():File { recoverBeforeAccess(); return File(app.filesDir, "attachments").apply{mkdirs()} }
     private val dataDir get() = File(rootDir,"data").apply{mkdirs()}
     private val indexFile get() = File(rootDir,"index.json")
-    @Synchronized fun initialize(context:Context){app=context.applicationContext; rootDir; dataDir}
+    @Synchronized fun initialize(context:Context){
+        app=context.applicationContext
+        if(RestoreJournal.pending(app))recoverBeforeAccess(true)
+        rootDir;dataDir
+    }
+    private fun recoverBeforeAccess(force:Boolean=false){
+        if(!RestoreJournal.active()&&(force||File(app.filesDir,RestoreJournal.JOURNAL).exists()||File(app.filesDir,RestoreJournal.DONE).exists())){
+            val helper=NoteDatabase(app)
+            try{helper.writableDatabase}finally{helper.close()}
+        }
+    }
 
     @Synchronized private fun readIndex():MutableList<AttachmentEntry>{
         if(!indexFile.exists()) return mutableListOf()
@@ -66,12 +77,23 @@ object AttachmentStore {
 
     /** Hold the attachment lock until the caller's SQLite transaction has completed. */
     @Synchronized internal fun withPreparedBackup(a:JSONArray,lang:String,io:AttachmentRestoreFiles,replace:((()->Unit)->Unit)){
+        withJournalBackup(a,lang,io,false,null){install,_->replace(install)}
+    }
+    internal fun withDatabaseBackup(a:JSONArray,lang:String,io:AttachmentRestoreFiles,db:NoteDatabase,settings:JSONObject?,replace:((()->Unit,String)->Unit)){
+        db.writableDatabase // Do not wait for SQLiteOpenHelper.onOpen while holding the attachment/recovery locks.
+        synchronized(this){withJournalBackup(a,lang,io,true,settings,replace)}
+    }
+    private fun withJournalBackup(a:JSONArray,lang:String,io:AttachmentRestoreFiles,database:Boolean,settings:JSONObject?,replace:((()->Unit,String)->Unit))=synchronized(RestoreJournal.lock){
         BackupValidation.attachments(a,lang)
+        recoverBeforeAccess()
         val live=File(app.filesDir,"attachments")
         val work=try{io.createWorkDirectory(app.filesDir)}catch(e:IOException){throw restoreError(lang,e)}catch(e:SecurityException){throw restoreError(lang,e)}
         val staged=File(work,"new"); val previous=File(work,"previous")
-        var movedOld=false; var installed=false; var safeToClean=false
+        val token=UUID.randomUUID().toString()
+        var intent:RestoreJournal.Intent?=null
+        var movedOld=false; var installed=false; var databaseCommitted=false
         try{
+            RestoreJournal.own(work,token,io)
             io.makeDirectory(staged)
             val data=File(staged,"data"); io.makeDirectory(data)
             val entries=mutableListOf<AttachmentEntry>()
@@ -83,17 +105,26 @@ object AttachmentStore {
                 entries.add(entry)
             }
             io.write(File(staged,"index.json"),indexJson(entries).toString().toByteArray(Charsets.UTF_8))
-            replace{
-                check(!installed&&!movedOld)
-                if(live.exists()){io.move(live,previous);movedOld=true}
-                io.move(staged,live);installed=true
+            io.write(File(staged,RestoreJournal.GENERATION),token.toByteArray(Charsets.UTF_8))
+            io.syncDirectory(data);io.syncDirectory(staged);io.syncDirectory(work);io.syncDirectory(app.filesDir)
+            intent=RestoreJournal.plan(app,work,token,database,settings)
+            RestoreJournal.begin(app,work,intent,io)
+            RestoreJournal.during(token){
+                replace({
+                    check(!installed&&!movedOld)
+                    if(live.exists()){io.move(live,previous);movedOld=true;RestoreJournal.moved(app,work,io)}
+                    io.move(staged,live);installed=true;RestoreJournal.moved(app,work,io)
+                },token)
             }
-            safeToClean=true // Only after the database commit may the old files be removed.
+            databaseCommitted=true
+            RestoreJournal.complete(app,intent,true,io)
         }catch(failure:Throwable){
+            if(databaseCommitted||failure is RestoreJournal.TransactionEndFailed)throw RestoreJournal.required(app,failure)
             try{
-                if(installed){io.move(live,staged);installed=false}
-                if(movedOld){io.move(previous,live);movedOld=false}
-                safeToClean=true
+                if(installed){io.move(live,staged);installed=false;RestoreJournal.moved(app,work,io)}
+                if(movedOld){io.move(previous,live);movedOld=false;RestoreJournal.moved(app,work,io)}
+                if(intent!=null&&File(app.filesDir,RestoreJournal.JOURNAL).exists())RestoreJournal.complete(app,intent,false,io)
+                else{io.remove(work);io.syncDirectory(app.filesDir)}
             }catch(rollback:Throwable){
                 failure.addSuppressed(rollback)
                 val message=if(AppStrings.normalizeLanguage(lang)=="ru")"Не удалось автоматически вернуть прежние вложения. Резервный каталог сохранён." else "The previous attachments could not be restored automatically. Their recovery directory has been retained."
@@ -101,10 +132,6 @@ object AttachmentStore {
             }
             if(failure is IOException||failure is SecurityException)throw restoreError(lang,failure)
             throw failure
-        }finally{
-            // Cleanup must never turn a committed restore into a reported failure.
-            // If rollback failed, keep both the old files and staging for recovery.
-            if(safeToClean)try{io.remove(work)}catch(_:Exception){}
         }
     }
     private fun restoreError(lang:String,cause:Throwable)=IOException(if(AppStrings.normalizeLanguage(lang)=="ru")"Не удалось восстановить вложения. Данные не изменены." else "Could not restore attachments. Your data has not been changed.",cause)

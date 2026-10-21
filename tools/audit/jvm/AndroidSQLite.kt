@@ -32,7 +32,18 @@ class SQLiteDatabase(private val c:Connection) {
     fun delete(table:String,where:String?,args:Array<String>?):Int=c.prepareStatement("DELETE FROM $table"+(where?.let{" WHERE $it"}?:"")).use{s->args?.forEachIndexed{i,v->s.setString(i+1,v)};s.executeUpdate()}
     fun beginTransaction(){c.autoCommit=false;successful=false}
     fun setTransactionSuccessful(){successful=true}
-    fun endTransaction(){if(successful)c.commit()else c.rollback();c.autoCommit=true}
+    fun endTransaction(){
+        if(successful){
+            c.commit()
+            if(System.getProperty("organizer.audit.afterCommit")=="halt")Runtime.getRuntime().halt(73)
+            if(System.getProperty("organizer.audit.afterCommit")=="throw"){
+                c.autoCommit=true
+                throw java.io.IOException("Host-only loss of COMMIT acknowledgement")
+            }
+        }else c.rollback()
+        c.autoCommit=true
+    }
+    fun close(){c.close()}
 }
 open class SQLiteOpenHelper(private val context:Context,private val name:String,factory:Any?,private val version:Int){
     private var opened:SQLiteDatabase?=null
@@ -42,12 +53,15 @@ open class SQLiteOpenHelper(private val context:Context,private val name:String,
         val file=java.io.File(context.sandbox,name)
         val fresh=!file.exists()
         val db=SQLiteDatabase(DriverManager.getConnection("jdbc:sqlite:"+file.absolutePath))
+        try{
+            if(fresh){onCreate(db);db.execSQL("PRAGMA user_version=$version")}
+            onOpen(db)
+        }catch(failure:Throwable){db.close();throw failure}
         opened=db
-        if(fresh){onCreate(db);db.execSQL("PRAGMA user_version=$version")}
-        onOpen(db)
         return db
     }
     val readableDatabase:SQLiteDatabase get()=writableDatabase
+    fun close(){opened?.close();opened=null}
     open fun onCreate(db:SQLiteDatabase){}
     open fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int){}
     open fun onOpen(db:SQLiteDatabase){}

@@ -54,13 +54,7 @@ internal object BackupValidation {
             // Local files must contain both sections, including when they are empty.
             if (version < 7 || root.has("settings")) {
                 val settings = root.opt("settings") as? JSONObject ?: throw Invalid("settings")
-                fields(settings, "settings", strings = "backupMode email language",
-                    booleans = "darkTheme boldText projectsEnabled",
-                    numbers = "fontScale contentFontScale buttonFontScale",
-                    optional = "projectsEnabled contentFontScale buttonFontScale")
-                for (key in listOf("fontScale", "contentFontScale", "buttonFontScale")) {
-                    if (settings.has(key) && !settings.getDouble(key).toFloat().isFinite()) throw Invalid("settings.$key")
-                }
+                settingsFields(settings)
             }
             if (version < 7 || root.has("attachments")) {
                 attachmentRecords(root)
@@ -79,19 +73,40 @@ internal object BackupValidation {
         catch (_: JSONException) { throw error(lang, "attachments") }
     }
 
-    private fun attachmentRecords(root: JSONObject) {
+    fun attachmentIndex(array: JSONArray, lang: String) {
+        try { attachmentRecords(JSONObject().put("attachments", array), false) }
+        catch (e: Invalid) { throw error(lang, e.field, e.duplicate) }
+        catch (_: JSONException) { throw error(lang, "attachments") }
+    }
+    fun settings(settings: JSONObject, lang: String) {
+        try { settingsFields(settings) }
+        catch (e: Invalid) { throw error(lang, e.field, e.duplicate) }
+        catch (_: JSONException) { throw error(lang, "settings") }
+    }
+    private fun settingsFields(settings: JSONObject) {
+        fields(settings, "settings", strings = "backupMode email language", booleans = "darkTheme boldText projectsEnabled",
+            numbers = "fontScale contentFontScale buttonFontScale", optional = "projectsEnabled contentFontScale buttonFontScale")
+        for (key in listOf("fontScale", "contentFontScale", "buttonFontScale")) {
+            if (settings.has(key) && !settings.getDouble(key).toFloat().isFinite()) throw Invalid("settings.$key")
+        }
+    }
+
+    private fun attachmentRecords(root: JSONObject, withData: Boolean = true) {
         val names = HashSet<String>()
         records(root, "attachments") { o, path ->
-            fields(o, path, strings = "targetType displayName storedName mimeType data",
+            fields(o, path, strings = "targetType displayName storedName mimeType" + if (withData) " data" else "",
                 longs = "id targetId size createdAt durationMs", optional = "durationMs")
             val name = o.getString("storedName")
             // Backups contain flat private filenames, never paths or directories.
             if (name.isBlank() || name == "." || name == ".." || name.any { it == '/' || it == '\\' || it == ':' || it.code < 32 || it.code == 127 })
                 throw Invalid("$path.storedName")
             if (!names.add(name)) throw Invalid("$path.storedName", true)
-            val bytes = try { Base64.getDecoder().decode(o.getString("data")) }
-            catch (_: IllegalArgumentException) { throw Invalid("$path.data") }
-            if (bytes.size.toLong() != o.getLong("size")) throw Invalid("$path.size")
+            if (o.getLong("size") < 0) throw Invalid("$path.size")
+            if (withData) {
+                val bytes = try { Base64.getDecoder().decode(o.getString("data")) }
+                catch (_: IllegalArgumentException) { throw Invalid("$path.data") }
+                if (bytes.size.toLong() != o.getLong("size")) throw Invalid("$path.size")
+            }
         }
     }
 

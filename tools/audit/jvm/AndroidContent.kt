@@ -2,6 +2,7 @@ package android.content
 
 import android.net.Uri
 import java.io.File
+import org.json.JSONObject
 
 /** Host-only adapter: no Android device or real application directory is accessed. */
 open class Context(val sandbox:File) {
@@ -12,7 +13,7 @@ open class Context(val sandbox:File) {
     val packageName="kz.kairat.organizer.audit"
     val contentResolver=ContentResolver()
     private val preferences=mutableMapOf<String,SharedPreferences>()
-    fun getSharedPreferences(name:String,mode:Int)=preferences.getOrPut(name){SharedPreferences()}
+    fun getSharedPreferences(name:String,mode:Int)=preferences.getOrPut(name){SharedPreferences(File(sandbox,"shared_prefs/$name.json"))}
     fun startActivity(intent:Intent) { error("UI launch is not supported in host audit") }
 }
 class ContentResolver {
@@ -36,11 +37,12 @@ class Intent(val action:String) {
 class ContentValues:LinkedHashMap<String,Any?>(){
     fun putNull(key:String){put(key,null)}
 }
-class SharedPreferences {
+class SharedPreferences(private val file:File?=null) {
     private val values=mutableMapOf<String,Any?>()
+    init { if(file?.isFile==true){val json=JSONObject(file.readText());json.keys().forEach{k->values[k]=json.get(k)}} }
     fun getBoolean(k:String,d:Boolean)=values[k] as? Boolean?:d
-    fun getFloat(k:String,d:Float)=values[k] as? Float?:d
-    fun getLong(k:String,d:Long)=values[k] as? Long?:d
+    fun getFloat(k:String,d:Float)=(values[k] as? Number)?.toFloat()?:d
+    fun getLong(k:String,d:Long)=(values[k] as? Number)?.toLong()?:d
     fun getString(k:String,d:String?)=values[k] as? String?:d
     fun edit()=Editor()
     inner class Editor {
@@ -51,6 +53,17 @@ class SharedPreferences {
         fun putLong(k:String,v:Long)=apply{pending[k]=v}
         fun putString(k:String,v:String?)=apply{pending[k]=v}
         fun remove(k:String)=apply{removed.add(k)}
-        fun apply(){removed.forEach{values.remove(it)};values.putAll(pending)}
+        fun commit():Boolean{
+            removed.forEach{values.remove(it)};values.putAll(pending)
+            if(System.getProperty("organizer.audit.failPreferencesCommit")=="true")return false
+            if(file!=null){
+                file.parentFile.mkdirs()
+                val temporary=File(file.parentFile,file.name+".tmp")
+                java.io.FileOutputStream(temporary).use{out->out.write(JSONObject(values as Map<*,*>).toString().toByteArray());out.fd.sync()}
+                java.nio.file.Files.move(temporary.toPath(),file.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING,java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+            }
+            return true
+        }
+        fun apply(){commit()}
     }
 }
