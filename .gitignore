@@ -1,0 +1,14 @@
+# Historical reconstruction outputs (the archived inputs remain tracked).
+/organizer/buildsrc0106/
+/organizer/MyOrganizer-v0.9.0-source.tar.xz
+/organizer/apply_v091.py
+
+# Mobile build products and local signing/configuration.
+**/.gradle/
+**/build/
+**/local.properties
+**/*.jks
+**/*.keystore
+**/node_modules/
+**/__pycache__/
+/audit-output/
