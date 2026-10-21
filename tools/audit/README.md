@@ -41,6 +41,23 @@ then remove the trigger and verify that a complete retry succeeds. Direct
 `replaceAll` calls also test duplicate primary/composite keys without preflight.
 This suite has no network access or production data.
 
+### D06 attachment suites
+
+Use `--suite attachment-validation` for malformed metadata/Base64, unsafe names,
+filename collisions, direct/full/ZIP restores, legacy schemas and cloud v7.
+Every rejection uses a fresh synthetic fixture and compares all records plus
+SQLite/file/index hashes. A real overlong filename also exercises filesystem
+failure before any database replacement. The suite can run on the D05 sources
+as a negative control.
+
+Use `--suite attachment-restore` for failures while staging files/index,
+directory renames, rollback, cleanup and concurrent attachment reads. It uses
+real temporary files and SQLite; the internal filesystem adapter injects a
+failure at one operation. One test raises an exception after file promotion
+inside the actual SQLite transaction. Another verifies retention of the
+original directory if rollback itself fails. These are host tests, not power
+loss/process-death tests or Android instrumentation.
+
 Supplied JARs for the recorded run: Kotlin compiler 2.1.21 and its POM runtime
 dependencies, org.json 20240303, JetBrains annotations 13.0, SQLite JDBC
 3.46.1.0, slf4j-api/nop 2.0.13. Downloaded tools are not committed.

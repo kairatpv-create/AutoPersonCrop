@@ -32,6 +32,9 @@ object BackupManager {
         return root.toString(2)
     }
     fun restore(json:String,db:NoteDatabase,lang:String="en"):RestoredPreferences{
+        return restore(json,db,lang,AttachmentRestoreFiles())
+    }
+    internal fun restore(json:String,db:NoteDatabase,lang:String,files:AttachmentRestoreFiles):RestoredPreferences{
         val root=BackupValidation.parse(json,lang)
         fun JSONArray?.objs()=sequence{val a=this@objs?:return@sequence;for(i in 0 until a.length())yield(a.getJSONObject(i))}
         val notes=root.optJSONArray("notes").objs().map{o->Note(o.optLong("id"),o.optString("title"),o.optString("body"),o.optLong("createdAt"),o.optLong("updatedAt"),o.optString("colorKey","blue"))}.toList()
@@ -57,8 +60,11 @@ object BackupManager {
             else->null
         }
         val preferences=RestoredPreferences(if(s.has("darkTheme"))s.optBoolean("darkTheme")else null,restoredContentScale,s.optString("backupMode","manual"),s.optString("email",""),if(s.has("boldText"))s.optBoolean("boldText")else null,s.optString("language",null),if(s.has("projectsEnabled"))s.optBoolean("projectsEnabled")else null,restoredButtonScale)
-        db.replaceAll(notes,tasks,projects,money,reminders,stages,journal,links)
-        root.optJSONArray("attachments")?.let{AttachmentStore.restoreBackup(it)}
+        val attachments=root.optJSONArray("attachments")
+        if(attachments==null)db.replaceAll(notes,tasks,projects,money,reminders,stages,journal,links)
+        else AttachmentStore.withPreparedBackup(attachments,lang,files){install->
+            db.replaceAll(notes,tasks,projects,money,reminders,stages,journal,links,beforeCommit=install)
+        }
         return preferences
     }
     fun writeToUri(context:Context,uri:Uri,json:String){context.contentResolver.openOutputStream(uri,"wt")!!.bufferedWriter().use{it.write(json)}}

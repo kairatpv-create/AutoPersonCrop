@@ -1,0 +1,378 @@
+{
+  "base_commit": "11ca2fc050c84f6ed0b8e0d3920642bdf3f27ee7",
+  "passed": 383,
+  "total": 383,
+  "suites": [
+    {
+      "total": 64,
+      "suite": "D06 attachment validation (synthetic host SQLite)",
+      "cases": [
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #0 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #0 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #1 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #1 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #2 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #2 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #3 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #3 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #4 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #4 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #5 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #5 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #6 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #6 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #7 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #7 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #8 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #8 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #9 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #9 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #10 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #10 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #11 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #11 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #12 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #12 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #13 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #13 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #14 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #14 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #15 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #15 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #16 rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename #16 rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Absolute filename rejected before database restore"
+        },
+        {
+          "result": "PASS",
+          "name": "Invalid Base64 full backup"
+        },
+        {
+          "result": "PASS",
+          "name": "Truncated file bytes full backup"
+        },
+        {
+          "result": "PASS",
+          "name": "Negative size full backup"
+        },
+        {
+          "result": "PASS",
+          "name": "Duplicate storedName with distinct IDs full backup"
+        },
+        {
+          "result": "PASS",
+          "name": "Missing file data full backup"
+        },
+        {
+          "result": "PASS",
+          "name": "Wrong metadata type full backup"
+        },
+        {
+          "result": "PASS",
+          "name": "Wrong file data type full backup"
+        },
+        {
+          "result": "PASS",
+          "name": "Non-object attachment full backup"
+        },
+        {
+          "result": "PASS",
+          "name": "Absolute filename rejected directly"
+        },
+        {
+          "result": "PASS",
+          "name": "Invalid Base64 direct"
+        },
+        {
+          "result": "PASS",
+          "name": "Truncated file bytes direct"
+        },
+        {
+          "result": "PASS",
+          "name": "Negative size direct"
+        },
+        {
+          "result": "PASS",
+          "name": "Duplicate storedName with distinct IDs direct"
+        },
+        {
+          "result": "PASS",
+          "name": "Missing file data direct"
+        },
+        {
+          "result": "PASS",
+          "name": "Wrong metadata type direct"
+        },
+        {
+          "result": "PASS",
+          "name": "Wrong file data type direct"
+        },
+        {
+          "result": "PASS",
+          "name": "Non-object attachment direct"
+        },
+        {
+          "result": "PASS",
+          "name": "Real filesystem filename-length error preserves database and old files"
+        },
+        {
+          "result": "PASS",
+          "name": "ZIP with traversal filename is rejected before database/files change"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename is rejected in schema 3"
+        },
+        {
+          "result": "PASS",
+          "name": "Unsafe filename is rejected in schema 7"
+        },
+        {
+          "result": "PASS",
+          "name": "Complete JSON restores binary, Unicode and zero-byte files"
+        },
+        {
+          "result": "PASS",
+          "name": "Complete ZIP restores binary, Unicode and zero-byte files"
+        },
+        {
+          "result": "PASS",
+          "name": "Direct valid attachment restore preserves database and writes every attachment"
+        },
+        {
+          "result": "PASS",
+          "name": "Legacy file schema 3 accepts absent duration and restores attachments"
+        },
+        {
+          "result": "PASS",
+          "name": "Legacy file schema 4 accepts absent duration and restores attachments"
+        },
+        {
+          "result": "PASS",
+          "name": "Legacy file schema 5 accepts absent duration and restores attachments"
+        },
+        {
+          "result": "PASS",
+          "name": "A valid empty attachment array intentionally clears old attachments"
+        },
+        {
+          "result": "PASS",
+          "name": "Cloud v7 without attachments preserves every local attachment byte and unindexed file"
+        }
+      ],
+      "passed": 64
+    },
+    {
+      "total": 17,
+      "suite": "D06 staged attachment restore failures (synthetic host SQLite)",
+      "cases": [
+        {
+          "result": "PASS",
+          "name": "create-work failure preserves the database/index/files; a complete retry succeeds"
+        },
+        {
+          "result": "PASS",
+          "name": "create-security failure preserves the database/index/files; a complete retry succeeds"
+        },
+        {
+          "result": "PASS",
+          "name": "mkdir-new failure preserves the database/index/files; a complete retry succeeds"
+        },
+        {
+          "result": "PASS",
+          "name": "mkdir-data failure preserves the database/index/files; a complete retry succeeds"
+        },
+        {
+          "result": "PASS",
+          "name": "write-1 failure preserves the database/index/files; a complete retry succeeds"
+        },
+        {
+          "result": "PASS",
+          "name": "write-2 failure preserves the database/index/files; a complete retry succeeds"
+        },
+        {
+          "result": "PASS",
+          "name": "write-3 failure preserves the database/index/files; a complete retry succeeds"
+        },
+        {
+          "result": "PASS",
+          "name": "write-4 failure preserves the database/index/files; a complete retry succeeds"
+        },
+        {
+          "result": "PASS",
+          "name": "partial-1 failure preserves the database/index/files; a complete retry succeeds"
+        },
+        {
+          "result": "PASS",
+          "name": "partial-2 failure preserves the database/index/files; a complete retry succeeds"
+        },
+        {
+          "result": "PASS",
+          "name": "partial-4 failure preserves the database/index/files; a complete retry succeeds"
+        },
+        {
+          "result": "PASS",
+          "name": "move-1 failure preserves the database/index/files; a complete retry succeeds"
+        },
+        {
+          "result": "PASS",
+          "name": "move-2 failure preserves the database/index/files; a complete retry succeeds"
+        },
+        {
+          "result": "PASS",
+          "name": "Failure after file promotion rolls back both real SQLite replacement and original attachment directory"
+        },
+        {
+          "result": "PASS",
+          "name": "Cleanup failure does not report a committed restore as failed or delete recoverable old files"
+        },
+        {
+          "result": "PASS",
+          "name": "A second rename failure during rollback retains all original files for recovery and rolls back SQLite"
+        },
+        {
+          "result": "PASS",
+          "name": "Attachment readers wait during directory replacement and receive the complete committed index"
+        }
+      ],
+      "passed": 17
+    }
+  ],
+  "regressions": {
+    "D04": {
+      "passed": 235,
+      "total": 235,
+      "matches_report": "docs/mobile-readiness/evidence/d04-backup-validation.json"
+    },
+    "D05": {
+      "passed": 67,
+      "total": 67,
+      "matches_report": "docs/mobile-readiness/evidence/d05-restore-integrity.json"
+    }
+  },
+  "negative_control": {
+    "base_commit": "11ca2fc050c84f6ed0b8e0d3920642bdf3f27ee7",
+    "total": 64,
+    "passed": 15,
+    "failed_as_expected": 49
+  },
+  "production_sha256": {
+    "mobile/android/app/src/main/java/kz/kairat/organizer/Models.kt": "fa51ad21112e70d4d27b6e0774d8c8630581231335a17fd8e2fe63419ef89b2d",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "59ae36419cf1ca89eb62658d530bddaf843242d10ddf20feb7194ac493fd6620",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "cae7c296277144c517104a97f3f2beb002815168f6cd36dba0813fa3daf8853f",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "a8cf11bc1d3290ad3f79ac3d6b1932dc3f4b7198bcc556900ff6bd3203bd36e7",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "076f2bf7c47b87b1954b6b772c91873a059da618199a77b1ef121f4c668b4112",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "cf189cd671f1740b04ae28027343c9fa964b9f87fd9b6fdb7e04697b34ff2fbf",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "72b56165e4becf3be39d8bfb09e8b61c77666f15e850ce3be06d8d3459b37d72"
+  },
+  "limits": [
+    "Synthetic host SQLite/filesystem tests; no phone testing.",
+    "Injected I/O failures; no process-death/power-loss testing.",
+    "Recovery after an interrupted process or a second rollback failure remains D14."
+  ]
+}

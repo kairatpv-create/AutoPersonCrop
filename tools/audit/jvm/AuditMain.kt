@@ -84,17 +84,17 @@ fun main(){
         check(runCatching{BackupManager.restore(r.toString(),db)}.isFailure)
         check(db.getNotes().size==1);check(db.getNotes().single().title=="Original")
     }
-    checkCase("Invalid attachment data removes old files without reporting failure",true){
+    checkCase("Invalid attachment Base64 is rejected without removing old files"){
         val c=context();val f=File(c.cacheDir,"old.txt").apply{writeText("keep")}
         val old=AttachmentStore.addLocalFile("note",1,f);val oldPath=AttachmentStore.file(old)
-        val a=JSONArray().put(JSONObject().put("id",1).put("targetType","note").put("targetId",1).put("storedName","bad.bin").put("data","!invalid-base64!"))
-        AttachmentStore.restoreBackup(a)
-        check(!oldPath.exists());check(!AttachmentStore.file(AttachmentStore.list("note",1).single()).exists())
+        val a=JSONArray().put(JSONObject().put("id",1).put("targetType","note").put("targetId",1).put("storedName","bad.bin").put("displayName","bad.bin").put("mimeType","application/octet-stream").put("size",1).put("createdAt",1).put("data","!invalid-base64!"))
+        check(runCatching{AttachmentStore.restoreBackup(a)}.isFailure)
+        check(oldPath.readText()=="keep");check(AttachmentStore.list("note",1).single()==old)
     }
-    checkCase("Attachment restore accepts a path outside its data directory",true){
-        val c=context();val a=JSONArray().put(JSONObject().put("id",1).put("targetType","note").put("targetId",1).put("storedName","../audit-escaped.txt").put("data",Base64.getEncoder().encodeToString("synthetic".toByteArray())))
-        AttachmentStore.restoreBackup(a)
-        check(File(c.filesDir,"attachments/audit-escaped.txt").readText()=="synthetic")
+    checkCase("Attachment traversal is rejected before writing outside the data directory"){
+        val c=context();val a=JSONArray().put(JSONObject().put("id",1).put("targetType","note").put("targetId",1).put("storedName","../audit-escaped.txt").put("displayName","file.txt").put("mimeType","text/plain").put("size",9).put("createdAt",1).put("data",Base64.getEncoder().encodeToString("synthetic".toByteArray())))
+        check(runCatching{AttachmentStore.restoreBackup(a)}.isFailure)
+        check(!File(c.filesDir,"attachments/audit-escaped.txt").exists())
     }
     checkCase("First sync selects old remote snapshot because of future project due date",true){
         Remote().use{remote->

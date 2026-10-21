@@ -155,7 +155,7 @@ class NoteDatabase(context: Context) : SQLiteOpenHelper(context, "organizer.db",
     fun getAllProjectStages():List<ProjectStage> = readableDatabase.rawQuery("SELECT id,project_id,title,done,due_at,created_at FROM project_stages",null).use{c->buildList{while(c.moveToNext())add(ProjectStage(c.getLong(0),c.getLong(1),c.getString(2),c.getInt(3)!=0,c.getLong(4),c.getLong(5)))}}
     fun getAllProjectJournal():List<ProjectJournalEntry> = readableDatabase.rawQuery("SELECT id,project_id,text,created_at FROM project_journal",null).use{c->buildList{while(c.moveToNext())add(ProjectJournalEntry(c.getLong(0),c.getLong(1),c.getString(2),c.getLong(3)))}}
 
-    fun replaceAll(notes:List<Note>,tasks:List<TaskItem>,projects:List<Project>,money:List<MoneyEntry>,reminders:List<ReminderEntry>,stages:List<ProjectStage> = emptyList(),journal:List<ProjectJournalEntry> = emptyList(),links:List<ProjectNoteLink> = emptyList()){
+    fun replaceAll(notes:List<Note>,tasks:List<TaskItem>,projects:List<Project>,money:List<MoneyEntry>,reminders:List<ReminderEntry>,stages:List<ProjectStage> = emptyList(),journal:List<ProjectJournalEntry> = emptyList(),links:List<ProjectNoteLink> = emptyList(),beforeCommit:()->Unit = {}){
         // Every insert must succeed before committing; a failed row must roll back all deletions too.
         writableDatabase.beginTransaction(); try {
             listOf("project_stages","project_journal","project_note_links","notes","tasks","projects","money_entries","reminders").forEach{writableDatabase.delete(it,null,null)}
@@ -167,6 +167,7 @@ class NoteDatabase(context: Context) : SQLiteOpenHelper(context, "organizer.db",
             stages.forEach{s->writableDatabase.insertOrThrow("project_stages",null,ContentValues().apply{put("id",s.id);put("project_id",s.projectId);put("title",s.title);put("done",if(s.done)1 else 0);put("due_at",s.dueAt);put("created_at",s.createdAt)})}
             journal.forEach{j->writableDatabase.insertOrThrow("project_journal",null,ContentValues().apply{put("id",j.id);put("project_id",j.projectId);put("text",j.text);put("created_at",j.createdAt)})}
             links.forEach{l->writableDatabase.insertOrThrow("project_note_links",null,ContentValues().apply{put("project_id",l.projectId);put("note_id",l.noteId)})}
+            beforeCommit()
             writableDatabase.setTransactionSuccessful()
         } finally { writableDatabase.endTransaction() }
     }
