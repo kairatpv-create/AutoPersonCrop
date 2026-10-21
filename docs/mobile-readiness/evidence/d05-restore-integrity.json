@@ -1,0 +1,295 @@
+{
+  "total": 67,
+  "suite": "D05 restore integrity (synthetic host SQLite)",
+  "cases": [
+    {
+      "result": "PASS",
+      "name": "v6 rejects identical duplicate in notes before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v6 rejects conflicting duplicate in notes before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v6 rejects identical duplicate in tasks before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v6 rejects conflicting duplicate in tasks before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v6 rejects identical duplicate in projects before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v6 rejects conflicting duplicate in projects before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v6 rejects identical duplicate in money before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v6 rejects conflicting duplicate in money before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v6 rejects identical duplicate in reminders before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v6 rejects conflicting duplicate in reminders before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v6 rejects identical duplicate in projectStages before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v6 rejects conflicting duplicate in projectStages before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v6 rejects identical duplicate in projectJournal before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v6 rejects conflicting duplicate in projectJournal before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v6 rejects identical duplicate in projectNoteLinks before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v6 rejects identical duplicate in attachments before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v6 rejects conflicting duplicate in attachments before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v7 rejects identical duplicate in notes before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v7 rejects conflicting duplicate in notes before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v7 rejects identical duplicate in tasks before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v7 rejects conflicting duplicate in tasks before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v7 rejects identical duplicate in projects before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v7 rejects conflicting duplicate in projects before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v7 rejects identical duplicate in money before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v7 rejects conflicting duplicate in money before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v7 rejects identical duplicate in reminders before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v7 rejects conflicting duplicate in reminders before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v7 rejects identical duplicate in projectStages before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v7 rejects conflicting duplicate in projectStages before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v7 rejects identical duplicate in projectJournal before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v7 rejects conflicting duplicate in projectJournal before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "v7 rejects identical duplicate in projectNoteLinks before writes"
+    },
+    {
+      "result": "PASS",
+      "name": "Equivalent integral numeric IDs are treated as duplicates"
+    },
+    {
+      "result": "PASS",
+      "name": "Duplicate IDs inside ZIP are rejected without changing data or files"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure inserting notes row 1 rolls back every table and preserves attachments; retry succeeds"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure inserting notes row 2 rolls back every table and preserves attachments; retry succeeds"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure inserting tasks row 1 rolls back every table and preserves attachments; retry succeeds"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure inserting tasks row 2 rolls back every table and preserves attachments; retry succeeds"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure inserting projects row 1 rolls back every table and preserves attachments; retry succeeds"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure inserting projects row 2 rolls back every table and preserves attachments; retry succeeds"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure inserting money row 1 rolls back every table and preserves attachments; retry succeeds"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure inserting money row 2 rolls back every table and preserves attachments; retry succeeds"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure inserting reminders row 1 rolls back every table and preserves attachments; retry succeeds"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure inserting reminders row 2 rolls back every table and preserves attachments; retry succeeds"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure inserting projectStages row 1 rolls back every table and preserves attachments; retry succeeds"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure inserting projectStages row 2 rolls back every table and preserves attachments; retry succeeds"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure inserting projectJournal row 1 rolls back every table and preserves attachments; retry succeeds"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure inserting projectJournal row 2 rolls back every table and preserves attachments; retry succeeds"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure inserting projectNoteLinks row 1 rolls back every table and preserves attachments; retry succeeds"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure inserting projectNoteLinks row 2 rolls back every table and preserves attachments; retry succeeds"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure deleting notes rolls back earlier deletions and leaves attachments unchanged"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure deleting tasks rolls back earlier deletions and leaves attachments unchanged"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure deleting projects rolls back earlier deletions and leaves attachments unchanged"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure deleting money rolls back earlier deletions and leaves attachments unchanged"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure deleting reminders rolls back earlier deletions and leaves attachments unchanged"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure deleting projectStages rolls back earlier deletions and leaves attachments unchanged"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure deleting projectJournal rolls back earlier deletions and leaves attachments unchanged"
+    },
+    {
+      "result": "PASS",
+      "name": "SQL failure deleting projectNoteLinks rolls back earlier deletions and leaves attachments unchanged"
+    },
+    {
+      "result": "PASS",
+      "name": "Direct replaceAll rejects duplicate notes and rolls back without JSON validation"
+    },
+    {
+      "result": "PASS",
+      "name": "Direct replaceAll rejects duplicate tasks and rolls back without JSON validation"
+    },
+    {
+      "result": "PASS",
+      "name": "Direct replaceAll rejects duplicate projects and rolls back without JSON validation"
+    },
+    {
+      "result": "PASS",
+      "name": "Direct replaceAll rejects duplicate money and rolls back without JSON validation"
+    },
+    {
+      "result": "PASS",
+      "name": "Direct replaceAll rejects duplicate reminders and rolls back without JSON validation"
+    },
+    {
+      "result": "PASS",
+      "name": "Direct replaceAll rejects duplicate projectStages and rolls back without JSON validation"
+    },
+    {
+      "result": "PASS",
+      "name": "Direct replaceAll rejects duplicate projectJournal and rolls back without JSON validation"
+    },
+    {
+      "result": "PASS",
+      "name": "Direct replaceAll rejects duplicate projectNoteLinks and rolls back without JSON validation"
+    },
+    {
+      "result": "PASS",
+      "name": "Valid complete backup allows repeated IDs across sections and shared project/note link components"
+    }
+  ],
+  "passed": 67,
+  "d04_regression": {
+    "passed": 235,
+    "total": 235,
+    "matches_report": "docs/mobile-readiness/evidence/d04-backup-validation.json"
+  },
+  "negative_control": {
+    "base_commit": "54ce800e35565843ffe666f1ef6804f23bcde3e6",
+    "passed": 9,
+    "failed_as_expected": 58,
+    "total": 67
+  },
+  "production_sha256": {
+    "mobile/android/app/src/main/java/kz/kairat/organizer/Models.kt": "fa51ad21112e70d4d27b6e0774d8c8630581231335a17fd8e2fe63419ef89b2d",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "0f8f6bae14a27080cdde6c0887b9d4a5e7b838a9a84ad32d8ccf313987293885",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "cae7c296277144c517104a97f3f2beb002815168f6cd36dba0813fa3daf8853f",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "8ffe32ef24793726db7e02dbeb175581895bf761e96b143a008033f5c9141cc7",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "78882ee73a6bf0030d0a1fd51ef41e306da4ad1e3206ab553898467715e15ff0",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "3bbdc39f0d83b1c86d34d11bbe9c089543639a367447caf1f8b14dd1b418cdc9"
+  }
+}

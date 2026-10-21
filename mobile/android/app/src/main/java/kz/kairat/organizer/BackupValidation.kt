@@ -9,7 +9,7 @@ import java.util.Base64
 
 /** Read-only preflight. Never infer an empty collection from a missing backup section. */
 internal object BackupValidation {
-    private class Invalid(val field: String) : RuntimeException()
+    private class Invalid(val field: String, val duplicate: Boolean = false) : RuntimeException()
 
     fun parse(json: String, lang: String): JSONObject {
         try {
@@ -39,7 +39,7 @@ internal object BackupValidation {
             records(root, "projectJournal") { o, path ->
                 fields(o, path, strings = "text", longs = "id projectId createdAt")
             }
-            records(root, "projectNoteLinks") { o, path -> fields(o, path, longs = "projectId noteId") }
+            records(root, "projectNoteLinks", listOf("projectId", "noteId")) { o, path -> fields(o, path, longs = "projectId noteId") }
             records(root, "money") { o, path ->
                 fields(o, path, strings = "type category projectName note colorKey", longs = "id projectId createdAt",
                     numbers = "amount", optional = "projectId colorKey")
@@ -74,18 +74,20 @@ internal object BackupValidation {
             }
             return root
         } catch (e: Invalid) {
-            throw error(lang, e.field)
+            throw error(lang, e.field, e.duplicate)
         } catch (_: JSONException) {
             throw error(lang, "JSON")
         }
     }
 
-    private fun records(root: JSONObject, key: String, validate: (JSONObject, String) -> Unit) {
+    private fun records(root: JSONObject, key: String, identity: List<String> = listOf("id"), validate: (JSONObject, String) -> Unit) {
         val array = root.opt(key) as? JSONArray ?: throw Invalid(key)
+        val seen = HashSet<List<Long>>()
         for (i in 0 until array.length()) {
             val path = "$key[$i]"
             val record = array.opt(i) as? JSONObject ?: throw Invalid(path)
             validate(record, path)
+            if (!seen.add(identity.map { record.getLong(it) })) throw Invalid("$path.${identity.joinToString("+")}", true)
         }
     }
 
@@ -112,10 +114,14 @@ internal object BackupValidation {
         catch (_: NumberFormatException) { false }
     }
 
-    private fun error(lang: String, field: String): IllegalArgumentException {
-        val message = if (AppStrings.normalizeLanguage(lang) == "ru")
-            "Резервная копия повреждена, неполна или имеет неподдерживаемый формат. Данные не изменены."
-        else "The backup is damaged, incomplete or uses an unsupported format. Your data has not been changed."
+    private fun error(lang: String, field: String, duplicate: Boolean = false): IllegalArgumentException {
+        val ru = AppStrings.normalizeLanguage(lang) == "ru"
+        val message = when {
+            duplicate && ru -> "Резервная копия содержит повторяющиеся идентификаторы. Данные не изменены."
+            duplicate -> "The backup contains duplicate identifiers. Your data has not been changed."
+            ru -> "Резервная копия повреждена, неполна или имеет неподдерживаемый формат. Данные не изменены."
+            else -> "The backup is damaged, incomplete or uses an unsupported format. Your data has not been changed."
+        }
         return IllegalArgumentException("$message ($field)")
     }
 }

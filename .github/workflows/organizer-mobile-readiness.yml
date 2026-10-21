@@ -2,7 +2,7 @@ name: Verify Organizer Pro mobile preparation
 
 on:
   push:
-    branches: [organizer-mobile-readiness-20261021, organizer-d04-backup-validation-20261021]
+    branches: [organizer-mobile-readiness-20261021, organizer-d04-backup-validation-20261021, organizer-d05-restore-integrity-20261021]
     paths:
       - 'mobile/android/**'
       - '.github/workflows/organizer-mobile-readiness.yml'

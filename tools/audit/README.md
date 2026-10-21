@@ -31,6 +31,16 @@ exported data and SHA-256 hashes of the SQLite file, attachment files and index.
 It also tests complete empty/nonempty JSON/ZIP files, legacy file schemas 3–5,
 and empty/nonempty cloud schema 7 snapshots without local-only sections.
 
+### D05 restore integrity suite
+
+Use `--suite restore-integrity` to test duplicate identities in local/ZIP/cloud
+backups and SQLite rollback during replacement. Real SQLite temporary triggers
+raise errors on the first/second inserted row in every restored table and on
+each table's deletion. These tests check all existing data and file hashes,
+then remove the trigger and verify that a complete retry succeeds. Direct
+`replaceAll` calls also test duplicate primary/composite keys without preflight.
+This suite has no network access or production data.
+
 Supplied JARs for the recorded run: Kotlin compiler 2.1.21 and its POM runtime
 dependencies, org.json 20240303, JetBrains annotations 13.0, SQLite JDBC
 3.46.1.0, slf4j-api/nop 2.0.13. Downloaded tools are not committed.

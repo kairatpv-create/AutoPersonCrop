@@ -78,11 +78,11 @@ fun main(){
         check(runCatching{BackupManager.restore("{\"notes\":[]}",db)}.isFailure)
         check(db.getMoneyEntries().single().amount==99.0)
     }
-    checkCase("Duplicate restore IDs silently commit a partial replacement",true){
+    checkCase("Duplicate restore IDs are rejected without replacing original data"){
         val db=NoteDatabase(context());db.save(null,"Original","Keep")
         val r=JSONObject(backup("first",1));r.getJSONArray("notes").put(JSONObject(r.getJSONArray("notes").getJSONObject(0).toString()).put("title","second"))
-        BackupManager.restore(r.toString(),db)
-        check(db.getNotes().size==1);check(db.getNotes().single().title=="first")
+        check(runCatching{BackupManager.restore(r.toString(),db)}.isFailure)
+        check(db.getNotes().size==1);check(db.getNotes().single().title=="Original")
     }
     checkCase("Invalid attachment data removes old files without reporting failure",true){
         val c=context();val f=File(c.cacheDir,"old.txt").apply{writeText("keep")}

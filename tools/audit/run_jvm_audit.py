@@ -11,7 +11,7 @@ p=argparse.ArgumentParser()
 p.add_argument('--source',type=Path,required=True)
 p.add_argument('--jars',type=Path,required=True)
 p.add_argument('--output',type=Path,required=True)
-p.add_argument('--suite',choices=['audit','backup-validation'],default='audit')
+p.add_argument('--suite',choices=['audit','backup-validation','restore-integrity'],default='audit')
 a=p.parse_args()
 source=a.source.resolve()/'app/src/main/java/kz/kairat/organizer'
 out=a.output.resolve();out.mkdir(parents=True,exist_ok=True)
@@ -28,7 +28,7 @@ if a.suite=='audit':
     cloud=cloud.replace(original,'private val ORGANIZER_SERVER: String get() = System.getProperty("organizer.audit.server")')
     (out/'CloudSyncCore.kt').write_text(cloud)
     files.append(out/'CloudSyncCore.kt')
-main='AuditMain' if a.suite=='audit' else 'BackupValidationMain'
+main={'audit':'AuditMain','backup-validation':'BackupValidationMain','restore-integrity':'RestoreIntegrityMain'}[a.suite]
 files += [f for f in sorted(stubdir.glob('*.kt')) if not f.name.endswith('Main.kt') or f.stem==main]
 classpath=os.pathsep.join(str(x.resolve()) for x in sorted(a.jars.glob('*.jar')))
 assert classpath,'No compiler jars supplied'
