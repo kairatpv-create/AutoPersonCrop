@@ -1,0 +1,44 @@
+name: Verify Organizer Pro mobile preparation
+
+on:
+  push:
+    branches: [organizer-mobile-readiness-20261021]
+    paths:
+      - 'mobile/android/**'
+      - '.github/workflows/organizer-mobile-readiness.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: organizer-mobile-preparation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  android-compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install the existing Android SDK baseline
+        shell: bash
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Compile the recovered existing application
+        run: gradle --no-daemon --build-cache -p mobile/android assembleDebug
+      - name: Preserve internal build evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: organizer-mobile-preparation-debug-INTERNAL-DO-NOT-INSTALL
+          path: mobile/android/app/build/outputs/apk/debug/
+          retention-days: 30
+          if-no-files-found: error

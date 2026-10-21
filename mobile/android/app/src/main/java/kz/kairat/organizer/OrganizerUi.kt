@@ -1063,7 +1063,6 @@ private fun languagesLabel(lang:String):String=when(AppStrings.normalizeLanguage
 }
 
 @Composable private fun SettingsScreen(db:NoteDatabase,settings:SettingsStore,lang:String,onLanguage:(String)->Unit,dark:Boolean,onDark:(Boolean)->Unit,fontScale:Float,onFont:(Float)->Unit,buttonScale:Float,onButtonScale:(Float)->Unit,bold:Boolean,onBold:(Boolean)->Unit,projectsEnabled:Boolean,onProjectsEnabled:(Boolean)->Unit){
-    val webUriHandler=androidx.compose.ui.platform.LocalUriHandler.current
     val context=LocalContext.current;var msg by remember{mutableStateOf<String?>(null)};var showPin by remember{mutableStateOf(false)};var showDisablePin by remember{mutableStateOf(false)};var showChangePin by remember{mutableStateOf(false)};var languageMenu by remember{mutableStateOf(false)};var archiveBackup by rememberSaveable{mutableStateOf(false)}
     val compactSettings=buttonScale<=1.16f
     val onePageSettings=buttonScale<=.90f
@@ -1109,28 +1108,13 @@ private fun languagesLabel(lang:String):String=when(AppStrings.normalizeLanguage
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(if(onePageSettings)2.dp else 4.dp)){
                 OutlinedButton({saveBackup.launch(BackupManager.suggestedFileName(archiveBackup))},Modifier.weight(1.05f).heightIn(min=if(onePageSettings)28.dp else if(compactSettings)32.dp else 36.dp),contentPadding=PaddingValues(horizontal=4.dp,vertical=0.dp)){Text(AppStrings.t(lang,"save_backup"),maxLines=2,textAlign=androidx.compose.ui.text.style.TextAlign.Center)}
                 OutlinedButton({openBackup.launch(arrayOf("application/json","application/zip","text/plain","*/*"))},Modifier.weight(1.05f).heightIn(min=if(onePageSettings)28.dp else if(compactSettings)32.dp else 36.dp),contentPadding=PaddingValues(horizontal=4.dp,vertical=0.dp)){Text(AppStrings.t(lang,"restore"),maxLines=2,textAlign=androidx.compose.ui.text.style.TextAlign.Center)}
-                Row(Modifier.weight(.9f),verticalAlignment=Alignment.CenterVertically){
-                    Text(AppStrings.t(lang,"archive_backup"),Modifier.weight(1f),maxLines=2,style=MaterialTheme.typography.bodySmall)
-                    Checkbox(archiveBackup,{archiveBackup=it},modifier=Modifier.size(if(onePageSettings)28.dp else 32.dp))
-                }
+            }
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+                Text(AppStrings.t(lang,"archive_backup"),Modifier.weight(1f),style=MaterialTheme.typography.bodySmall)
+                Checkbox(archiveBackup,{archiveBackup=it})
             }
         }}
         item{CloudSyncSettingsCard(db,settings,lang,compactSettings)}
-        item{SettingsCard("",verticalPadding=if(compactSettings)6.dp else 8.dp,spacing=3.dp){
-            Text(
-                if(AppStrings.normalizeLanguage(lang)=="ru") "Веб-страница" else "Web page",
-                style=MaterialTheme.typography.titleSmall,
-                maxLines=1
-            )
-            Text(
-                "https://organizer-pro.onrender.com",
-                modifier=Modifier.fillMaxWidth(),
-                style=MaterialTheme.typography.bodySmall,
-                maxLines=2,
-                softWrap=true,
-                overflow=TextOverflow.Visible
-            )
-        }}
         item{SettingsCard("",verticalPadding=infoCardPad,spacing=if(compactSettings)1.dp else 2.dp){
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
                 Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(if(compactSettings)0.dp else 2.dp)){
