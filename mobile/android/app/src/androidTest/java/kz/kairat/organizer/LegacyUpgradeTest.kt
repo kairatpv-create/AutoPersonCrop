@@ -39,7 +39,7 @@ class LegacyUpgradeTest {
         assertEquals("synthetic upgrade file",String(java.util.Base64.getDecoder().decode(attachment.getString("data"))))
         assertEquals("organizer-pro:9999",c.getSharedPreferences("organizer_sync_owner",0).getString("owner",null));db.close()
     }
-    @Test fun verifyVersion72(){
+    @Test fun verifyCandidateUpdate(){
         records();val c=c();val s=SettingsStore(c);s.ensureSecureStorage()
         assertEquals("synthetic-upgrade-token",s.syncIdToken);assertTrue(s.verifyPin("2580"));assertTrue(s.isPinProtectionEnabled())
         assertEquals("en",s.language);assertTrue(s.darkTheme)

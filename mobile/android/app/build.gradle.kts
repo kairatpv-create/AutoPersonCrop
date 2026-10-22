@@ -12,8 +12,8 @@ android {
         applicationId = "kz.kairat.organizer"
         minSdk = 26
         targetSdk = 36
-        versionCode = 72
-        versionName = "0.9.39"
+        versionCode = 73
+        versionName = "0.9.40"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

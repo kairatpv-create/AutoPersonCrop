@@ -25,7 +25,7 @@ failed=0
 checked_case() { run_case "$@" || failed=1; }
 run_case 'kz.kairat.organizer.LegacyUpgradeTest#seedVersion71' upgrade-seed
 adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
-run_case 'kz.kairat.organizer.LegacyUpgradeTest#verifyVersion72' upgrade-verify
+run_case 'kz.kairat.organizer.LegacyUpgradeTest#verifyCandidateUpdate' upgrade-verify
 checked_case kz.kairat.organizer.MobileSafetyTest data-offline-account
 checked_case kz.kairat.organizer.ApkHardeningTest apk-hardening
 checked_case 'kz.kairat.organizer.MobileRestartTest#seed' restart-seed
@@ -40,12 +40,13 @@ if rg -q 'OK \(' android-safety-evidence/expected-crash.txt; then
 fi
 checked_case 'kz.kairat.organizer.MobileCrashTest#recoverAfterHalt' crash-recovery
 adb shell am force-stop kz.kairat.organizer
-adb install -r organizer-apk-stage/Organizer-Pro-v0.9.39-staging.apk
+adb install -r organizer-apk-stage/Organizer-Pro-v0.9.40-staging.apk
 checked_case 'kz.kairat.organizer.LegacyUpgradeTest#verifyReleaseUpdate' release-upgrade
 adb shell svc power stayon true
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard
 checked_case kz.kairat.organizer.MobileUiTest ui-navigation
+checked_case kz.kairat.organizer.EmailBackupImportTest email-backup
 adb pull /sdcard/Android/data/kz.kairat.organizer/files/synthetic-ui android-safety-evidence/ || failed=1
 adb logcat -c
 adb shell am start -W -n kz.kairat.organizer/.MainActivity | tee android-safety-evidence/launch.txt
@@ -57,7 +58,7 @@ import json,re
 from pathlib import Path
 root=Path('android-safety-evidence')
 counts={}
-for name in ['upgrade-seed','upgrade-verify','data-offline-account','apk-hardening','restart-seed','restart-verify','crash-recovery','release-upgrade','ui-navigation']:
+for name in ['upgrade-seed','upgrade-verify','data-offline-account','apk-hardening','restart-seed','restart-verify','crash-recovery','release-upgrade','ui-navigation','email-backup']:
     text=(root/(name+'.txt')).read_text();counts[name]=int(re.search(r'OK \((\d+) tests?\)',text).group(1))
 for lang in ['ru','en']:
     for screen in ['notes','finances','projects','settings']:

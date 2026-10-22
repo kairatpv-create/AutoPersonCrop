@@ -55,6 +55,74 @@ class MobileUiTest {
         File(context.getExternalFilesDir(null),"synthetic-ui").apply{mkdirs()}.resolve("$name.png").outputStream().use{image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)}
         image.recycle()
     }
+    private fun localBackup(db:NoteDatabase,settings:SettingsStore):String =
+        org.json.JSONObject(BackupManager.createBackup(db,settings)).let{it.remove("createdAt");it.toString()}
+
+    @Test fun savedCloudSessionDoesNotSendDataOrExposeAccountControls(){
+        check(InstrumentationRegistry.getArguments().getString("syntheticOnly")=="1")
+        AttachmentStore.initialize(context)
+        val db=NoteDatabase(context);val settings=SettingsStore(context)
+        val originalToken=settings.syncIdToken
+        settings.syncIdToken="synthetic-disabled-cloud-token";settings.setPinProtectionEnabled(false)
+        val credentials=File(context.noBackupFilesDir,"protected-settings/credentials.bin").readBytes()
+        val requests=java.util.concurrent.atomic.AtomicInteger()
+        CloudSync.testTransport={_,_,_,_->requests.incrementAndGet();throw java.io.IOException("Unexpected cloud request")}
+        try{
+            for(lang in listOf("ru","en")){
+                settings.language=lang;settings.fontScale=.85f;settings.buttonFontScale=.85f;settings.darkTheme=false
+                prepareLocale(lang)
+                val before=localBackup(db,settings)
+                val activity=instrumentation.startActivitySync(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                try{
+                    click(AppStrings.t(lang,"settings"))
+                    waitFor(AppStrings.t(lang,"save_backup"));waitFor(AppStrings.t(lang,"restore"))
+                    waitFor(SyncSnapshot.message(lang,"Данные и приватность","Data and privacy"))
+                    fun checkNodes(node:AccessibilityNodeInfo){
+                        val forbidden=listOf("Аккаунт и синхронизация","Account and sync","Email","Архив","Archive")
+                        assertFalse("Removed setting remains: ${node.text}",node.isVisibleToUser&&forbidden.any{it.equals(node.text?.toString(),ignoreCase=true)})
+                        for(i in 0 until node.childCount)node.getChild(i)?.let{checkNodes(it)}
+                    }
+                    checkNodes(checkNotNull(instrumentation.uiAutomation.rootInActiveWindow))
+                    screenshot("$lang-settings-local-only")
+                    Thread.sleep(1000)
+                    assertEquals("Opening the app must not contact the sync server",0,requests.get())
+                    assertEquals(before,localBackup(db,settings))
+                    assertArrayEquals(credentials,File(context.noBackupFilesDir,"protected-settings/credentials.bin").readBytes())
+                }finally{instrumentation.runOnMainSync{activity.finish()}}
+            }
+        }finally{CloudSync.testTransport=null;settings.syncIdToken=originalToken;db.close()}
+    }
+
+    @Test fun zipBackupCanBeSharedAndBothSavedFormatsRemainReadable(){
+        check(InstrumentationRegistry.getArguments().getString("syntheticOnly")=="1")
+        AttachmentStore.initialize(context)
+        val db=NoteDatabase(context);val settings=SettingsStore(context)
+        val files=listOf(File(context.cacheDir,"synthetic-share-backup.zip"),File(context.cacheDir,"synthetic-legacy-backup.json"))
+        try{
+            val json=BackupManager.createBackup(db,settings)
+            val root=org.json.JSONObject(json)
+            assertTrue(root.getJSONArray("notes").length()>0)
+            assertTrue(root.getJSONArray("money").length()>0)
+            assertTrue(root.getJSONArray("attachments").length()>0)
+            val uris=files.map{androidx.core.content.FileProvider.getUriForFile(context,"${context.packageName}.files",it)}
+            BackupManager.writeArchiveToUri(context,uris[0],json)
+            BackupManager.writeToUri(context,uris[1],json)
+            assertEquals(json,BackupManager.readFromUri(context,uris[0]))
+            assertEquals(json,BackupManager.readFromUri(context,uris[1]))
+            val share=BackupSharing.intent(uris[0],"en")
+            assertEquals(Intent.ACTION_SEND,share.action)
+            assertEquals("application/zip",share.type)
+            assertTrue(share.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION!=0)
+            assertEquals(uris[0],share.clipData!!.getItemAt(0).uri)
+            val stream=checkNotNull(share.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM))
+            assertEquals(json,BackupManager.readFromUri(context,stream))
+            assertFalse(share.hasExtra(Intent.EXTRA_EMAIL))
+            assertEquals(json,BackupManager.createBackup(db,settings).let{current->
+                org.json.JSONObject(current).put("createdAt",root.getLong("createdAt")).toString(2)
+            })
+        }finally{files.forEach{it.delete()};db.close()}
+    }
+
     @Test fun pinLocksOnBackgroundAndKeepsTheCurrentScreen(){
         check(InstrumentationRegistry.getArguments().getString("syntheticOnly")=="1")
         val settings=SettingsStore(context);settings.language="en";settings.setPin("2580");settings.setPinProtectionEnabled(false)

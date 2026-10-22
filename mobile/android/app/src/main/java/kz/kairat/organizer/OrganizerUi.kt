@@ -77,7 +77,7 @@ import java.util.Locale
     }
 }
 
-@Composable private fun UnlockScreen(lang:String,store:SettingsStore,onUnlock:()->Unit){
+@Composable internal fun UnlockScreen(lang:String,store:SettingsStore,onUnlock:()->Unit){
     var pin by remember{mutableStateOf("")};var error by remember{mutableStateOf(false)}
     var retry by remember{mutableLongStateOf(store.pinRetrySeconds())}
     LaunchedEffect(Unit){while(true){retry=store.pinRetrySeconds();delay(1000)}}
@@ -86,7 +86,6 @@ import java.util.Locale
 
 @Composable private fun OrganizerHome(db:NoteDatabase,settings:SettingsStore,lang:String,onLanguage:(String)->Unit,dark:Boolean,onDark:(Boolean)->Unit,fontScale:Float,onFont:(Float)->Unit,buttonScale:Float,onButtonScale:(Float)->Unit,bold:Boolean,onBold:(Boolean)->Unit,onLock:()->Unit){
     val context=LocalContext.current
-    CloudSyncAutoHost(db,settings,lang)
     var section by rememberSaveable{mutableStateOf("notes")}
     var editorNoteId by rememberSaveable{mutableStateOf<Long?>(null)}
     var newEditor by rememberSaveable{mutableStateOf(false)}
@@ -1078,7 +1077,7 @@ private fun languagesLabel(lang:String):String=when(AppStrings.normalizeLanguage
 }
 
 @Composable private fun SettingsScreen(db:NoteDatabase,settings:SettingsStore,lang:String,onLanguage:(String)->Unit,dark:Boolean,onDark:(Boolean)->Unit,fontScale:Float,onFont:(Float)->Unit,buttonScale:Float,onButtonScale:(Float)->Unit,bold:Boolean,onBold:(Boolean)->Unit,projectsEnabled:Boolean,onProjectsEnabled:(Boolean)->Unit){
-    val context=LocalContext.current;var msg by remember{mutableStateOf<String?>(null)};var showPin by remember{mutableStateOf(false)};var showDisablePin by remember{mutableStateOf(false)};var showChangePin by remember{mutableStateOf(false)};var languageMenu by remember{mutableStateOf(false)};var archiveBackup by rememberSaveable{mutableStateOf(false)}
+    val context=LocalContext.current;var msg by remember{mutableStateOf<String?>(null)};var showPin by remember{mutableStateOf(false)};var showDisablePin by remember{mutableStateOf(false)};var showChangePin by remember{mutableStateOf(false)};var languageMenu by remember{mutableStateOf(false)};var savedBackup by remember{mutableStateOf<Uri?>(null)};var showPrivacy by remember{mutableStateOf(false)}
     val compactSettings=buttonScale*LocalDensity.current.fontScale<=1.16f
     val onePageSettings=buttonScale*LocalDensity.current.fontScale<=.90f
     val settingsOuterV=if(onePageSettings)0.dp else if(compactSettings)2.dp else 4.dp
@@ -1088,7 +1087,14 @@ private fun languagesLabel(lang:String):String=when(AppStrings.normalizeLanguage
     val pinCardPad=if(onePageSettings)0.dp else if(compactSettings)2.dp else 4.dp
     val backupCardPad=if(onePageSettings)1.dp else if(compactSettings)3.dp else 5.dp
     val infoCardPad=if(onePageSettings)1.dp else if(compactSettings)3.dp else 5.dp
-    val saveBackup=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")){uri->uri?.let{runCatching{val j=BackupManager.createBackup(db,settings);if(archiveBackup)BackupManager.writeArchiveToUri(context,it,j)else BackupManager.writeToUri(context,it,j);settings.lastBackupAt=System.currentTimeMillis()}.onSuccess{msg=AppStrings.t(lang,"backup_ok")}.onFailure{e->msg=e.message}}}
+    val saveBackup=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")){uri->
+        uri?.let{chosen->
+            runCatching{
+                BackupManager.writeArchiveToUri(context,chosen,BackupManager.createBackup(db,settings))
+                settings.lastBackupAt=System.currentTimeMillis()
+            }.onSuccess{msg=AppStrings.t(lang,"backup_ok");savedBackup=chosen}.onFailure{e->msg=e.message}
+        }
+    }
     val openBackup=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let{runCatching{val p=BackupManager.restore(BackupManager.readFromUri(context,it),db,lang);p.darkTheme?.let(onDark);p.fontScale?.let(onFont);p.buttonFontScale?.let(onButtonScale);p.boldText?.let(onBold);p.language?.let(onLanguage);p.projectsEnabled?.let(onProjectsEnabled);settings.backupEmail=p.email;settings.backupMode=p.backupMode;ReminderScheduler.rescheduleAll(context)}.onSuccess{msg=AppStrings.t(lang,"restore_ok")}.onFailure{e->msg=e.message}}}
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal=10.dp,vertical=settingsOuterV),
@@ -1121,15 +1127,11 @@ private fun languagesLabel(lang:String):String=when(AppStrings.normalizeLanguage
         item{SettingsCard("",verticalPadding=pinCardPad,spacing=if(compactSettings)1.dp else 2.dp){val enabled=settings.isPinProtectionEnabled();SettingSwitch(AppStrings.t(lang,"pin"),enabled){want->if(want&&!enabled)showPin=true else if(!want&&enabled)showDisablePin=true};if(enabled)OutlinedButton({showChangePin=true},Modifier.fillMaxWidth().heightIn(min=if(compactSettings)30.dp else 34.dp),contentPadding=PaddingValues(horizontal=10.dp,vertical=0.dp)){Text(AppStrings.t(lang,"change_pin"))}}}
         item{SettingsCard("",verticalPadding=backupCardPad,spacing=if(onePageSettings)0.dp else if(compactSettings)2.dp else 4.dp){
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(if(onePageSettings)2.dp else 4.dp)){
-                OutlinedButton({saveBackup.launch(BackupManager.suggestedFileName(archiveBackup))},Modifier.weight(1.05f).heightIn(min=if(onePageSettings)28.dp else if(compactSettings)32.dp else 36.dp),contentPadding=PaddingValues(horizontal=4.dp,vertical=0.dp)){Text(AppStrings.t(lang,"save_backup"),maxLines=2,textAlign=androidx.compose.ui.text.style.TextAlign.Center)}
+                OutlinedButton({saveBackup.launch(BackupManager.suggestedFileName(true))},Modifier.weight(1.05f).heightIn(min=if(onePageSettings)28.dp else if(compactSettings)32.dp else 36.dp),contentPadding=PaddingValues(horizontal=4.dp,vertical=0.dp)){Text(AppStrings.t(lang,"save_backup"),maxLines=2,textAlign=androidx.compose.ui.text.style.TextAlign.Center)}
                 OutlinedButton({openBackup.launch(arrayOf("application/json","application/zip","text/plain","*/*"))},Modifier.weight(1.05f).heightIn(min=if(onePageSettings)28.dp else if(compactSettings)32.dp else 36.dp),contentPadding=PaddingValues(horizontal=4.dp,vertical=0.dp)){Text(AppStrings.t(lang,"restore"),maxLines=2,textAlign=androidx.compose.ui.text.style.TextAlign.Center)}
             }
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-                Text(AppStrings.t(lang,"archive_backup"),Modifier.weight(1f),style=MaterialTheme.typography.bodySmall)
-                Checkbox(archiveBackup,{archiveBackup=it})
-            }
+            Text(SyncSnapshot.message(lang,"Копию можно отправить себе по e-mail. Для восстановления откройте вложение письма в Органайзере или сохраните его и выберите здесь.","You can email the backup to yourself. To restore, open the email attachment in Organizer or save it and choose it here."),style=MaterialTheme.typography.bodySmall)
         }}
-        item{CloudSyncSettingsCard(db,settings,lang,compactSettings)}
         item{SettingsCard("",verticalPadding=infoCardPad,spacing=if(compactSettings)1.dp else 2.dp){
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
                 Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(if(compactSettings)0.dp else 2.dp)){
@@ -1146,6 +1148,7 @@ private fun languagesLabel(lang:String):String=when(AppStrings.normalizeLanguage
                             }.onFailure{toast(context,it.message?:AppStrings.t(lang,"error"))}
                         }
                     )
+                    TextButton(onClick={showPrivacy=true}){Text(SyncSnapshot.message(lang,"Данные и приватность","Data and privacy"))}
                     Text(AppStrings.t(lang,"copyright"),style=MaterialTheme.typography.bodyMedium)
                 }
                 Spacer(Modifier.width(if(compactSettings)6.dp else 10.dp))
@@ -1154,6 +1157,14 @@ private fun languagesLabel(lang:String):String=when(AppStrings.normalizeLanguage
         }}
         msg?.let{item{Text(it,color=MaterialTheme.colorScheme.primary)}}
     }
+    savedBackup?.let{uri->AlertDialog(
+        onDismissRequest={savedBackup=null},
+        title={Text(AppStrings.t(lang,"backup_ok"))},
+        text={Text(SyncSnapshot.message(lang,"Резервная копия сохранена. Можно отправить её себе через почтовое или другое приложение.","Your backup is saved. You can send it to yourself using an email app or another app."))},
+        confirmButton={TextButton(onClick={savedBackup=null;runCatching{BackupSharing.share(context,uri,lang)}.onFailure{msg=it.message}}){Text(AppStrings.t(lang,"send_backup"))}},
+        dismissButton={TextButton(onClick={savedBackup=null}){Text("OK")}}
+    )}
+    if(showPrivacy)AlertDialog(onDismissRequest={showPrivacy=false},title={Text(SyncSnapshot.message(lang,"Данные и приватность","Data and privacy"))},text={Text(PrivacyNotice.text(lang),modifier=Modifier.verticalScroll(rememberScrollState()))},confirmButton={TextButton(onClick={showPrivacy=false}){Text("OK")}})
     if(showPin)PinSetupDialog(lang,{showPin=false}){pin->settings.setPin(pin);settings.setPinProtectionEnabled(true);showPin=false}
     if(showDisablePin)VerifyPinDialog(lang,settings,AppStrings.t(lang,"disable_pin"),{showDisablePin=false}){settings.setPinProtectionEnabled(false);showDisablePin=false}
     if(showChangePin)ChangePinDialog(lang,settings){showChangePin=false}

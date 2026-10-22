@@ -15,6 +15,8 @@ p=argparse.ArgumentParser()
 p.add_argument('--staging',type=Path,required=True)
 p.add_argument('--signed',type=Path,required=True)
 p.add_argument('--output',type=Path,required=True)
+p.add_argument('--version-name',required=True)
+p.add_argument('--version-code',type=int,required=True)
 a=p.parse_args()
 from loguru import logger
 logger.remove()
@@ -30,7 +32,7 @@ apk=APK(str(a.signed))
 identity={'package':apk.get_package(),'versionName':apk.get_androidversion_name(),'versionCode':int(apk.get_androidversion_code()),
           'minSdk':int(apk.get_min_sdk_version()),'targetSdk':int(apk.get_target_sdk_version()),
           'debuggable':apk.get_attribute_value('application','debuggable')=='true'}
-assert identity=={'package':'kz.kairat.organizer','versionName':'0.9.39','versionCode':72,'minSdk':26,'targetSdk':36,'debuggable':False},identity
+assert identity=={'package':'kz.kairat.organizer','versionName':a.version_name,'versionCode':a.version_code,'minSdk':26,'targetSdk':36,'debuggable':False},identity
 native=[]
 with a.signed.open('rb') as raw,zipfile.ZipFile(a.signed) as archive:
     for item in archive.infolist():

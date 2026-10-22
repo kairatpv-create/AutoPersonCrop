@@ -1,7 +1,7 @@
 name: Verify Organizer Pro APK candidate
 on:
   push:
-    branches: [organizer-sync-release-safety-20261022, organizer-android-apk-20261022]
+    branches: [organizer-sync-release-safety-20261022, organizer-android-apk-20261022, organizer-local-only-20261022]
     paths:
       - 'mobile/android/**'
       - 'organizer-sync-server/**'
@@ -11,7 +11,7 @@ permissions:
   contents: read
 concurrency:
   group: organizer-sync-safety-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref == 'refs/heads/organizer-android-apk-20261022' }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/organizer-android-apk-20261022' || github.ref == 'refs/heads/organizer-local-only-20261022' }}
 jobs:
   server-postgres:
     runs-on: ubuntu-24.04
@@ -64,7 +64,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-          cache-read-only: ${{ github.ref != 'refs/heads/organizer-android-apk-20261022' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/organizer-android-apk-20261022' && github.ref != 'refs/heads/organizer-local-only-20261022' }}
       - name: Create disposable test signing identity
         run: |
           keytool -genkeypair -noprompt -keystore "$ORGANIZER_CI_KEYSTORE" -storepass android -keypass android -alias androiddebugkey -dname "CN=Organizer Pro Synthetic CI" -keyalg RSA -keysize 2048 -validity 30
@@ -91,11 +91,11 @@ jobs:
       - name: Sign release staging APK for emulator testing only
         run: |
           mkdir organizer-apk-stage
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks "$ORGANIZER_CI_KEYSTORE" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true --out organizer-apk-stage/Organizer-Pro-v0.9.39-staging.apk mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs organizer-apk-stage/Organizer-Pro-v0.9.39-staging.apk > organizer-apk-stage/staging-signature.txt
-          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 organizer-apk-stage/Organizer-Pro-v0.9.39-staging.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks "$ORGANIZER_CI_KEYSTORE" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true --out organizer-apk-stage/Organizer-Pro-v0.9.40-staging.apk mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs organizer-apk-stage/Organizer-Pro-v0.9.40-staging.apk > organizer-apk-stage/staging-signature.txt
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 organizer-apk-stage/Organizer-Pro-v0.9.40-staging.apk
           git rev-parse HEAD > organizer-apk-stage/source-commit.txt
-          sha256sum organizer-apk-stage/Organizer-Pro-v0.9.39-staging.apk > organizer-apk-stage/staging-sha256.txt
+          sha256sum organizer-apk-stage/Organizer-Pro-v0.9.40-staging.apk > organizer-apk-stage/staging-sha256.txt
       - name: Enable KVM for the disposable emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -121,6 +121,6 @@ jobs:
           retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
-          name: organizer-0.9.39-tested-staging
+          name: organizer-0.9.40-tested-staging
           path: organizer-apk-stage/
           retention-days: 14
