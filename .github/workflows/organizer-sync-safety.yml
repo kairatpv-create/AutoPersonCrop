@@ -64,6 +64,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
+          cache-read-only: ${{ github.ref != 'refs/heads/organizer-android-apk-20261022' }}
       - name: Create disposable test signing identity
         run: |
           keytool -genkeypair -noprompt -keystore "$ORGANIZER_CI_KEYSTORE" -storepass android -keypass android -alias androiddebugkey -dname "CN=Organizer Pro Synthetic CI" -keyalg RSA -keysize 2048 -validity 30

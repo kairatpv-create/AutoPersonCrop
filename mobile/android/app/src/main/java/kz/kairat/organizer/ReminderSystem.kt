@@ -158,8 +158,9 @@ object ReminderNotifications{
         for(sound in listOf(false,true))for(vibrate in listOf(false,true)) nm.createNotificationChannel(NotificationChannel(channel(sound,vibrate),AppStrings.t(lang,"reminders")+" · "+(if(sound)"♪" else "—")+(if(vibrate)" ≋" else ""),NotificationManager.IMPORTANCE_HIGH).apply{
             description=AppStrings.t(lang,"notification_channel_desc")
             lockscreenVisibility=Notification.VISIBILITY_PRIVATE
+            vibrationPattern=if(vibrate)longArrayOf(0,650,250,650,250,900) else null
+            // setVibrationPattern can enable vibration; apply the requested flag afterwards.
             enableVibration(vibrate)
-            vibrationPattern=longArrayOf(0,650,250,650,250,900)
             setSound(if(sound)alarmUri else null,attrs)
         })
     }
