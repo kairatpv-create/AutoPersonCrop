@@ -23,10 +23,25 @@ class MobileUiTest {
     private fun waitFor(label:String):AccessibilityNodeInfo {
         val deadline=android.os.SystemClock.uptimeMillis()+15000
         while(android.os.SystemClock.uptimeMillis()<deadline){
-            instrumentation.uiAutomation.rootInActiveWindow?.findAccessibilityNodeInfosByText(label)
-                ?.firstOrNull{it.text?.toString()==label&&it.isVisibleToUser}?.let{return it}
+            fun find(node:AccessibilityNodeInfo):AccessibilityNodeInfo?{
+                if(node.text?.toString()==label&&node.isVisibleToUser)return node
+                for(i in 0 until node.childCount)node.getChild(i)?.let{find(it)}?.let{return it}
+                return null
+            }
+            instrumentation.uiAutomation.rootInActiveWindow?.let{find(it)}?.let{return it}
             Thread.sleep(100)
         }
+        val name="failure-"+label.replace(Regex("[^a-zA-Z0-9]"),"_").take(40)
+        runCatching{screenshot(name)}
+        val nodes=org.json.JSONArray()
+        fun dump(node:AccessibilityNodeInfo,depth:Int){
+            nodes.put(org.json.JSONObject().put("depth",depth).put("class",node.className?.toString())
+                .put("text",node.text?.toString()).put("description",node.contentDescription?.toString())
+                .put("visible",node.isVisibleToUser).put("clickable",node.isClickable))
+            for(i in 0 until node.childCount)node.getChild(i)?.let{dump(it,depth+1)}
+        }
+        instrumentation.uiAutomation.rootInActiveWindow?.let{dump(it,0)}
+        File(context.getExternalFilesDir(null),"synthetic-ui").apply{mkdirs()}.resolve("$name.json").writeText(nodes.toString(2))
         error("Visible UI label missing: $label")
     }
     private fun click(label:String){
