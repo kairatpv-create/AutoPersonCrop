@@ -30,7 +30,7 @@ final class CoreTests: XCTestCase {
     }
     func testActualAndroidZIPWithDataDescriptor() throws {
         let zip = try XCTUnwrap(Data(base64Encoded: String(decoding: fixture("android-v6.zip", ext: "base64"), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)))
-        XCTAssertEqual(try BackupCodec.decode(zip), sample())
+        XCTAssertEqual(try BackupCodec.decode(zip), try sample())
     }
     func testSwiftZIPRoundtrip() throws {
         let source = try sample(), zip = try BackupCodec.encode(source)
@@ -81,7 +81,7 @@ final class CoreTests: XCTestCase {
         XCTAssertTrue(try db.load().records("money").isEmpty)
         let safety = try XCTUnwrap(db.safetyCopies().first)
         XCTAssertFalse(try db.safetyCopy(id: safety.id).records("money").isEmpty)
-        try db.restore(db.safetyCopy(id: safety.id)); XCTAssertEqual(try db.fullSnapshot().records("money"), sample().records("money"))
+        try db.restore(db.safetyCopy(id: safety.id)); XCTAssertEqual(try db.fullSnapshot().records("money"), try sample().records("money"))
     }
     func testLegacyLocalVersions() throws {
         for version in 3...6 { var s = try sample(); s.root["version"] = .integer(Int64(version)); XCTAssertNoThrow(try BackupCodec.decode(encoded(s))) }
