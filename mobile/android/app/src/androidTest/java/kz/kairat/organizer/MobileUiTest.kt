@@ -34,6 +34,27 @@ class MobileUiTest {
         File(context.getExternalFilesDir(null),"synthetic-ui").apply{mkdirs()}.resolve("$name.png").outputStream().use{image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)}
         image.recycle()
     }
+    @Test fun pinLocksOnBackgroundAndKeepsTheCurrentScreen(){
+        check(InstrumentationRegistry.getArguments().getString("syntheticOnly")=="1")
+        val settings=SettingsStore(context);settings.language="en";settings.setPin("2580");settings.setPinProtectionEnabled(false)
+        val activity=instrumentation.startActivitySync(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        try{
+            click(AppStrings.t("en","money"));waitFor(AppStrings.t("en","income"));settings.setPinProtectionEnabled(true)
+            instrumentation.uiAutomation.executeShellCommand("input keyevent KEYCODE_HOME").use{fd->java.io.FileInputStream(fd.fileDescriptor).use{it.readBytes()}}
+            Thread.sleep(500)
+            instrumentation.runOnMainSync{context.startActivity(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))}
+            waitFor(AppStrings.t("en","unlock"))
+            instrumentation.runOnMainSync{assertTrue(activity.window.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_SECURE!=0)}
+            fun field(node:AccessibilityNodeInfo):AccessibilityNodeInfo?{
+                if(node.className=="android.widget.EditText")return node
+                for(i in 0 until node.childCount)node.getChild(i)?.let{field(it)}?.let{return it}
+                return null
+            }
+            val edit=checkNotNull(field(checkNotNull(instrumentation.uiAutomation.rootInActiveWindow)))
+            assertTrue(edit.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,android.os.Bundle().apply{putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,"2580")}))
+            click(AppStrings.t("en","confirm"));waitFor(AppStrings.t("en","income"))
+        }finally{settings.setPinProtectionEnabled(false);instrumentation.runOnMainSync{activity.finish()}}
+    }
     @Test fun russianEnglishNavigationAndLargeTextRender(){
         check(InstrumentationRegistry.getArguments().getString("syntheticOnly")=="1")
         for((lang,dark,scale) in listOf(Triple("ru",false,1f),Triple("en",true,1.45f))){

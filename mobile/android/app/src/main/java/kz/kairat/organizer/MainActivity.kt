@@ -14,6 +14,8 @@ import androidx.compose.runtime.setValue
 
 class MainActivity:ComponentActivity(){
     private var ready=false
+    private var backgroundLocked=false
+    private var backgroundPinDialog:AlertDialog?=null
     private var pinRequest by androidx.compose.runtime.mutableStateOf("")
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
@@ -49,7 +51,48 @@ class MainActivity:ComponentActivity(){
     override fun onResume(){
         super.onResume()
         if(!ready)return
+        protectWindow()
+        if(backgroundLocked&&backgroundPinDialog==null)showBackgroundPin()
         scheduleReminders()
+    }
+    override fun onPause(){
+        if(ready)protectWindow()
+        super.onPause()
+    }
+    override fun onStop(){
+        if(ready&&!isChangingConfigurations&&SettingsStore(this).isPinProtectionEnabled())backgroundLocked=true
+        backgroundPinDialog?.dismiss();backgroundPinDialog=null
+        super.onStop()
+    }
+    private fun protectWindow(){
+        if(SettingsStore(this).isPinProtectionEnabled())window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+    }
+    /** Overlay the existing editor so locking on background does not discard an unsaved UI draft. */
+    private fun showBackgroundPin(){
+        val settings=SettingsStore(this)
+        if(!settings.isPinProtectionEnabled()){backgroundLocked=false;return}
+        val lang=settings.language
+        val input=android.widget.EditText(this).apply{
+            inputType=android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            filters=arrayOf(android.text.InputFilter.LengthFilter(12))
+            importantForAutofill=android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+        }
+        val dialog=AlertDialog.Builder(this).setTitle(AppStrings.t(lang,"unlock")).setView(input).setCancelable(false)
+            .setPositiveButton(AppStrings.t(lang,"confirm"),null)
+            .setNegativeButton(if(lang=="ru")"Закрыть" else "Close"){_,_->finish()}.create()
+        backgroundPinDialog=dialog
+        dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        dialog.show()
+        dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener{
+            if(settings.verifyPin(input.text.toString())){backgroundLocked=false;backgroundPinDialog=null;dialog.dismiss()}
+            else {
+                val wait=settings.pinRetrySeconds()
+                input.error=if(wait>0) (if(lang=="ru")"Повторите через $wait с" else "Try again in $wait s") else AppStrings.t(lang,"wrong_pin")
+                input.text.clear()
+            }
+        }
     }
     private fun scheduleReminders(){
         ReminderNotifications.ensureChannel(this)
