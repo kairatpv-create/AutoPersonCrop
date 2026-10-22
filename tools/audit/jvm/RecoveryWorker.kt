@@ -45,8 +45,9 @@ internal object RecoveryWorker {
         }
         check(mode=="snapshot")
         val backup=JSONObject(BackupManager.createBackup(db,SettingsStore(context))).apply{remove("createdAt")}
-        val prefs=JSONObject(File(context.sandbox,"shared_prefs/organizer_settings.json").readText())
-        val protected=JSONObject()
+        val preferenceFile=File(context.sandbox,"shared_prefs/organizer_preferences.json").takeIf{it.isFile}?:File(context.sandbox,"shared_prefs/organizer_settings.json")
+        val prefs=JSONObject(preferenceFile.readText())
+        val protected=JSONObject().put("encryptedCredentials",JSONObject(d06Files(File(context.noBackupFilesDir,"protected-settings"))))
         prefs.keys().forEach{key->if(key.startsWith("pin_")||key.startsWith("sync_")||key=="last_backup_at")protected.put(key,prefs.get(key))}
         val files=d06Files(File(context.filesDir,"attachments")).filterKeys{it!=".organizer-restore-generation"}
         val pending=context.filesDir.listFiles().orEmpty().count{it.name.startsWith("attachments-restore-")||it.name=="organizer-restore.json"||it.name=="organizer-restore.done"}

@@ -558,6 +558,7 @@ private fun decodeAttachmentThumbnail(file:File):android.graphics.Bitmap?{
             item{
                 Button(
                     onClick={submit()},
+                    enabled=(parseAmountInput(amount)?:0.0)>0.0,
                     modifier=Modifier.fillMaxWidth(),
                     colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.tertiary,contentColor=MaterialTheme.colorScheme.onTertiary)
                 ){
@@ -644,7 +645,7 @@ private fun decodeAttachmentThumbnail(file:File):android.graphics.Bitmap?{
 @Composable private fun AddProjectStageDialog(db:NoteDatabase,projectId:Long,lang:String,onDismiss:()->Unit,onAdded:()->Unit){
     val context=LocalContext.current
     var title by remember{mutableStateOf("")};var due by remember{mutableLongStateOf(0L)}
-    AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"add_stage"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(title,{title=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"title"))},textStyle=userTextStyle(),singleLine=true);OutlinedButton({launchDatePicker(context,if(due>0)due else System.currentTimeMillis()){due=it}},Modifier.fillMaxWidth()){Icon(Icons.Default.Event,null);Spacer(Modifier.width(6.dp));Text(if(due>0)formatDay(due) else AppStrings.t(lang,"due_date"))}}},confirmButton={Button({if(title.isNotBlank()){db.addProjectStage(projectId,title.trim(),due);onAdded()}}){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
+    AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"add_stage"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(title,{title=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"title"))},textStyle=userTextStyle(),singleLine=true);OutlinedButton({launchDatePicker(context,if(due>0)due else System.currentTimeMillis()){due=it}},Modifier.fillMaxWidth()){Icon(Icons.Default.Event,null);Spacer(Modifier.width(6.dp));Text(if(due>0)formatDay(due) else AppStrings.t(lang,"due_date"))}}},confirmButton={Button({if(title.isNotBlank()){db.addProjectStage(projectId,title.trim(),due);onAdded()}},enabled=(parseAmountInput(amount)?:0.0)>0.0){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
 }
 
 @Composable private fun ProjectFinanceTab(db:NoteDatabase,project:Project,lang:String,revision:Int,onChanged:()->Unit){
@@ -661,16 +662,16 @@ private fun decodeAttachmentThumbnail(file:File):android.graphics.Bitmap?{
     if(add)AddProjectMoneyDialog(db,project.id,lang,{add=false}){add=false;onChanged()}
 }
 
-@Composable private fun ProjectMoneySummaryRow(label:String,amount:Double,color:Color){Row(Modifier.fillMaxWidth()){Text(label,style=MaterialTheme.typography.titleMedium,modifier=Modifier.weight(1f));Text("%,.0f ₸".format(amount),style=MaterialTheme.typography.titleMedium,color=color)}}
+@Composable private fun ProjectMoneySummaryRow(label:String,amount:Double,color:Color){Row(Modifier.fillMaxWidth()){Text(label,style=MaterialTheme.typography.titleMedium,modifier=Modifier.weight(1f));Text(MoneyAmounts.display(amount),style=MaterialTheme.typography.titleMedium,color=color)}}
 
 @Composable private fun AddProjectMoneyDialog(db:NoteDatabase,projectId:Long,lang:String,onDismiss:()->Unit,onAdded:()->Unit){
     var type by remember{mutableStateOf("expense")};var amount by remember{mutableStateOf("")};var cat by remember{mutableStateOf("")};var note by remember{mutableStateOf("")}
     AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"project_finance"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
         Row{FilterChip(type=="expense",{type="expense"},{Text(AppStrings.t(lang,"expense"))});Spacer(Modifier.width(8.dp));FilterChip(type=="income",{type="income"},{Text(AppStrings.t(lang,"income"))})}
-        OutlinedTextField(amount,{amount=formatAmountInput(it)},label={Text(AppStrings.t(lang,"amount"))},textStyle=userTextStyle(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
+        OutlinedTextField(amount,{amount=formatAmountInput(it)},label={Text(AppStrings.t(lang,"amount"))},textStyle=userTextStyle(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,isError=amount.isNotBlank()&&((parseAmountInput(amount)?:0.0)<=0.0),supportingText={if(amount.isNotBlank()&&((parseAmountInput(amount)?:0.0)<=0.0))Text(if(lang=="ru")"Введите сумму больше нуля" else "Enter an amount greater than zero")})
         SuggestionTextField(cat,{cat=capitalizeSentences(it)},AppStrings.t(lang,"category"),db.getMoneyCategorySuggestions(cat),{cat=it},{db.hideSuggestion("money_category",it)},Modifier.fillMaxWidth())
         OutlinedTextField(note,{note=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"comment"))},textStyle=userTextStyle())
-    }},confirmButton={Button({parseAmountInput(amount)?.takeIf{it>0.0}?.let{db.addMoneyEntry(type,it,cat,projectId,note);onAdded()}}){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
+    }},confirmButton={Button({parseAmountInput(amount)?.takeIf{it>0.0}?.let{db.addMoneyEntry(type,it,cat,projectId,note);onAdded()}},enabled=(parseAmountInput(amount)?:0.0)>0.0){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
 }
 
 @Composable private fun ProjectFilesTab(project:Project,lang:String,revision:Int,onChanged:()->Unit){
@@ -714,17 +715,17 @@ private fun decodeAttachmentThumbnail(file:File):android.graphics.Bitmap?{
         item{Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(5.dp)){listOf("planned","in_progress","paused","completed").forEach{st->FilterChip(selected=status==st,onClick={status=st},label={Text(projectStatusText(lang,st),maxLines=1,style=MaterialTheme.typography.labelSmall)})}}}
         item{Text("${AppStrings.t(lang,"progress")}: ${progress.toInt()}%",style=MaterialTheme.typography.bodyMedium);Slider(progress,{progress=it},valueRange=0f..100f,steps=19)}
         item{Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){OutlinedButton({launchDatePicker(context,if(startAt>0)startAt else System.currentTimeMillis()){startAt=it}},Modifier.weight(1f)){Text(if(startAt>0)formatDay(startAt) else AppStrings.t(lang,"start_date"),maxLines=1,overflow=TextOverflow.Ellipsis)};OutlinedButton({launchDatePicker(context,if(dueAt>0)dueAt else System.currentTimeMillis()){dueAt=it}},Modifier.weight(1f)){Text(if(dueAt>0)formatDay(dueAt) else AppStrings.t(lang,"due_date"),maxLines=1,overflow=TextOverflow.Ellipsis)}}}
-        item{OutlinedTextField(budget,{budget=formatAmountInput(it)},label={Text(AppStrings.t(lang,"budget"))},textStyle=userTextStyle(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.fillMaxWidth())}
+        item{OutlinedTextField(budget,{budget=formatAmountInput(it)},label={Text(AppStrings.t(lang,"budget"))},textStyle=userTextStyle(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.fillMaxWidth(),isError=budget.isNotBlank()&&parseAmountInput(budget)==null,supportingText={if(budget.isNotBlank()&&parseAmountInput(budget)==null)Text(if(lang=="ru")"Введите корректный бюджет" else "Enter a valid budget")})}
         item{OutlinedTextField(client,{client=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"client"))},textStyle=userTextStyle(),singleLine=true,modifier=Modifier.fillMaxWidth())}
         item{OutlinedTextField(address,{address=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"address"))},textStyle=userTextStyle(),singleLine=true,modifier=Modifier.fillMaxWidth())}
         item{OutlinedTextField(contact,{contact=it},label={Text(AppStrings.t(lang,"contact"))},textStyle=userTextStyle(),singleLine=true,modifier=Modifier.fillMaxWidth())}
-    }},confirmButton={Button({if(name.isNotBlank()&&(budget.isBlank()||parseAmountInput(budget)!=null)){db.saveProject(project.id,name.trim(),description.trim(),status,progress.toInt(),startAt,dueAt,parseAmountInput(budget)?:0.0,client.trim(),address.trim(),contact.trim(),project.colorKey);onSaved()}}){Text(AppStrings.t(lang,"save"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
+    }},confirmButton={Button({if(name.isNotBlank()&&(budget.isBlank()||parseAmountInput(budget)!=null)){db.saveProject(project.id,name.trim(),description.trim(),status,progress.toInt(),startAt,dueAt,parseAmountInput(budget)?:0.0,client.trim(),address.trim(),contact.trim(),project.colorKey);onSaved()}},enabled=name.isNotBlank()&&(budget.isBlank()||parseAmountInput(budget)!=null)){Text(AppStrings.t(lang,"save"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
 }
 
 @Composable private fun AddProjectJournalDialog(db:NoteDatabase,projectId:Long,lang:String,onDismiss:()->Unit,onAdded:()->Unit){
     var text by remember{mutableStateOf("")}
     val speech=rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){r->if(r.resultCode==Activity.RESULT_OK){val spoken=r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty();text=appendRecognizedText(text,spoken)}}
-    AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"add_journal"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(text,{text=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"note"))},textStyle=userTextStyle(),minLines=5,modifier=Modifier.fillMaxWidth());OutlinedButton({runCatching{speech.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,AppStrings.localeTag(lang))})}},Modifier.fillMaxWidth()){Icon(Icons.Default.KeyboardVoice,null);Spacer(Modifier.width(6.dp));Text(AppStrings.t(lang,"to_text"))}}},confirmButton={Button({if(text.isNotBlank()){db.addProjectJournal(projectId,text.trim());onAdded()}}){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
+    AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"add_journal"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(text,{text=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"note"))},textStyle=userTextStyle(),minLines=5,modifier=Modifier.fillMaxWidth());OutlinedButton({runCatching{speech.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,AppStrings.localeTag(lang))})}},Modifier.fillMaxWidth()){Icon(Icons.Default.KeyboardVoice,null);Spacer(Modifier.width(6.dp));Text(AppStrings.t(lang,"to_text"))}}},confirmButton={Button({if(text.isNotBlank()){db.addProjectJournal(projectId,text.trim());onAdded()}},enabled=(parseAmountInput(amount)?:0.0)>0.0){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
 }
 
 @Composable private fun LinkNoteDialog(db:NoteDatabase,projectId:Long,lang:String,onDismiss:()->Unit,onChanged:()->Unit){
@@ -930,6 +931,8 @@ private fun moneyMonthPoints(entries:List<MoneyEntry>,lang:String):List<MoneyMon
                     {amount=formatAmountInput(it)},
                     Modifier.fillMaxWidth(),
                     label={Text(AppStrings.t(lang,"amount"))},
+                    isError=amount.isNotBlank()&&((parseAmountInput(amount)?:0.0)<=0.0),
+                    supportingText={if(amount.isNotBlank()&&((parseAmountInput(amount)?:0.0)<=0.0))Text(if(lang=="ru")"Введите сумму больше нуля" else "Enter an amount greater than zero")},
                     textStyle=userTextStyle(),
                     keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),
                     singleLine=true
@@ -959,6 +962,7 @@ private fun moneyMonthPoints(entries:List<MoneyEntry>,lang:String):List<MoneyMon
             item{
                 Button(
                     onClick={submit()},
+                    enabled=(parseAmountInput(amount)?:0.0)>0.0,
                     modifier=Modifier.fillMaxWidth(),
                     colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.tertiary,contentColor=MaterialTheme.colorScheme.onTertiary)
                 ){
