@@ -50,7 +50,7 @@ jobs:
           retention-days: 14
   android-emulator:
     env:
-      ORGANIZER_CI_KEYSTORE: ${{ runner.temp }}/organizer-ci-test.jks
+      ORGANIZER_CI_KEYSTORE: /tmp/organizer-ci-test.jks
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:

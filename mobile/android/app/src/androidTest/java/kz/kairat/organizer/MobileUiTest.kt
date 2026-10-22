@@ -14,6 +14,12 @@ import java.io.File
 class MobileUiTest {
     private val instrumentation get()=InstrumentationRegistry.getInstrumentation()
     private val context get()=instrumentation.targetContext
+    private fun prepareLocale(lang:String){
+        instrumentation.runOnMainSync{
+            context.getSystemService(android.app.LocaleManager::class.java).applicationLocales=android.os.LocaleList.forLanguageTags(AppStrings.localeTag(lang))
+        }
+        instrumentation.waitForIdleSync()
+    }
     private fun waitFor(label:String):AccessibilityNodeInfo {
         val deadline=android.os.SystemClock.uptimeMillis()+15000
         while(android.os.SystemClock.uptimeMillis()<deadline){
@@ -37,6 +43,7 @@ class MobileUiTest {
     @Test fun pinLocksOnBackgroundAndKeepsTheCurrentScreen(){
         check(InstrumentationRegistry.getArguments().getString("syntheticOnly")=="1")
         val settings=SettingsStore(context);settings.language="en";settings.setPin("2580");settings.setPinProtectionEnabled(false)
+        prepareLocale("en")
         val activity=instrumentation.startActivitySync(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
         try{
             click(AppStrings.t("en","money"));waitFor(AppStrings.t("en","income"));settings.setPinProtectionEnabled(true)
@@ -59,6 +66,7 @@ class MobileUiTest {
         check(InstrumentationRegistry.getArguments().getString("syntheticOnly")=="1")
         for((lang,dark,scale) in listOf(Triple("ru",false,1f),Triple("en",true,1.45f))){
             val settings=SettingsStore(context);settings.language=lang;settings.darkTheme=dark;settings.fontScale=scale;settings.buttonFontScale=scale
+            prepareLocale(lang)
             val activity=instrumentation.startActivitySync(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
             try{
                 waitFor(AppStrings.t(lang,"notes"));screenshot("$lang-notes")
