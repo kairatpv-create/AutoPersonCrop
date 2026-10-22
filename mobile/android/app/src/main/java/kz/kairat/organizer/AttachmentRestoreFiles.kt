@@ -20,6 +20,13 @@ internal open class AttachmentRestoreFiles {
     open fun write(file: File, bytes: ByteArray) {
         FileOutputStream(file).use { out -> out.write(bytes); out.fd.sync() }
     }
+    open fun copyFile(source: File, destination: File) {
+        if (destination.exists()) throw IOException("Safety copy destination already exists")
+        source.inputStream().use { input -> FileOutputStream(destination).use { output ->
+            input.copyTo(output, 8192); output.fd.sync()
+        } }
+    }
+    open fun syncFile(file:File) { java.io.RandomAccessFile(file,"rw").use{it.fd.sync()} }
     open fun move(from: File, to: File) {
         if (to.exists() || !from.renameTo(to)) throw IOException("Cannot move attachment restore directory")
     }

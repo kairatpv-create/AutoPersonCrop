@@ -50,7 +50,7 @@ private fun files(directory: File) = directory.walkTopDown().filter { it.isFile 
 }
 private data class Snapshot(val data: JSONObject, val files: Map<String, String>)
 private fun snapshot(f: Fixture) = Snapshot(f.backup().apply { remove("createdAt") },
-    files(f.context.sandbox).filterKeys { !it.startsWith("cache/") })
+    files(f.context.sandbox).filterKeys { !it.startsWith("cache/")&&!it.startsWith("no_backup/restore-safety/") })
 private fun unchanged(before: Snapshot, target: Fixture) {
     val after = snapshot(target)
     check(before.data.similar(after.data)) { "Existing records, preferences or attachments changed" }

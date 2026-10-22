@@ -12,6 +12,7 @@ internal object BackupValidation {
     private class Invalid(val field: String, val duplicate: Boolean = false) : RuntimeException()
 
     fun parse(json: String, lang: String): JSONObject {
+        BackupImportLimits.checkJson(json,lang)
         try {
             val input = JSONTokener(json)
             val root = input.nextValue() as? JSONObject ?: throw Invalid("JSON")
@@ -57,6 +58,7 @@ internal object BackupValidation {
                 settingsFields(settings)
             }
             if (version < 7 || root.has("attachments")) {
+                root.optJSONArray("attachments")?.let { BackupImportLimits.checkAttachments(it,lang) }
                 attachmentRecords(root)
             }
             return root
@@ -68,6 +70,7 @@ internal object BackupValidation {
     }
 
     fun attachments(array: JSONArray, lang: String) {
+        BackupImportLimits.checkAttachments(array,lang)
         try { attachmentRecords(JSONObject().put("attachments", array)) }
         catch (e: Invalid) { throw error(lang, e.field, e.duplicate) }
         catch (_: JSONException) { throw error(lang, "attachments") }

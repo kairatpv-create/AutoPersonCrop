@@ -8,15 +8,25 @@ import java.sql.DriverManager
 
 /** Executes the real application's SQL on SQLite JDBC, emulating Android's insert return value. */
 class SQLiteDatabase(private val c:Connection) {
-    companion object{const val CONFLICT_IGNORE=4;const val CONFLICT_REPLACE=5}
+    companion object{
+        const val CONFLICT_IGNORE=4;const val CONFLICT_REPLACE=5;const val OPEN_READONLY=1
+        fun openOrCreateDatabase(file:java.io.File,factory:Any?):SQLiteDatabase{Class.forName("org.sqlite.JDBC");return SQLiteDatabase(DriverManager.getConnection("jdbc:sqlite:"+file.absolutePath))}
+        fun openDatabase(path:String,factory:Any?,flags:Int):SQLiteDatabase{
+            Class.forName("org.sqlite.JDBC")
+            return SQLiteDatabase(DriverManager.getConnection("jdbc:sqlite:file:"+java.io.File(path).absolutePath+if(flags==OPEN_READONLY)"?mode=ro" else ""))
+        }
+    }
     private var successful=false
-    fun execSQL(sql:String,args:Array<out Any?>?=null){c.prepareStatement(sql).use{s->args?.forEachIndexed{i,v->s.setObject(i+1,v)};s.execute()}}
+    private var safetyRows=0
+    fun execSQL(sql:String,args:Array<out Any?>?=null){c.prepareStatement(sql).use{s->args?.forEachIndexed{i,v->s.setObject(i+1,v)};s.execute()}
+        if(System.getProperty("organizer.audit.haltSafetySql")=="true"&&c.metaData.url.contains("/restore-safety/")&&sql.startsWith("INSERT INTO")&&++safetyRows==2)Runtime.getRuntime().halt(73)
+    }
     fun rawQuery(sql:String,args:Array<String>?):Cursor = c.prepareStatement(sql).use{s->
         args?.forEachIndexed{i,v->s.setString(i+1,v)}
         s.executeQuery().use{r->
             val rows=mutableListOf<List<Any?>>()
             while(r.next())rows.add((1..r.metaData.columnCount).map{r.getObject(it)})
-            Cursor(rows)
+            Cursor(rows,Array(r.metaData.columnCount){r.metaData.getColumnName(it+1)})
         }
     }
     fun insertOrThrow(table:String,nullColumnHack:String?,v:ContentValues):Long=insertInternal(table,v,"")
@@ -30,13 +40,15 @@ class SQLiteDatabase(private val c:Connection) {
         (v.values.toList()+args.toList()).forEachIndexed{i,x->s.setObject(i+1,x)};s.executeUpdate()
     }
     fun delete(table:String,where:String?,args:Array<String>?):Int=c.prepareStatement("DELETE FROM $table"+(where?.let{" WHERE $it"}?:"")).use{s->args?.forEachIndexed{i,v->s.setString(i+1,v)};s.executeUpdate()}
-    fun beginTransaction(){c.autoCommit=false;successful=false}
+    fun beginTransaction(){(c as org.sqlite.SQLiteConnection).connectionConfig.transactionMode=org.sqlite.SQLiteConfig.TransactionMode.EXCLUSIVE;c.autoCommit=false;successful=false}
+    fun inTransaction()=!c.autoCommit
     fun setTransactionSuccessful(){successful=true}
     fun endTransaction(){
         if(successful){
             c.commit()
-            if(System.getProperty("organizer.audit.afterCommit")=="halt")Runtime.getRuntime().halt(73)
-            if(System.getProperty("organizer.audit.afterCommit")=="throw"){
+            val main=c.metaData.url.endsWith("/organizer.db")&&!c.metaData.url.contains("/restore-safety/")
+            if(main&&System.getProperty("organizer.audit.afterCommit")=="halt")Runtime.getRuntime().halt(73)
+            if(main&&System.getProperty("organizer.audit.afterCommit")=="throw"){
                 c.autoCommit=true
                 throw java.io.IOException("Host-only loss of COMMIT acknowledgement")
             }

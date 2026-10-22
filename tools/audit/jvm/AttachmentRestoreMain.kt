@@ -28,8 +28,9 @@ private class FaultFiles(private val phase: String) : AttachmentRestoreFiles() {
         super.write(file, bytes)
     }
     override fun move(from: File, to: File) {
-        if(from.isDirectory)moves++
-        if (from.isDirectory&&(phase == "move-$moves" || phase == "rollback-fails" && moves in 2..3)) throw IOException("D06 injected rename failure")
+        val attachment=from.isDirectory&&(from.name=="attachments"||to.name=="attachments"||to.name=="previous")
+        if(attachment)moves++
+        if (attachment&&(phase == "move-$moves" || phase == "rollback-fails" && moves in 2..3)) throw IOException("D06 injected rename failure")
         super.move(from, to)
     }
     override fun remove(directory: File) {

@@ -11,7 +11,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 object BackupManager {
@@ -27,10 +26,11 @@ object BackupManager {
         root.put("projectNoteLinks",JSONArray().apply{db.getProjectNoteLinks().forEach{l->put(JSONObject().apply{put("projectId",l.projectId);put("noteId",l.noteId)})}})
         root.put("money",JSONArray().apply{db.getMoneyEntries().forEach{m->put(JSONObject().apply{put("id",m.id);put("type",m.type);put("amount",m.amount);put("category",m.category);if(m.projectId!=null)put("projectId",m.projectId);put("projectName",m.projectName);put("note",m.note);put("createdAt",m.createdAt);put("colorKey",m.colorKey)})}})
         root.put("reminders",JSONArray().apply{db.getReminders().forEach{r->put(JSONObject().apply{put("id",r.id);put("targetType",r.targetType);put("targetId",r.targetId);put("triggerAt",r.triggerAt);put("sound",r.sound);put("vibrate",r.vibrate);put("soundKey",r.soundKey);put("createdAt",r.createdAt);put("scheduleType",r.scheduleType);put("daysMask",r.daysMask);put("dayMode",r.dayMode);put("baseMinutes",r.baseMinutes)})}})
-        root.put("settings",JSONObject().apply{put("darkTheme",settings.darkTheme);put("fontScale",settings.fontScale);put("contentFontScale",settings.fontScale);put("buttonFontScale",settings.buttonFontScale);put("boldText",settings.boldText);put("projectsEnabled",settings.projectsEnabled);put("backupMode",settings.backupMode);put("email",settings.backupEmail);put("language",settings.language)})
+        root.put("settings",exportedSettings(settings))
         root.put("attachments",AttachmentStore.exportBackup())
         return root.toString(2)
     }
+    internal fun exportedSettings(settings:SettingsStore)=JSONObject().apply{put("darkTheme",settings.darkTheme);put("fontScale",settings.fontScale);put("contentFontScale",settings.fontScale);put("buttonFontScale",settings.buttonFontScale);put("boldText",settings.boldText);put("projectsEnabled",settings.projectsEnabled);put("backupMode",settings.backupMode);put("email",settings.backupEmail);put("language",settings.language)}
     fun restore(json:String,db:NoteDatabase,lang:String="en"):RestoredPreferences{
         return restore(json,db,lang,AttachmentRestoreFiles())
     }
@@ -51,8 +51,8 @@ object BackupManager {
         val preferences=preferences(root.optJSONObject("settings")?:JSONObject())
         val attachments=root.optJSONArray("attachments")
         if(attachments==null)db.replaceAll(notes,tasks,projects,money,reminders,stages,journal,links)
-        else AttachmentStore.withDatabaseBackup(attachments,lang,files,db,root.optJSONObject("settings")){install,token->
-            db.replaceAll(notes,tasks,projects,money,reminders,stages,journal,links,beforeCommit=install,restoreToken=token)
+        else AttachmentStore.withDatabaseBackup(attachments,lang,files,db,root.optJSONObject("settings")){install,token,safety->
+            db.replaceAll(notes,tasks,projects,money,reminders,stages,journal,links,beforeCommit=install,restoreToken=token,beforeReplace=safety)
         }
         return preferences
     }
@@ -80,17 +80,7 @@ object BackupManager {
         }
     }
     fun readFromUri(context:Context,uri:Uri):String{
-        val bytes=context.contentResolver.openInputStream(uri)!!.use{it.readBytes()}
-        val zipped=bytes.size>=4&&bytes[0]==0x50.toByte()&&bytes[1]==0x4b.toByte()
-        if(!zipped)return bytes.toString(Charsets.UTF_8)
-        ZipInputStream(bytes.inputStream()).use{zip->
-            var entry=zip.nextEntry
-            while(entry!=null){
-                if(!entry.isDirectory)return zip.readBytes().toString(Charsets.UTF_8)
-                entry=zip.nextEntry
-            }
-        }
-        throw IllegalArgumentException("Empty backup archive")
+        return context.contentResolver.openInputStream(uri)!!.use{BackupImportReader.read(it,context.cacheDir,SettingsStore(context).language)}
     }
     fun shareBackup(context:Context,json:String,email:String="",lang:String="en"){
         val dir=File(context.cacheDir,"backups").apply{mkdirs()}; val f=File(dir,suggestedFileName()).apply{writeText(json)}; val uri=FileProvider.getUriForFile(context,"${context.packageName}.files",f)

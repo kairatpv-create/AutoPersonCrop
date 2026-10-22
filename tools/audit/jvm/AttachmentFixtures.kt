@@ -50,7 +50,7 @@ internal fun d06Files(directory: File): Map<String, String> = directory.walkTopD
 }
 internal data class D06Snapshot(val data: JSONObject, val files: Map<String, String>)
 internal fun d06Snapshot(f: D06Fixture) = D06Snapshot(f.backup().apply { remove("createdAt") },
-    d06Files(f.context.sandbox).filterKeys { !it.startsWith("cache/") })
+    d06Files(f.context.sandbox).filterKeys { !it.startsWith("cache/")&&!it.startsWith("no_backup/restore-safety/") })
 internal fun d06Unchanged(before: D06Snapshot, target: D06Fixture) {
     val after = d06Snapshot(target)
     check(before.data.similar(after.data)) { "Existing records, settings or attachment index changed" }

@@ -86,6 +86,40 @@ old API surface and is independent of the journal's internal state schema.
 These are host process-restart tests, not Android instrumentation, phone
 testing, power-cut testing or proof against arbitrary storage corruption.
 
+### D14 bounded imports and persistent safety snapshots
+
+Use `--suite import-safety` to exercise bounded unknown-length/zero-read streams,
+UTF-8 byte limits, ZIP expanded/compressed limits, directory/count/CRC checks,
+truncated and ambiguous archives, nesting/value/Base64 allocation limits, and
+real public URI imports in separate 64 MiB JVMs. All refusals compare live data
+and file hashes. No provider size metadata is trusted.
+
+Native pre-import snapshots are verified and copied into fresh synthetic
+contexts to test recovery of all exported sections, all attachment bytes,
+fractional SQL budgets, BLOB/NULL/64-bit values, hidden suggestions, schema
+objects and AUTOINCREMENT counters. Both DELETE/WAL source databases are used,
+including committed WAL frames. Faults cover preparation, copy/partial copy,
+checksum mismatch, file/directory sync, publication and SQL replacement.
+Separate processes are halted during SQL/file/manifest creation and publication.
+Two cached-connection writer tests check that a concurrent note survives after
+restore commits; source snapshot and replacement share the same SQL transaction.
+
+Host Cursor type/name metadata and SQLite open/read-only APIs are adapted using
+SQLite JDBC. `beginTransaction` requests EXCLUSIVE mode, matching the Android
+API contract; this does not replace Android connection-pool testing. JVM perf
+data is disabled for isolated PID namespaces. The COMMIT-loss fault applies
+only to the live database, not the independent snapshot database.
+
+Use `--suite import-safety-probe` against the preceding D14 source commit and
+the current source. The old API-compatible probes require refusal of a ZIP
+with two documents and retention of a safety snapshot after a successful import.
+Both probes are expected to fail on the previous implementation and pass here.
+
+Snapshot files under `no_backup/restore-safety/` are intentionally excluded only
+from live-state hash comparisons: their creation is the feature being tested.
+Live database files/counters, attachment files/index and preferences remain
+covered. Every refusal during preflight must still create no published snapshot.
+
 Supplied JARs for the recorded run: Kotlin compiler 2.1.21 and its POM runtime
 dependencies, org.json 20240303, JetBrains annotations 13.0, SQLite JDBC
 3.46.1.0, slf4j-api/nop 2.0.13. Downloaded tools are not committed.

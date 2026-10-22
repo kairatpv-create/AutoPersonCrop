@@ -9,6 +9,7 @@ open class Context(val sandbox:File) {
     companion object { const val MODE_PRIVATE=0 }
     val filesDir=File(sandbox,"files").apply{mkdirs()}
     val cacheDir=File(sandbox,"cache").apply{mkdirs()}
+    val noBackupFilesDir=File(sandbox,"no_backup").apply{mkdirs()}
     val applicationContext:Context get()=this
     val packageName="kz.kairat.organizer.audit"
     val contentResolver=ContentResolver()

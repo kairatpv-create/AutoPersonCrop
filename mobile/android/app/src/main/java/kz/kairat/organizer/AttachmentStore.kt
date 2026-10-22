@@ -79,9 +79,15 @@ object AttachmentStore {
     @Synchronized internal fun withPreparedBackup(a:JSONArray,lang:String,io:AttachmentRestoreFiles,replace:((()->Unit)->Unit)){
         withJournalBackup(a,lang,io,false,null){install,_->replace(install)}
     }
-    internal fun withDatabaseBackup(a:JSONArray,lang:String,io:AttachmentRestoreFiles,db:NoteDatabase,settings:JSONObject?,replace:((()->Unit,String)->Unit)){
-        db.writableDatabase // Do not wait for SQLiteOpenHelper.onOpen while holding the attachment/recovery locks.
-        synchronized(this){withJournalBackup(a,lang,io,true,settings,replace)}
+    internal fun withDatabaseBackup(a:JSONArray,lang:String,io:AttachmentRestoreFiles,db:NoteDatabase,settings:JSONObject?,replace:((()->Unit,String,()->Unit)->Unit)){
+        val database=db.writableDatabase // Open before taking the attachment/recovery locks.
+        synchronized(this){synchronized(RestoreJournal.lock){
+            BackupValidation.attachments(a,lang)
+            recoverBeforeAccess()
+            withJournalBackup(a,lang,io,true,settings){install,token->
+                replace(install,token){RestoreSafety.capture(app,database,lang,io,insideRestore=true)}
+            }
+        }}
     }
     private fun withJournalBackup(a:JSONArray,lang:String,io:AttachmentRestoreFiles,database:Boolean,settings:JSONObject?,replace:((()->Unit,String)->Unit))=synchronized(RestoreJournal.lock){
         BackupValidation.attachments(a,lang)
@@ -130,6 +136,7 @@ object AttachmentStore {
                 val message=if(AppStrings.normalizeLanguage(lang)=="ru")"Не удалось автоматически вернуть прежние вложения. Резервный каталог сохранён." else "The previous attachments could not be restored automatically. Their recovery directory has been retained."
                 throw IOException(message,failure)
             }
+            if(failure is RestoreSafety.Failure)throw failure
             if(failure is IOException||failure is SecurityException)throw restoreError(lang,failure)
             throw failure
         }

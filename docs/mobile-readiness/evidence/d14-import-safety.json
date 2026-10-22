@@ -1,0 +1,389 @@
+{
+  "base_commit": "f1ff0f4535f51d6d187bc93d7887261d8b4aa290",
+  "branch": "organizer-d14-import-safety-20261022",
+  "passed": 506,
+  "total": 506,
+  "new_suites": {
+    "import-safety": {
+      "total": 52,
+      "suite": "D14 bounded input and independent verified safety snapshots (synthetic host)",
+      "cases": [
+        {
+          "result": "PASS",
+          "name": "ru raw JSON byte limit refuses limit+1 without touching data"
+        },
+        {
+          "result": "PASS",
+          "name": "en raw JSON byte limit refuses limit+1 without touching data"
+        },
+        {
+          "result": "PASS",
+          "name": "Exact UTF-8 byte boundary accepts Russian text, emoji and quoted brackets"
+        },
+        {
+          "result": "PASS",
+          "name": "Unknown-length infinite provider is stopped after at most limit+1 bytes"
+        },
+        {
+          "result": "PASS",
+          "name": "Short/zero reads and available=0 do not truncate a valid backup"
+        },
+        {
+          "result": "PASS",
+          "name": "Invalid UTF-8 is refused without replacement characters"
+        },
+        {
+          "result": "PASS",
+          "name": "Directory-only ZIP is refused"
+        },
+        {
+          "result": "PASS",
+          "name": "Empty ZIP is refused"
+        },
+        {
+          "result": "PASS",
+          "name": "Single-document ZIP with a directory and UTF-8 comment restores normally"
+        },
+        {
+          "result": "PASS",
+          "name": "Compressed input limit is enforced before opening ZIP"
+        },
+        {
+          "result": "PASS",
+          "name": "ZIP expanded size limit is enforced"
+        },
+        {
+          "result": "PASS",
+          "name": "Ambiguous ZIP with two documents is refused"
+        },
+        {
+          "result": "PASS",
+          "name": "ZIP entry count is bounded before ZipFile builds its index"
+        },
+        {
+          "result": "PASS",
+          "name": "Truncated ZIP central directory is refused"
+        },
+        {
+          "result": "PASS",
+          "name": "Wrong central CRC is refused"
+        },
+        {
+          "result": "PASS",
+          "name": "Forged small expanded size still cannot bypass the streaming bound"
+        },
+        {
+          "result": "PASS",
+          "name": "Directory payload contributes to the expanded-size budget"
+        },
+        {
+          "result": "PASS",
+          "name": "Forged central entry count cannot hide extra entries"
+        },
+        {
+          "result": "PASS",
+          "name": "Direct String restore rejects deep nesting before allocating its JSON tree"
+        },
+        {
+          "result": "PASS",
+          "name": "Direct String restore rejects excessive value count before allocating its JSON tree"
+        },
+        {
+          "result": "PASS",
+          "name": "Direct attachment restore checks the allocation budget before decoding Base64"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE saved SQLite snapshot preserves fractional budgets, all SQL types, hidden rows, schema and sequence counters"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL saved SQLite snapshot preserves fractional budgets, all SQL types, hidden rows, schema and sequence counters"
+        },
+        {
+          "result": "PASS",
+          "name": "Failure creating the safety root cancels restore before any live write"
+        },
+        {
+          "result": "PASS",
+          "name": "Safety failure stage cancels import and preserves both live data and a previous verified snapshot"
+        },
+        {
+          "result": "PASS",
+          "name": "Safety failure database-sync cancels import and preserves both live data and a previous verified snapshot"
+        },
+        {
+          "result": "PASS",
+          "name": "Safety failure settings cancels import and preserves both live data and a previous verified snapshot"
+        },
+        {
+          "result": "PASS",
+          "name": "Safety failure copy-1 cancels import and preserves both live data and a previous verified snapshot"
+        },
+        {
+          "result": "PASS",
+          "name": "Safety failure copy-2 cancels import and preserves both live data and a previous verified snapshot"
+        },
+        {
+          "result": "PASS",
+          "name": "Safety failure partial-copy cancels import and preserves both live data and a previous verified snapshot"
+        },
+        {
+          "result": "PASS",
+          "name": "Safety failure corrupt-copy cancels import and preserves both live data and a previous verified snapshot"
+        },
+        {
+          "result": "PASS",
+          "name": "Safety failure manifest cancels import and preserves both live data and a previous verified snapshot"
+        },
+        {
+          "result": "PASS",
+          "name": "Safety failure manifest-partial cancels import and preserves both live data and a previous verified snapshot"
+        },
+        {
+          "result": "PASS",
+          "name": "Safety failure directory-sync cancels import and preserves both live data and a previous verified snapshot"
+        },
+        {
+          "result": "PASS",
+          "name": "Safety failure publish cancels import and preserves both live data and a previous verified snapshot"
+        },
+        {
+          "result": "PASS",
+          "name": "Successive full imports retain earlier verified snapshots"
+        },
+        {
+          "result": "PASS",
+          "name": "SQL failure after safety publication keeps the independent safety copy and all original records"
+        },
+        {
+          "result": "PASS",
+          "name": "Cloud v7 without local sections creates no safety snapshot and retains local attachments"
+        },
+        {
+          "result": "PASS",
+          "name": "A complete empty pre-import database produces a usable empty safety snapshot"
+        },
+        {
+          "result": "PASS",
+          "name": "A directory sync failure after snapshot publication keeps the verified snapshot and cancels import"
+        },
+        {
+          "result": "PASS",
+          "name": "64 MiB JVM rejects a large raw JSON through the public URI path without changing live data"
+        },
+        {
+          "result": "PASS",
+          "name": "64 MiB JVM rejects a large compressed ZIP through the public URI path without changing live data"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE cached concurrent writer waits between safety publication and restore commit, then its new note survives"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL cached concurrent writer waits between safety publication and restore commit, then its new note survives"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE process death during safety sql leaves live data intact and never treats a partial safety copy as complete"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE process death during safety copy leaves live data intact and never treats a partial safety copy as complete"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE process death during safety manifest leaves live data intact and never treats a partial safety copy as complete"
+        },
+        {
+          "result": "PASS",
+          "name": "DELETE process death during safety published leaves live data intact and never treats a partial safety copy as complete"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL process death during safety sql leaves live data intact and never treats a partial safety copy as complete"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL process death during safety copy leaves live data intact and never treats a partial safety copy as complete"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL process death during safety manifest leaves live data intact and never treats a partial safety copy as complete"
+        },
+        {
+          "result": "PASS",
+          "name": "WAL process death during safety published leaves live data intact and never treats a partial safety copy as complete"
+        }
+      ],
+      "passed": 52
+    },
+    "import-safety-probe": {
+      "total": 2,
+      "suite": "D14 remaining-risk probes (previous D14 sources must fail both)",
+      "cases": [
+        {
+          "result": "PASS",
+          "name": "A ZIP with two complete documents must be refused before changing live data"
+        },
+        {
+          "result": "PASS",
+          "name": "A successful full restore must retain an independent pre-import safety snapshot"
+        }
+      ],
+      "passed": 2
+    }
+  },
+  "regressions": {
+    "backup-validation": {
+      "passed": 235,
+      "total": 235,
+      "result_sha256": "6a272aaf7b9dcca6ae68abafe10a642311be324cee09764e9998c4dee25dd1cc"
+    },
+    "restore-integrity": {
+      "passed": 67,
+      "total": 67,
+      "result_sha256": "a543c8bd04f2bb844e6c6fdf8549f5aba116fcdfb5506daa29423c44dac87abc"
+    },
+    "attachment-validation": {
+      "passed": 64,
+      "total": 64,
+      "result_sha256": "dc8ddb01e9c27512f5517ae5f34f317430ee437e6d696e7fb007a03fda65780e"
+    },
+    "attachment-restore": {
+      "passed": 17,
+      "total": 17,
+      "result_sha256": "ec50c3d9ed8cb064a5c710763fd95858d6282dc50adddb0955e07dfcd760d8da"
+    },
+    "restore-recovery": {
+      "passed": 68,
+      "total": 68,
+      "result_sha256": "c5d612f214b352eb2805d4b6393a7297c0c31f6a15f25bde37edfcf2fdbecad8"
+    },
+    "restore-recovery-probe": {
+      "passed": 1,
+      "total": 1,
+      "result_sha256": "c96114ec23c550bc10354aa9a8dba3b07ae68d05778895080f7fd851eb7d2b28"
+    }
+  },
+  "negative_control": {
+    "source_commit": "f1ff0f4535f51d6d187bc93d7887261d8b4aa290",
+    "expected_exit_code": 1,
+    "result": {
+      "total": 2,
+      "suite": "D14 remaining-risk probes (previous D14 sources must fail both)",
+      "cases": [
+        {
+          "result": "FAIL",
+          "name": "A ZIP with two complete documents must be refused before changing live data",
+          "error": "java.lang.IllegalStateException: Reproduced: ambiguous ZIP accepted"
+        },
+        {
+          "result": "FAIL",
+          "name": "A successful full restore must retain an independent pre-import safety snapshot",
+          "error": "java.lang.IllegalStateException: Reproduced: no pre-import safety snapshot remains"
+        }
+      ],
+      "passed": 0
+    },
+    "production_sha256": {
+      "mobile/android/app/src/main/java/kz/kairat/organizer/Models.kt": "fa51ad21112e70d4d27b6e0774d8c8630581231335a17fd8e2fe63419ef89b2d",
+      "mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
+      "mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "1d6d6e0b8836786dbdb2cc958cf0b142d4c92c6fcb4831b8e1ab301ef15b35f0",
+      "mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "f09908dd2a4d135b888eb4fb4a3ad0ae97eff8a738ceff37984c5fd9f40aae94",
+      "mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "466f0d0ad114136e0873363927b64a9e31c9923b6fb1fdc6a9d6547426aedb07",
+      "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "7744d113100696b5280bdd8bfe80adc6f2d94d51c6e140f17e0bd1fedea19fd7",
+      "mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "4d008d76d614123b882f75d6bec42f0e0455c580ae500269a3543d96711f15e7",
+      "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "d2572206b53321dda7322ac3f95be6d775a89ade6982d047d29510d328788bc9",
+      "mobile/android/app/src/main/java/kz/kairat/organizer/RestoreJournal.kt": "b3392ec12106f8ab2f5d9212f1184705b06a549cad9f0c8e994bf0693de6e099"
+    }
+  },
+  "production_sha256": {
+    "mobile/android/app/src/main/java/kz/kairat/organizer/Models.kt": "fa51ad21112e70d4d27b6e0774d8c8630581231335a17fd8e2fe63419ef89b2d",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "4188205755e7a45d24ed77d89a83b24c4a4ea05025e54df951aff6614cd07761",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "f09908dd2a4d135b888eb4fb4a3ad0ae97eff8a738ceff37984c5fd9f40aae94",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "4780c1c17efc90f1823d6e91d58fdf5c98522cf532cc8e56902595fdd7deb467",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "29dd075424b530fc8374f59cce3743e3a53de62fc68a1bb2bb8f1e5eb8544cb1",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "bbc24401e68fc737944bb09671f5409c90fd05b4367c6fe3cf25baa59807c807",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "58915da86a928cb969acd2359188660616c1b8f14abee3ecf550dc015fac1ec0",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/RestoreJournal.kt": "b3392ec12106f8ab2f5d9212f1184705b06a549cad9f0c8e994bf0693de6e099",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupImportLimits.kt": "3adeddcd324dd94c8a15ca457b59374e81299a5275e87a3f218b9235e834cd84",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupImportReader.kt": "1563553ae25907593445fc58f387933ba067c177083cd63f38257c676cd1c932",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/RestoreSafety.kt": "dc9a1fa0f20b645eba0e2bbd1e290e90ba5f50f953e9360804ee447e85124510"
+  },
+  "executed_source_sha256": {
+    "mobile/android/app/src/main/java/kz/kairat/organizer/Models.kt": "fa51ad21112e70d4d27b6e0774d8c8630581231335a17fd8e2fe63419ef89b2d",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "4188205755e7a45d24ed77d89a83b24c4a4ea05025e54df951aff6614cd07761",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "f09908dd2a4d135b888eb4fb4a3ad0ae97eff8a738ceff37984c5fd9f40aae94",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "4780c1c17efc90f1823d6e91d58fdf5c98522cf532cc8e56902595fdd7deb467",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "29dd075424b530fc8374f59cce3743e3a53de62fc68a1bb2bb8f1e5eb8544cb1",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "bbc24401e68fc737944bb09671f5409c90fd05b4367c6fe3cf25baa59807c807",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "58915da86a928cb969acd2359188660616c1b8f14abee3ecf550dc015fac1ec0",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/RestoreJournal.kt": "b3392ec12106f8ab2f5d9212f1184705b06a549cad9f0c8e994bf0693de6e099",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupImportLimits.kt": "3adeddcd324dd94c8a15ca457b59374e81299a5275e87a3f218b9235e834cd84",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupImportReader.kt": "1563553ae25907593445fc58f387933ba067c177083cd63f38257c676cd1c932",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/RestoreSafety.kt": "dc9a1fa0f20b645eba0e2bbd1e290e90ba5f50f953e9360804ee447e85124510",
+    "tools/audit/jvm/AndroidContent.kt": "00f8d3ffed86a8da20b799596c151e5d311adbff5069a64502e4c841911da19a",
+    "tools/audit/jvm/AndroidCursor.kt": "302bc45c6fc1a39e458b3b13a62219af7027613efd9bbe62e0a3507a9dbbd636",
+    "tools/audit/jvm/AndroidOs.kt": "cf4e6d466170130e414de4981389a942b12df3439732d159a8a433a06d0422fc",
+    "tools/audit/jvm/AndroidProvider.kt": "be3a2dfa0d04583945a94cd1ba9e8bc009fd9b402efbf461c4029eb10c3ef0a9",
+    "tools/audit/jvm/AndroidSQLite.kt": "a8c8f521c2b00acc83fe2888a21e37a6cc1f71969efc5355a2f52b4ebed2aa9d",
+    "tools/audit/jvm/AndroidUri.kt": "c19c6b1ba5ec2a2fcd12ec44813782407467732c6a053bbf73e9f9c1ebfd515b",
+    "tools/audit/jvm/AttachmentFixtures.kt": "c0c5e1913f384350ace9f4ac63b9a0fa777549e58c0fecf3a98d92f95cb75ba1",
+    "tools/audit/jvm/FileProvider.kt": "3020b150a3880104842bbf38ecd10bda305fe6e2eba8eb659e0a2bcec3f4e576",
+    "tools/audit/jvm/ImportSafetyMain.kt": "a53f0ce234190fb6980a4cab5a688d1fb7bdd4f7b39e52d0cee22955d2f1babd",
+    "tools/audit/jvm/RecoveryWorker.kt": "ebec9f314d149ddc51cb390b438d4a5be41057509dd9edabd07c8d948180972a",
+    "tools/audit/jvm/Schedulers.kt": "f4af96d5abed34f4c2c87dd7fd35539b7a1ae559cc1d99974af4c1f6c1a0a7f5"
+  },
+  "runner_sha256": "75cd27178ba06c71b01ee46ada287d2778b6179e1f38474e11650c1dab845c55",
+  "limits": {
+    "json_utf8_bytes": 67108864,
+    "json_memory_budget": "minimum of 64 MiB and one eighth of available Java heap",
+    "archive_input_bytes": 67108864,
+    "zip_central_directory_bytes": 262144,
+    "zip_entries": 32,
+    "json_nesting": 32,
+    "json_structural_units": 1000000,
+    "structural_memory_budget": "minimum of 1000000 and available Java heap / 256",
+    "attachment_bytes": 26214400,
+    "decoded_attachment_bytes": 50331648,
+    "decoded_memory_budget": "minimum of configured bound and available Java heap / 4",
+    "attachment_count": 10000,
+    "snapshot_files": 20000,
+    "snapshot_manifest_bytes": 8388608
+  },
+  "snapshot": {
+    "directory": "Context.noBackupFilesDir/restore-safety/before-restore-UUID",
+    "format": "organizer-restore-safety",
+    "version": 1,
+    "database_format": "logical SQLite snapshot with typed values, schema and sqlite_sequence; no raw live .db copy",
+    "source_transaction": "same transaction as replacement; snapshot verification/publication before first live deletion",
+    "verification": [
+      "SHA-256 and size of every recorded file",
+      "SQLite integrity_check",
+      "user_version",
+      "all saved table row counts",
+      "isolated fresh-context recovery with exact attachment/index comparison"
+    ],
+    "retention": "previous verified snapshots are never automatically removed",
+    "credentials": "PIN/account tokens omitted; live credentials unchanged",
+    "cloud_v7_without_local_sections": "unchanged; no snapshot created"
+  },
+  "android_build": {
+    "workflow": ".github/workflows/organizer-mobile-readiness.yml",
+    "command": "gradle --no-daemon --build-cache -p mobile/android assembleDebug",
+    "result_location": "GitHub Actions run for the published commit; reported after execution",
+    "apk_artifact": "disabled for this branch"
+  },
+  "validation_limits": [
+    "Synthetic host tests, not Android instrumentation.",
+    "64 MiB tests run in separate JVMs, not an Android low-memory device.",
+    "I/O/space failures injected; no actual disk-full or physical power-cut test.",
+    "Android provider, CursorWindow and connection pool require device checks.",
+    "Internal safety snapshots have no new UI restore button; recovery tested in isolated synthetic Contexts.",
+    "Automatic cloud sync retains its existing algorithm and version-7 behavior."
+  ]
+}
