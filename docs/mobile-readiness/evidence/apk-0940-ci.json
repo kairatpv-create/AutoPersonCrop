@@ -1,0 +1,263 @@
+{
+  "date": "2026-10-22",
+  "syntheticOnly": true,
+  "github": {
+    "runId": 39755253939,
+    "url": "https://github.com/kairatpv-create/AutoPersonCrop/actions/runs/39755253939",
+    "sourceCommit": "663b949f175ea380695cd967ce3e7c493c7b866e",
+    "sourceTree": "fb24d545640198e33c51245342fcb914cb5d0e2a",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-10-22T09:25:05Z",
+    "completedAt": "2026-10-22T09:31:50Z",
+    "jobs": [
+      {
+        "id": 119745516501,
+        "name": "android-emulator",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 119745517032,
+        "name": "server-postgres",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "build": {
+    "result": "BUILD SUCCESSFUL",
+    "candidateElapsedSeconds": 112,
+    "cacheUsed": true,
+    "tasks": [
+      "assembleDebug",
+      "assembleDebugAndroidTest",
+      "assembleRelease"
+    ]
+  },
+  "artifacts": [
+    {
+      "id": 12415878285,
+      "name": "synthetic-android-test-results",
+      "archiveSha256": "39f9e1fea2b39b50263064c440b1dd3cab1e2dc7523860fd8e4832392f0dac5b",
+      "downloadDigestVerified": true
+    },
+    {
+      "id": 12415501371,
+      "name": "synthetic-postgres-test-results",
+      "archiveSha256": "9898e876ab7bd47aac8e005925c1b4a3a07887e1b9acd7e4b02e2b2edb2d4134",
+      "downloadDigestVerified": true
+    },
+    {
+      "id": 12414999966,
+      "name": "organizer-0.9.40-tested-staging",
+      "archiveSha256": "96ca4e04b7200981658a0d87990ad84d84fc861a81cf76b34e73ace77db2f8dd",
+      "downloadDigestVerified": true
+    }
+  ],
+  "history": [
+    {
+      "runId": 39751732250,
+      "sourceCommit": "42d18350dbd942c744e839ce79bfec63ab49f6c0",
+      "conclusion": "failure",
+      "reason": "Missing Compose scrolling imports; no Android tests or accepted APK."
+    },
+    {
+      "runId": 39752639691,
+      "sourceCommit": "fed49bf3a2e04bb09fbc42d7740ee143626e0c22",
+      "conclusion": "failure",
+      "reason": "Release UI test used a debug-mangled Kotlin internal setter. Email restore checks passed; the run was not accepted."
+    },
+    {
+      "runId": 39753947057,
+      "sourceCommit": "862715bfb5d0819203bcb7812cac91da21efb869",
+      "conclusion": "success",
+      "note": "All 35 Android checks passed; visual inspection found a system inset issue in the new import screen. This internal candidate was not delivered."
+    },
+    {
+      "runId": 39755253939,
+      "sourceCommit": "663b949f175ea380695cd967ce3e7c493c7b866e",
+      "conclusion": "success",
+      "note": "Final candidate after system insets and status bar contrast correction."
+    }
+  ],
+  "actualEmailDeliveryTested": false,
+  "realPhoneTest": false,
+  "realUserDataUsed": false,
+  "productionServerDeployed": false,
+  "finalOwnerSignedApkRunOnEmulator": false,
+  "android": {
+    "platform": "Android emulator API 36",
+    "syntheticOnly": true,
+    "passed": 35,
+    "groups": {
+      "upgrade-seed": 1,
+      "upgrade-verify": 1,
+      "data-offline-account": 14,
+      "apk-hardening": 8,
+      "restart-seed": 1,
+      "restart-verify": 1,
+      "crash-recovery": 1,
+      "release-upgrade": 1,
+      "ui-navigation": 4,
+      "email-backup": 3
+    },
+    "expectedAbruptRestoreTermination": true,
+    "realPhone": false
+  },
+  "serverPostgres": {
+    "suite": "sync-server-safety",
+    "database": "real disposable PostgreSQL",
+    "passed": 31,
+    "total": 31,
+    "results": [
+      {
+        "name": "Synthetic accounts register with bcrypt and distinct stable JWT subjects",
+        "result": "PASS"
+      },
+      {
+        "name": "The authenticated account advertises deletion support",
+        "result": "PASS"
+      },
+      {
+        "name": "Unauthenticated sync and deletion are refused",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject invalid JSON before database changes",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject incomplete notes-only JSON before database changes",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject array root before database changes",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject missing collections before database changes",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject wrong collection type: notes",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject wrong collection type: tasks",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject wrong collection type: projects",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject wrong collection type: projectStages",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject wrong collection type: projectJournal",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject wrong collection type: projectNoteLinks",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject wrong collection type: money",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject wrong collection type: reminders",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject invalid baseRev: -1",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject invalid baseRev: 0.5",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject invalid baseRev: \"0\"",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject invalid baseRev: null",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject invalid baseRev: 9007199254740992",
+        "result": "PASS"
+      },
+      {
+        "name": "Two simultaneous first uploads preserve one winner and return the other as 409",
+        "result": "PASS"
+      },
+      {
+        "name": "Wrong field type and duplicate record IDs cannot replace an existing snapshot",
+        "result": "PASS"
+      },
+      {
+        "name": "A complete empty v7 snapshot remains valid",
+        "result": "PASS"
+      },
+      {
+        "name": "The standalone external deletion page is served without the deferred web app",
+        "result": "PASS"
+      },
+      {
+        "name": "Missing confirmation and another account email do not delete the user",
+        "result": "PASS"
+      },
+      {
+        "name": "Wrong password cannot delete the user or cloud snapshot",
+        "result": "PASS"
+      },
+      {
+        "name": "Correct reauthentication deletes only the selected account and cascades its snapshot",
+        "result": "PASS"
+      },
+      {
+        "name": "Old JWTs cannot read, upload, or delete after account deletion",
+        "result": "PASS"
+      },
+      {
+        "name": "The same email can register again with a distinct account identity and no old snapshot",
+        "result": "PASS"
+      },
+      {
+        "name": "Concurrent deletion and upload never resurrect the deleted user or its sync row",
+        "result": "PASS"
+      },
+      {
+        "name": "Unknown API routes return JSON 404",
+        "result": "PASS"
+      }
+    ]
+  },
+  "sourceSha256": {
+    ".github/workflows/organizer-sync-safety.yml": "04d4b15dc05ae5bd2518a515de0c2f19d92f9d097fd44c102e58fcf61795e60b",
+    "mobile/android/app/build.gradle.kts": "3bd2bf49d4c654bd92d1b1cb611ec5952a0b79b67310bf2451cd6cc093994b52",
+    "mobile/android/app/src/androidTest/java/kz/kairat/organizer/EmailBackupImportTest.kt": "97c3aaad8ded245638d17e1e0b637d59bdadfb1c6bb94e83c7e9a0efd321ca9a",
+    "mobile/android/app/src/androidTest/java/kz/kairat/organizer/LegacyUpgradeTest.kt": "57c83b026d80b2a1614e751a03ae6a2b08d948c942166e09d83ee37c78e10a15",
+    "mobile/android/app/src/androidTest/java/kz/kairat/organizer/MobileUiTest.kt": "9461ce4ced33ebe11179dc70e470587643f017d7b8bde044adae04589aef70b4",
+    "mobile/android/app/src/main/AndroidManifest.xml": "bdf429ee9d9ddb7d1561026caa1f4fd1aa783a2ea3b5b27cbba730d93e91e4df",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "4f22af1bb2c515983aad578b5bd59e42b3d4288e443722da8dbdd1f059350aa7",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupImportActivity.kt": "3e0cc1439465d37e3ea7d93555a67582f81de5220e2148d3f99bd8cb962465d7",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupSharing.kt": "20bb47d6ba5d0d86b306e8f73e3457ca29ee6e02edf5f40b955ead8a27120199",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt": "d9989145a7a2cf251d79c30c0b61785f65553f16dcdffa4fecfceb5660b777af",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/PrivacyNotice.kt": "bcf9e39674f017a9b71b658fff77a60ce40390bccc28c7eb10aff1cc3c20ee6a",
+    "tools/audit/inspect_apk_candidate.py": "8cf174b7b42cfdbbff091d61ffb6af2bf4f240268d0bbefa7484d68b382e51c0",
+    "tools/audit/run_android_safety.sh": "2a9d0321cd945dedc0643d44ce79f6cf2d3c93586d184a7e33a9383f4e569a30"
+  },
+  "apkVerification": "apk-0940-verification.json",
+  "visualReview": {
+    "finalImportConfirm": true,
+    "finalImportInvalid": true,
+    "settingsRussianLight": true,
+    "settingsEnglishLargeDark": true,
+    "realPhone": false
+  }
+}
