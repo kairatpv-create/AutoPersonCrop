@@ -68,15 +68,13 @@ jobs:
         run: |
           keytool -genkeypair -noprompt -keystore "$ORGANIZER_CI_KEYSTORE" -storepass android -keypass android -alias androiddebugkey -dname "CN=Organizer Pro Synthetic CI" -keyalg RSA -keysize 2048 -validity 30
           cat > "$RUNNER_TEMP/organizer-ci-signing.init.gradle" <<'GROOVY'
-          gradle.projectsEvaluated {
-            allprojects {
-              if (plugins.hasPlugin('com.android.application')) {
-                def debugSigning = extensions.getByName('android').signingConfigs.getByName('debug')
+          gradle.beforeProject { project ->
+            project.pluginManager.withPlugin('com.android.application') {
+                def debugSigning = project.extensions.getByName('android').signingConfigs.getByName('debug')
                 debugSigning.storeFile = new File(System.getenv('ORGANIZER_CI_KEYSTORE'))
                 debugSigning.storePassword = 'android'
                 debugSigning.keyPassword = 'android'
                 debugSigning.keyAlias = 'androiddebugkey'
-              }
             }
           }
           GROOVY
