@@ -11,7 +11,7 @@ permissions:
   contents: read
 concurrency:
   group: organizer-sync-safety-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.ref == 'refs/heads/organizer-android-apk-20261022' }}
 jobs:
   server-postgres:
     runs-on: ubuntu-24.04
