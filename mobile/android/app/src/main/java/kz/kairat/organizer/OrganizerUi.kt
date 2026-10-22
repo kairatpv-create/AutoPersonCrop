@@ -558,7 +558,7 @@ private fun decodeAttachmentThumbnail(file:File):android.graphics.Bitmap?{
             item{
                 Button(
                     onClick={submit()},
-                    enabled=(parseAmountInput(amount)?:0.0)>0.0,
+                    enabled=name.isNotBlank(),
                     modifier=Modifier.fillMaxWidth(),
                     colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.tertiary,contentColor=MaterialTheme.colorScheme.onTertiary)
                 ){
@@ -645,7 +645,7 @@ private fun decodeAttachmentThumbnail(file:File):android.graphics.Bitmap?{
 @Composable private fun AddProjectStageDialog(db:NoteDatabase,projectId:Long,lang:String,onDismiss:()->Unit,onAdded:()->Unit){
     val context=LocalContext.current
     var title by remember{mutableStateOf("")};var due by remember{mutableLongStateOf(0L)}
-    AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"add_stage"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(title,{title=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"title"))},textStyle=userTextStyle(),singleLine=true);OutlinedButton({launchDatePicker(context,if(due>0)due else System.currentTimeMillis()){due=it}},Modifier.fillMaxWidth()){Icon(Icons.Default.Event,null);Spacer(Modifier.width(6.dp));Text(if(due>0)formatDay(due) else AppStrings.t(lang,"due_date"))}}},confirmButton={Button({if(title.isNotBlank()){db.addProjectStage(projectId,title.trim(),due);onAdded()}},enabled=(parseAmountInput(amount)?:0.0)>0.0){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
+    AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"add_stage"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(title,{title=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"title"))},textStyle=userTextStyle(),singleLine=true);OutlinedButton({launchDatePicker(context,if(due>0)due else System.currentTimeMillis()){due=it}},Modifier.fillMaxWidth()){Icon(Icons.Default.Event,null);Spacer(Modifier.width(6.dp));Text(if(due>0)formatDay(due) else AppStrings.t(lang,"due_date"))}}},confirmButton={Button({if(title.isNotBlank()){db.addProjectStage(projectId,title.trim(),due);onAdded()}},enabled=title.isNotBlank()){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
 }
 
 @Composable private fun ProjectFinanceTab(db:NoteDatabase,project:Project,lang:String,revision:Int,onChanged:()->Unit){
@@ -725,7 +725,7 @@ private fun decodeAttachmentThumbnail(file:File):android.graphics.Bitmap?{
 @Composable private fun AddProjectJournalDialog(db:NoteDatabase,projectId:Long,lang:String,onDismiss:()->Unit,onAdded:()->Unit){
     var text by remember{mutableStateOf("")}
     val speech=rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){r->if(r.resultCode==Activity.RESULT_OK){val spoken=r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty();text=appendRecognizedText(text,spoken)}}
-    AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"add_journal"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(text,{text=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"note"))},textStyle=userTextStyle(),minLines=5,modifier=Modifier.fillMaxWidth());OutlinedButton({runCatching{speech.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,AppStrings.localeTag(lang))})}},Modifier.fillMaxWidth()){Icon(Icons.Default.KeyboardVoice,null);Spacer(Modifier.width(6.dp));Text(AppStrings.t(lang,"to_text"))}}},confirmButton={Button({if(text.isNotBlank()){db.addProjectJournal(projectId,text.trim());onAdded()}},enabled=(parseAmountInput(amount)?:0.0)>0.0){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
+    AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"add_journal"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){OutlinedTextField(text,{text=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"note"))},textStyle=userTextStyle(),minLines=5,modifier=Modifier.fillMaxWidth());OutlinedButton({runCatching{speech.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,AppStrings.localeTag(lang))})}},Modifier.fillMaxWidth()){Icon(Icons.Default.KeyboardVoice,null);Spacer(Modifier.width(6.dp));Text(AppStrings.t(lang,"to_text"))}}},confirmButton={Button({if(text.isNotBlank()){db.addProjectJournal(projectId,text.trim());onAdded()}},enabled=text.isNotBlank()){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
 }
 
 @Composable private fun LinkNoteDialog(db:NoteDatabase,projectId:Long,lang:String,onDismiss:()->Unit,onChanged:()->Unit){
