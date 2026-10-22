@@ -1,7 +1,7 @@
 {
   "base_commit": "365c73ec93cb606998690c5323c21530647bb585",
   "branch": "organizer-sync-release-safety-20261022",
-  "host_passed": 563,
+  "host_passed": 564,
   "suites": {
     "sync-safety-probe": {
       "exit": 0,
@@ -10,8 +10,8 @@
     },
     "sync-safety": {
       "exit": 0,
-      "passed": 54,
-      "total": 54
+      "passed": 55,
+      "total": 55
     },
     "backup-validation": {
       "exit": 0,
@@ -55,7 +55,7 @@
     }
   },
   "new_sync_cases": {
-    "total": 54,
+    "total": 55,
     "suite": "sync-safety",
     "cases": [
       {
@@ -273,9 +273,13 @@
       {
         "result": "PASS",
         "name": "A changed saved conflict snapshot is rejected by its checksum"
+      },
+      {
+        "result": "PASS",
+        "name": "Cloud quota applies to compact wire JSON, without local backup indentation overhead"
       }
     ],
-    "passed": 54
+    "passed": 55
   },
   "new_probe_cases": {
     "total": 3,
@@ -458,7 +462,7 @@
     "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "c0962ffb2d9e3e6db920224d04f990b8c120bd4aadb6fedb77b814b044c4747f",
     "mobile/android/app/src/main/java/kz/kairat/organizer/BackupImportLimits.kt": "3adeddcd324dd94c8a15ca457b59374e81299a5275e87a3f218b9235e834cd84",
     "mobile/android/app/src/main/java/kz/kairat/organizer/BackupImportReader.kt": "1563553ae25907593445fc58f387933ba067c177083cd63f38257c676cd1c932",
-    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "fc18f0b0d7370ffe58df5c78fa711e704df492d4f39e036a61e3a359aed0bd6a",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "7996aef8f4c5177c0846ca43161c6d59cf7b77130e3a149c690b71f984cf8998",
     "mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "bbc24401e68fc737944bb09671f5409c90fd05b4367c6fe3cf25baa59807c807",
     "mobile/android/app/src/main/java/kz/kairat/organizer/CalendarSystem.kt": "372c60e55625bf97680ba570488c6dcbf497a53ded224dea542960495106510a",
     "mobile/android/app/src/main/java/kz/kairat/organizer/CalendarUi.kt": "196160db119388c37c6d13a5ce83a969847c31f587ff09a8a709f2da1e12be09",
@@ -503,7 +507,7 @@
     "mobile/android/app/build.gradle.kts": "f0cbbc4cb17091bf36b04f3d5738e7b687d68153eae3427cc3e82b362b063f22",
     ".github/workflows/organizer-sync-safety.yml": "2d96c297ed3aa1878572f0e537a37180fa92679bf75298087d0ade2a1817167a",
     "tools/audit/run_jvm_audit.py": "2f38fb13f8c7d0535f16ae2cb9a4845d98f17e17d85965b9e58afd8a1e9d5962",
-    "tools/audit/jvm/SyncSafetyMain.kt": "a231642e2ba284c1f1baf33e09895faeef0f27033b9fca8e7c23b2e4ae5ab69d",
+    "tools/audit/jvm/SyncSafetyMain.kt": "abd7b725d563afea34b22365207867bf4b03a1ad38ec58a17480f0e85e5cd905",
     "tools/audit/jvm/SyncSafetyProbeMain.kt": "d75bc4e0da794907f0b0889a1643bf836a779a21b529d9614735a5dc0ca0f0c0",
     "tools/audit/run_sync_server_safety.cjs": "1613e7ca466f16d1b52c6246381627a3f219d67dbcf10401f169aeeb7dd55778",
     "tools/audit/run_android_safety.sh": "2b34ad1bd66eaeabb14b92456dd51b94259b1b1068efface1a9c6baab740f429",
@@ -515,7 +519,7 @@
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "4188205755e7a45d24ed77d89a83b24c4a4ea05025e54df951aff6614cd07761",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "41e60be9a5f5fc921984221f2bc375f8ee9dd663bbab626bcb7d46c6208d2b5b",
-      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "fc18f0b0d7370ffe58df5c78fa711e704df492d4f39e036a61e3a359aed0bd6a",
+      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "7996aef8f4c5177c0846ca43161c6d59cf7b77130e3a149c690b71f984cf8998",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "c0962ffb2d9e3e6db920224d04f990b8c120bd4aadb6fedb77b814b044c4747f",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "bbc24401e68fc737944bb09671f5409c90fd05b4367c6fe3cf25baa59807c807",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "58915da86a928cb969acd2359188660616c1b8f14abee3ecf550dc015fac1ec0",
@@ -544,7 +548,7 @@
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "4188205755e7a45d24ed77d89a83b24c4a4ea05025e54df951aff6614cd07761",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "41e60be9a5f5fc921984221f2bc375f8ee9dd663bbab626bcb7d46c6208d2b5b",
-      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "fc18f0b0d7370ffe58df5c78fa711e704df492d4f39e036a61e3a359aed0bd6a",
+      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "7996aef8f4c5177c0846ca43161c6d59cf7b77130e3a149c690b71f984cf8998",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "c0962ffb2d9e3e6db920224d04f990b8c120bd4aadb6fedb77b814b044c4747f",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "bbc24401e68fc737944bb09671f5409c90fd05b4367c6fe3cf25baa59807c807",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "58915da86a928cb969acd2359188660616c1b8f14abee3ecf550dc015fac1ec0",
@@ -566,14 +570,14 @@
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/tools/audit/jvm/FileProvider.kt": "3020b150a3880104842bbf38ecd10bda305fe6e2eba8eb659e0a2bcec3f4e576",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/tools/audit/jvm/RecoveryWorker.kt": "ebec9f314d149ddc51cb390b438d4a5be41057509dd9edabd07c8d948180972a",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/tools/audit/jvm/Schedulers.kt": "f4af96d5abed34f4c2c87dd7fd35539b7a1ae559cc1d99974af4c1f6c1a0a7f5",
-      "/workspace/scratch/335da780c4ab/organizer-sync-safety/tools/audit/jvm/SyncSafetyMain.kt": "a231642e2ba284c1f1baf33e09895faeef0f27033b9fca8e7c23b2e4ae5ab69d"
+      "/workspace/scratch/335da780c4ab/organizer-sync-safety/tools/audit/jvm/SyncSafetyMain.kt": "abd7b725d563afea34b22365207867bf4b03a1ad38ec58a17480f0e85e5cd905"
     },
     "backup-validation": {
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/Models.kt": "fa51ad21112e70d4d27b6e0774d8c8630581231335a17fd8e2fe63419ef89b2d",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "4188205755e7a45d24ed77d89a83b24c4a4ea05025e54df951aff6614cd07761",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "41e60be9a5f5fc921984221f2bc375f8ee9dd663bbab626bcb7d46c6208d2b5b",
-      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "fc18f0b0d7370ffe58df5c78fa711e704df492d4f39e036a61e3a359aed0bd6a",
+      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "7996aef8f4c5177c0846ca43161c6d59cf7b77130e3a149c690b71f984cf8998",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "c0962ffb2d9e3e6db920224d04f990b8c120bd4aadb6fedb77b814b044c4747f",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "bbc24401e68fc737944bb09671f5409c90fd05b4367c6fe3cf25baa59807c807",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "58915da86a928cb969acd2359188660616c1b8f14abee3ecf550dc015fac1ec0",
@@ -601,7 +605,7 @@
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "4188205755e7a45d24ed77d89a83b24c4a4ea05025e54df951aff6614cd07761",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "41e60be9a5f5fc921984221f2bc375f8ee9dd663bbab626bcb7d46c6208d2b5b",
-      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "fc18f0b0d7370ffe58df5c78fa711e704df492d4f39e036a61e3a359aed0bd6a",
+      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "7996aef8f4c5177c0846ca43161c6d59cf7b77130e3a149c690b71f984cf8998",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "c0962ffb2d9e3e6db920224d04f990b8c120bd4aadb6fedb77b814b044c4747f",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "bbc24401e68fc737944bb09671f5409c90fd05b4367c6fe3cf25baa59807c807",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "58915da86a928cb969acd2359188660616c1b8f14abee3ecf550dc015fac1ec0",
@@ -629,7 +633,7 @@
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "4188205755e7a45d24ed77d89a83b24c4a4ea05025e54df951aff6614cd07761",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "41e60be9a5f5fc921984221f2bc375f8ee9dd663bbab626bcb7d46c6208d2b5b",
-      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "fc18f0b0d7370ffe58df5c78fa711e704df492d4f39e036a61e3a359aed0bd6a",
+      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "7996aef8f4c5177c0846ca43161c6d59cf7b77130e3a149c690b71f984cf8998",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "c0962ffb2d9e3e6db920224d04f990b8c120bd4aadb6fedb77b814b044c4747f",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "bbc24401e68fc737944bb09671f5409c90fd05b4367c6fe3cf25baa59807c807",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "58915da86a928cb969acd2359188660616c1b8f14abee3ecf550dc015fac1ec0",
@@ -657,7 +661,7 @@
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "4188205755e7a45d24ed77d89a83b24c4a4ea05025e54df951aff6614cd07761",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "41e60be9a5f5fc921984221f2bc375f8ee9dd663bbab626bcb7d46c6208d2b5b",
-      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "fc18f0b0d7370ffe58df5c78fa711e704df492d4f39e036a61e3a359aed0bd6a",
+      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "7996aef8f4c5177c0846ca43161c6d59cf7b77130e3a149c690b71f984cf8998",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "c0962ffb2d9e3e6db920224d04f990b8c120bd4aadb6fedb77b814b044c4747f",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "bbc24401e68fc737944bb09671f5409c90fd05b4367c6fe3cf25baa59807c807",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "58915da86a928cb969acd2359188660616c1b8f14abee3ecf550dc015fac1ec0",
@@ -685,7 +689,7 @@
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "4188205755e7a45d24ed77d89a83b24c4a4ea05025e54df951aff6614cd07761",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "41e60be9a5f5fc921984221f2bc375f8ee9dd663bbab626bcb7d46c6208d2b5b",
-      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "fc18f0b0d7370ffe58df5c78fa711e704df492d4f39e036a61e3a359aed0bd6a",
+      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "7996aef8f4c5177c0846ca43161c6d59cf7b77130e3a149c690b71f984cf8998",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "c0962ffb2d9e3e6db920224d04f990b8c120bd4aadb6fedb77b814b044c4747f",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "bbc24401e68fc737944bb09671f5409c90fd05b4367c6fe3cf25baa59807c807",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "58915da86a928cb969acd2359188660616c1b8f14abee3ecf550dc015fac1ec0",
@@ -713,7 +717,7 @@
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "4188205755e7a45d24ed77d89a83b24c4a4ea05025e54df951aff6614cd07761",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "41e60be9a5f5fc921984221f2bc375f8ee9dd663bbab626bcb7d46c6208d2b5b",
-      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "fc18f0b0d7370ffe58df5c78fa711e704df492d4f39e036a61e3a359aed0bd6a",
+      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "7996aef8f4c5177c0846ca43161c6d59cf7b77130e3a149c690b71f984cf8998",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "c0962ffb2d9e3e6db920224d04f990b8c120bd4aadb6fedb77b814b044c4747f",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "bbc24401e68fc737944bb09671f5409c90fd05b4367c6fe3cf25baa59807c807",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "58915da86a928cb969acd2359188660616c1b8f14abee3ecf550dc015fac1ec0",
@@ -741,7 +745,7 @@
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "4188205755e7a45d24ed77d89a83b24c4a4ea05025e54df951aff6614cd07761",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "41e60be9a5f5fc921984221f2bc375f8ee9dd663bbab626bcb7d46c6208d2b5b",
-      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "fc18f0b0d7370ffe58df5c78fa711e704df492d4f39e036a61e3a359aed0bd6a",
+      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "7996aef8f4c5177c0846ca43161c6d59cf7b77130e3a149c690b71f984cf8998",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "c0962ffb2d9e3e6db920224d04f990b8c120bd4aadb6fedb77b814b044c4747f",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "bbc24401e68fc737944bb09671f5409c90fd05b4367c6fe3cf25baa59807c807",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "58915da86a928cb969acd2359188660616c1b8f14abee3ecf550dc015fac1ec0",
@@ -769,7 +773,7 @@
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "413b19f95b0dd4d7072e12e31f0af25bcfc18d23fe922a889be2ca4315803360",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "4188205755e7a45d24ed77d89a83b24c4a4ea05025e54df951aff6614cd07761",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "41e60be9a5f5fc921984221f2bc375f8ee9dd663bbab626bcb7d46c6208d2b5b",
-      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "fc18f0b0d7370ffe58df5c78fa711e704df492d4f39e036a61e3a359aed0bd6a",
+      "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "7996aef8f4c5177c0846ca43161c6d59cf7b77130e3a149c690b71f984cf8998",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "c0962ffb2d9e3e6db920224d04f990b8c120bd4aadb6fedb77b814b044c4747f",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "bbc24401e68fc737944bb09671f5409c90fd05b4367c6fe3cf25baa59807c807",
       "/workspace/scratch/335da780c4ab/organizer-sync-safety/mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "58915da86a928cb969acd2359188660616c1b8f14abee3ecf550dc015fac1ec0",
@@ -805,5 +809,11 @@
     "description": "Keep logout/conflict export off the main thread while the sync coordinator waits on network; make deletion confirmation scrollable.",
     "cloud_non_ui_prefix_unchanged": true,
     "prefix_sha256": "5a6df1c89c45f57b959b7269a518b64ef7f0a3d90874c3ccce6ee03054d747a7"
+  },
+  "cloud_size_followup": {
+    "synthetic_notes": 8000,
+    "compact_wire_json_under_server_limit": true,
+    "same_snapshot_indented_json_over_server_limit": true,
+    "local_backup_json_format_unchanged": true
   }
 }

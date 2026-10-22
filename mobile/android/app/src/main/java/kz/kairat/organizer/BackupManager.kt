@@ -32,7 +32,7 @@ object BackupManager {
             root.put("settings",exportedSettings(settings))
             root.put("attachments",AttachmentStore.exportBackup())
         }else{root.put("version",7);root.put("createdAt",0L);root.put("cloudSchema","organizer-sync-v3")}
-        return root.toString(2)
+        return if(local)root.toString(2) else root.toString()
     }
     internal fun exportedSettings(settings:SettingsStore)=JSONObject().apply{put("darkTheme",settings.darkTheme);put("fontScale",settings.fontScale);put("contentFontScale",settings.fontScale);put("buttonFontScale",settings.buttonFontScale);put("boldText",settings.boldText);put("projectsEnabled",settings.projectsEnabled);put("backupMode",settings.backupMode);put("email",settings.backupEmail);put("language",settings.language)}
     fun restore(json:String,db:NoteDatabase,lang:String="en"):RestoredPreferences{

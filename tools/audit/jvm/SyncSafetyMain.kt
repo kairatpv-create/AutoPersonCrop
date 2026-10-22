@@ -212,6 +212,14 @@ fun main(){
         val r=Remote();val f=SyncFixture();val id=f.db.save(null,"base","body");f.sync();f.db.save(id,"left","body");r.payload=mutate(r.payload!!,"notes"){it.put("title","right")};r.rev++;fails(f,r)
         val root=File(f.c.noBackupFilesDir,"sync-conflicts");val directory=File(root,File(root,"latest").readText());File(directory,"remote.json").writeText(f.cloud());check(runCatching{CloudSync.exportConflict(f.s,true)}.isFailure)
     }
+    d06Test("Cloud quota applies to compact wire JSON, without local backup indentation overhead"){
+        val r=Remote();val f=SyncFixture()
+        f.db.replaceAll(List(8000){i->Note((i+1).toLong(),"","",1,1,"blue")},emptyList(),emptyList(),emptyList(),emptyList())
+        val cloud=BackupManager.createCloudBackup(f.db,f.s)
+        check(cloud.toByteArray().size<850000){"Compact bytes: ${cloud.toByteArray().size}"}
+        check(JSONObject(cloud).toString(2).toByteArray().size>850000){"Indented bytes: ${JSONObject(cloud).toString(2).toByteArray().size}"}
+        f.sync();check(r.payload==f.cloud())
+    }
     CloudSync.testTransport=null
     d06Finish("sync-safety")
 }
