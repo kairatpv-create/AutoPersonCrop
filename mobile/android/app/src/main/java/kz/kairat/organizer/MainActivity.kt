@@ -56,7 +56,8 @@ class MainActivity:ComponentActivity(){
         scheduleReminders()
     }
     override fun onPause(){
-        if(ready)protectWindow()
+        // A quick Home -> app transition may resume before onStop. Lock as soon as focus is lost.
+        if(ready&&protectWindow())backgroundLocked=true
         super.onPause()
     }
     override fun onStop(){
@@ -64,9 +65,11 @@ class MainActivity:ComponentActivity(){
         backgroundPinDialog?.dismiss();backgroundPinDialog=null
         super.onStop()
     }
-    private fun protectWindow(){
-        if(SettingsStore(this).isPinProtectionEnabled())window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+    private fun protectWindow():Boolean{
+        val protected=SettingsStore(this).isPinProtectionEnabled()
+        if(protected)window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        return protected
     }
     /** Overlay the existing editor so locking on background does not discard an unsaved UI draft. */
     private fun showBackgroundPin(){
