@@ -19,14 +19,17 @@ assert re.search(r'OK \(\d+ tests?\)', text), text
 assert 'FAILURES' not in text and 'shortMsg' not in text, text
 PY
 }
+# Collect independent groups in one run; every failure still blocks the final APK artifact.
+failed=0
+checked_case() { run_case "$@" || failed=1; }
 run_case 'kz.kairat.organizer.LegacyUpgradeTest#seedVersion71' upgrade-seed
 adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
 run_case 'kz.kairat.organizer.LegacyUpgradeTest#verifyVersion72' upgrade-verify
-run_case kz.kairat.organizer.MobileSafetyTest data-offline-account
-run_case kz.kairat.organizer.ApkHardeningTest apk-hardening
-run_case 'kz.kairat.organizer.MobileRestartTest#seed' restart-seed
+checked_case kz.kairat.organizer.MobileSafetyTest data-offline-account
+checked_case kz.kairat.organizer.ApkHardeningTest apk-hardening
+checked_case 'kz.kairat.organizer.MobileRestartTest#seed' restart-seed
 adb shell am force-stop kz.kairat.organizer
-run_case 'kz.kairat.organizer.MobileRestartTest#verifyAfterForceStop' restart-verify
+checked_case 'kz.kairat.organizer.MobileRestartTest#verifyAfterForceStop' restart-verify
 # This instrumentation process must die inside the real restore before SQLite commit.
 set +e
 adb shell am instrument -w -r -e syntheticOnly 1 -e class 'kz.kairat.organizer.MobileCrashTest#haltBeforeSqlCommit' "$runner" > android-safety-evidence/expected-crash.txt 2>&1
@@ -34,11 +37,11 @@ set -e
 if rg -q 'OK \(' android-safety-evidence/expected-crash.txt; then
   echo 'The crash injection unexpectedly completed normally'; exit 1
 fi
-run_case 'kz.kairat.organizer.MobileCrashTest#recoverAfterHalt' crash-recovery
+checked_case 'kz.kairat.organizer.MobileCrashTest#recoverAfterHalt' crash-recovery
 adb shell am force-stop kz.kairat.organizer
 adb install -r organizer-apk-stage/Organizer-Pro-v0.9.39-staging.apk
-run_case 'kz.kairat.organizer.LegacyUpgradeTest#verifyReleaseUpdate' release-upgrade
-run_case kz.kairat.organizer.MobileUiTest ui-navigation
+checked_case 'kz.kairat.organizer.LegacyUpgradeTest#verifyReleaseUpdate' release-upgrade
+checked_case kz.kairat.organizer.MobileUiTest ui-navigation
 mkdir -p android-safety-evidence/ui
 for name in ru-notes ru-finances ru-projects ru-settings en-notes en-finances en-projects en-settings; do
   adb pull "/sdcard/Android/data/kz.kairat.organizer/files/synthetic-ui/$name.png" "android-safety-evidence/ui/$name.png"
@@ -60,3 +63,5 @@ assert 'Status: ok' in (root/'launch.txt').read_text()
 (root/'summary.json').write_text(json.dumps({'platform':'Android emulator API 36','syntheticOnly':True,'passed':sum(counts.values()),'groups':counts,'expectedAbruptRestoreTermination':True,'realPhone':False},indent=2))
 print((root/'summary.json').read_text())
 PY
+
+[[ "$failed" == 0 ]]
