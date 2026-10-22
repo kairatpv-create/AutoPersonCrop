@@ -7,6 +7,8 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,7 +43,7 @@ class ReminderAlertActivity:ComponentActivity(){
         val bounds=if(android.os.Build.VERSION.SDK_INT>=30) windowManager.currentWindowMetrics.bounds else android.graphics.Rect(0,0,resources.displayMetrics.widthPixels,resources.displayMetrics.heightPixels)
         val p=window.attributes
         p.width=(bounds.width()*0.94f).toInt()
-        p.height=(bounds.height()*0.30f).toInt()
+        p.height=(bounds.height()*0.65f).toInt()
         p.gravity=Gravity.TOP or Gravity.CENTER_HORIZONTAL
         p.y=(12*resources.displayMetrics.density).toInt()
         window.attributes=p
@@ -49,17 +51,17 @@ class ReminderAlertActivity:ComponentActivity(){
     @Composable private fun ReminderAlertContent(r:ReminderEntry,lang:String){
         var snoozeMenu by remember{mutableStateOf(false)}
         Surface(Modifier.fillMaxSize(),shape=MaterialTheme.shapes.large,tonalElevation=8.dp,color=MaterialTheme.colorScheme.surface){
-            Column(Modifier.fillMaxSize().padding(horizontal=14.dp,vertical=10.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=14.dp,vertical=10.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
                 Text(r.title.ifBlank{AppStrings.t(lang,"reminders")},style=MaterialTheme.typography.titleLarge,textAlign=TextAlign.Center,modifier=Modifier.fillMaxWidth(),maxLines=2)
                 Text(r.details.ifBlank{r.title},style=MaterialTheme.typography.bodyMedium,maxLines=3,modifier=Modifier.fillMaxWidth())
-                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                    OutlinedButton(onClick={ReminderScheduler.dismissCurrent(this@ReminderAlertActivity,r);finish()},modifier=Modifier.weight(1f),contentPadding=PaddingValues(horizontal=6.dp,vertical=0.dp)){Text(AppStrings.t(lang,"dismiss_alarm"),maxLines=1)}
-                    Button(onClick={snoozeMenu=!snoozeMenu},modifier=Modifier.weight(1f),contentPadding=PaddingValues(horizontal=6.dp,vertical=0.dp)){Text(AppStrings.t(lang,"snooze"),maxLines=1)}
+                    OutlinedButton(onClick={ReminderScheduler.dismissCurrent(this@ReminderAlertActivity,r);finish()},modifier=Modifier.weight(1f),contentPadding=PaddingValues(horizontal=6.dp,vertical=0.dp)){Text(AppStrings.t(lang,"dismiss_alarm"))}
+                    Button(onClick={snoozeMenu=!snoozeMenu},modifier=Modifier.weight(1f),contentPadding=PaddingValues(horizontal=6.dp,vertical=0.dp)){Text(AppStrings.t(lang,"snooze"))}
                 }
                 if(snoozeMenu){
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)){
-                        listOf(10,30,60).forEach{m->OutlinedButton(onClick={ReminderScheduler.snooze(this@ReminderAlertActivity,r,m);finish()},modifier=Modifier.weight(1f),contentPadding=PaddingValues(horizontal=3.dp,vertical=0.dp)){Text(if(m<60)"$m ${AppStrings.t(lang,"minute_short")}" else "1 ${AppStrings.t(lang,"hour_short")}",maxLines=1)}}
+                        listOf(10,30,60).forEach{m->OutlinedButton(onClick={ReminderScheduler.snooze(this@ReminderAlertActivity,r,m);finish()},modifier=Modifier.weight(1f),contentPadding=PaddingValues(horizontal=3.dp,vertical=0.dp)){Text(if(m<60)"$m ${AppStrings.t(lang,"minute_short")}" else "1 ${AppStrings.t(lang,"hour_short")}")}}
                     }
                 }
             }

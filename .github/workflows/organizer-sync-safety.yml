@@ -1,7 +1,7 @@
-name: Verify mobile sync and publication preparation
+name: Verify Organizer Pro APK candidate
 on:
   push:
-    branches: [organizer-sync-release-safety-20261022]
+    branches: [organizer-sync-release-safety-20261022, organizer-android-apk-20261022]
     paths:
       - 'mobile/android/**'
       - 'organizer-sync-server/**'
@@ -62,8 +62,23 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Compile Android and test APKs once
-        run: gradle --no-daemon --build-cache -p mobile/android assembleDebug assembleDebugAndroidTest
+      - name: Reconstruct version 71 storage baseline for synthetic update test
+        run: |
+          git fetch --depth=1 origin 86a0fcc51d41ac0f53cad9463d751df27e2b03a9
+          mkdir legacy-version71
+          git archive 86a0fcc51d41ac0f53cad9463d751df27e2b03a9 mobile/android | tar -x -C legacy-version71
+          sed -i 's/compileSdk = 35/compileSdk = 36/' legacy-version71/mobile/android/app/build.gradle.kts
+          gradle --no-daemon --build-cache -p legacy-version71/mobile/android assembleDebug
+      - name: Compile candidate Android, tests and release APKs
+        run: gradle --no-daemon --build-cache -p mobile/android assembleDebug assembleDebugAndroidTest assembleRelease
+      - name: Sign release staging APK for emulator testing only
+        run: |
+          mkdir organizer-apk-stage
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks "$HOME/.android/debug.keystore" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true --out organizer-apk-stage/Organizer-Pro-v0.9.39-staging.apk mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs organizer-apk-stage/Organizer-Pro-v0.9.39-staging.apk > organizer-apk-stage/staging-signature.txt
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 organizer-apk-stage/Organizer-Pro-v0.9.39-staging.apk
+          git rev-parse HEAD > organizer-apk-stage/source-commit.txt
+          sha256sum organizer-apk-stage/Organizer-Pro-v0.9.39-staging.apk > organizer-apk-stage/staging-sha256.txt
       - name: Enable KVM for the disposable emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -86,4 +101,9 @@ jobs:
         with:
           name: synthetic-android-test-results
           path: android-safety-evidence/
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: organizer-0.9.39-tested-staging
+          path: organizer-apk-stage/
           retention-days: 14

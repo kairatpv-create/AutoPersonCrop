@@ -3,4 +3,5 @@
     <include domain="database" path="." />
     <include domain="sharedpref" path="." />
     <include domain="file" path="." />
+    <exclude domain="sharedpref" path="organizer_settings.xml" />
 </full-backup-content>

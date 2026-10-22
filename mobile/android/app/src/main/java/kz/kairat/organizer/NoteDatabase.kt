@@ -99,6 +99,7 @@ class NoteDatabase(context: Context) : SQLiteOpenHelper(context, "organizer.db",
 
     fun addProject(name:String,description:String,colorKey:String="blue"):Long = saveProject(null,name,description,"planned",0,System.currentTimeMillis(),0L,0.0,"","","",colorKey)
     fun saveProject(id:Long?,name:String,description:String,status:String,progress:Int,startAt:Long,dueAt:Long,budget:Double,client:String,address:String,contact:String,colorKey:String="blue"):Long{
+        require(budget.isFinite() && budget>=0.0) { "Invalid project budget" }
         val safeColor=colorKey.takeIf{it in setOf("blue","yellow","green","orange","pink","purple","red","bright_yellow","cyan")}?:"blue"
         val now=System.currentTimeMillis(); val values=ContentValues().apply{put("name",name);put("description",description);put("status",status);put("progress",progress.coerceIn(0,100));put("start_at",startAt);put("due_at",dueAt);put("budget",budget);put("client",client);put("address",address);put("contact",contact);put("color_key",safeColor);put("updated_at",now)}
         return if(id==null||id<=0L){values.put("created_at",now);writableDatabase.insertOrThrow("projects",null,values)}else{writableDatabase.update("projects",values,"id=?",arrayOf(id.toString()));id}
@@ -131,6 +132,8 @@ class NoteDatabase(context: Context) : SQLiteOpenHelper(context, "organizer.db",
     fun getProjectNoteLinks():List<ProjectNoteLink> = readableDatabase.rawQuery("SELECT project_id,note_id FROM project_note_links",null).use{c->buildList{while(c.moveToNext())add(ProjectNoteLink(c.getLong(0),c.getLong(1)))}}
 
     fun addMoneyEntry(type:String,amount:Double,category:String,projectId:Long?,note:String,colorKey:String="blue"):Long {
+        require(type in setOf("income","expense") && amount.isFinite() && amount>0.0) { "Invalid financial entry" }
+        require(projectId==null || getProject(projectId)!=null) { "The project no longer exists" }
         val safeColor=colorKey.takeIf{it in setOf("blue","yellow","green","orange","pink","purple","red","bright_yellow","cyan")}?:"blue"
         val id=writableDatabase.insertOrThrow("money_entries",null,ContentValues().apply{put("type",type);put("amount",amount);put("category",category);if(projectId==null)putNull("project_id")else put("project_id",projectId);put("note",note);put("color_key",safeColor);put("created_at",System.currentTimeMillis())})
         if(category.isNotBlank()) unhideSuggestion("money_category",category.trim());return id

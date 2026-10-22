@@ -68,8 +68,8 @@ import java.util.Locale
     val context=LocalContext.current
     val db=remember{NoteDatabase(context)}; val store=remember{SettingsStore(context)}
     var dark by rememberSaveable{mutableStateOf(store.darkTheme)}; var font by rememberSaveable{mutableFloatStateOf(store.fontScale)}; var buttonFont by rememberSaveable{mutableFloatStateOf(store.buttonFontScale)}; var bold by rememberSaveable{mutableStateOf(store.boldText)}; var lang by rememberSaveable{mutableStateOf(store.language)}
-    var unlocked by rememberSaveable{mutableStateOf(!store.isPinProtectionEnabled())}
-    var handledPinRequest by rememberSaveable{mutableStateOf("")}
+    var unlocked by remember{mutableStateOf(!store.isPinProtectionEnabled())}
+    var handledPinRequest by remember{mutableStateOf("")}
     LaunchedEffect(Unit){syncAndroidAppLocale(context,lang)}
     OrganizerTheme(dark,font,buttonFont,bold){
         if(!unlocked||(store.isPinProtectionEnabled()&&pinRequest.isNotBlank()&&handledPinRequest!=pinRequest)) UnlockScreen(lang,store){unlocked=true;handledPinRequest=pinRequest}
@@ -79,7 +79,9 @@ import java.util.Locale
 
 @Composable private fun UnlockScreen(lang:String,store:SettingsStore,onUnlock:()->Unit){
     var pin by remember{mutableStateOf("")};var error by remember{mutableStateOf(false)}
-    Box(Modifier.fillMaxSize().padding(28.dp),contentAlignment=Alignment.Center){Card{Column(Modifier.padding(24.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){Text(AppStrings.t(lang,"app"),style=MaterialTheme.typography.titleLarge);Text(AppStrings.t(lang,"unlock"));OutlinedTextField(pin,{pin=it.filter(Char::isDigit).take(12)},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.NumberPassword),visualTransformation=PasswordVisualTransformation(),singleLine=true);if(error)Text(AppStrings.t(lang,"wrong_pin"),color=MaterialTheme.colorScheme.error);Button({if(store.verifyPin(pin))onUnlock()else error=true},Modifier.fillMaxWidth()){Text(AppStrings.t(lang,"confirm"))}}}}
+    var retry by remember{mutableLongStateOf(store.pinRetrySeconds())}
+    LaunchedEffect(Unit){while(true){retry=store.pinRetrySeconds();delay(1000)}}
+    Box(Modifier.fillMaxSize().padding(28.dp),contentAlignment=Alignment.Center){Card{Column(Modifier.padding(24.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){Text(AppStrings.t(lang,"app"),style=MaterialTheme.typography.titleLarge);Text(AppStrings.t(lang,"unlock"));OutlinedTextField(pin,{pin=it.filter(Char::isDigit).take(12)},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.NumberPassword),visualTransformation=PasswordVisualTransformation(),singleLine=true);if(error)Text(if(retry>0) (if(lang=="ru") "Повторите через $retry с" else "Try again in $retry s") else AppStrings.t(lang,"wrong_pin"),color=MaterialTheme.colorScheme.error);Button({if(store.verifyPin(pin))onUnlock()else {error=true;retry=store.pinRetrySeconds()}},Modifier.fillMaxWidth(),enabled=retry==0L){Text(AppStrings.t(lang,"confirm"))}}}}
 }
 
 @Composable private fun OrganizerHome(db:NoteDatabase,settings:SettingsStore,lang:String,onLanguage:(String)->Unit,dark:Boolean,onDark:(Boolean)->Unit,fontScale:Float,onFont:(Float)->Unit,buttonScale:Float,onButtonScale:(Float)->Unit,bold:Boolean,onBold:(Boolean)->Unit,onLock:()->Unit){
@@ -233,7 +235,7 @@ import java.util.Locale
     var showReminderEditor by remember{mutableStateOf(false)}
     val atts=remember(refresh){AttachmentStore.list("note",note.id)}
     BackHandler{onBack()}
-    Scaffold(topBar={TopAppBar(title={Text(note.title.ifBlank{AppStrings.t(lang,"note")},maxLines=1,style=userTextStyle(15f,true))},navigationIcon={IconButton(onBack){Icon(Icons.Default.ArrowBack,null)}},actions={IconButton(onEdit){Icon(Icons.Default.Edit,null)};IconButton({db.delete(note.id);AttachmentStore.deleteTarget("note",note.id);onDeleted()}){Icon(Icons.Default.Delete,null)}},colors=organizerTopBarColors())}){pad->
+    Scaffold(topBar={TopAppBar(title={Text(note.title.ifBlank{AppStrings.t(lang,"note")},maxLines=1,style=userTextStyle(15f,true))},navigationIcon={IconButton(onBack){Icon(Icons.Default.ArrowBack,null)}},actions={IconButton(onEdit){Icon(Icons.Default.Edit,null)};IconButton({ReminderScheduler.cancelAllForTarget(context,"note",note.id,db);db.delete(note.id);AttachmentStore.deleteTarget("note",note.id);onDeleted()}){Icon(Icons.Default.Delete,null)}},colors=organizerTopBarColors())}){pad->
         LazyColumn(Modifier.padding(pad).padding(horizontal=10.dp,vertical=6.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
             item{Text(note.body,style=userTextStyle())}
             val voices=atts.filter{it.isVoice}; if(voices.isNotEmpty()){items(voices,key={it.id}){VoiceNoteBlock(it,lang)}}
@@ -274,7 +276,7 @@ import java.util.Locale
     fun save(){if(recording)stopRecording();val id=db.save(note?.id,title.trim(),body.trim(),colorKey);if(tempId<0)AttachmentStore.reassignTarget("note",tempId,id);onSaved(id)}
     fun close(){if(recording)recorder.cancel();if(note==null)AttachmentStore.deleteTarget("note",tempId);onClose()}
     BackHandler{close()}
-    Scaffold(topBar={TopAppBar(title={Text(AppStrings.t(lang,if(note==null)"new_note" else "edit_note"))},navigationIcon={if(note!=null){IconButton({close()}){Icon(Icons.Default.ArrowBack,null)}}},actions={if(note!=null)IconButton({db.delete(note.id);AttachmentStore.deleteTarget("note",note.id);onClose()}){Icon(Icons.Default.Delete,null)};TopColorMenu(colorKey){colorKey=it}},colors=organizerTopBarColors())}){pad->
+    Scaffold(topBar={TopAppBar(title={Text(AppStrings.t(lang,if(note==null)"new_note" else "edit_note"))},navigationIcon={if(note!=null){IconButton({close()}){Icon(Icons.Default.ArrowBack,null)}}},actions={if(note!=null)IconButton({ReminderScheduler.cancelAllForTarget(context,"note",note.id,db);db.delete(note.id);AttachmentStore.deleteTarget("note",note.id);onClose()}){Icon(Icons.Default.Delete,null)};TopColorMenu(colorKey){colorKey=it}},colors=organizerTopBarColors())}){pad->
         LazyColumn(Modifier.padding(pad).consumeWindowInsets(pad).imePadding().padding(horizontal=10.dp,vertical=6.dp),verticalArrangement=Arrangement.spacedBy(7.dp)){
             if(note!=null)item{Text("${AppStrings.t(lang,"created")}: ${formatDate(note.createdAt,lang)}\n${AppStrings.t(lang,"changed")}: ${formatDate(note.updatedAt,lang)}",style=MaterialTheme.typography.bodySmall)}
             item{SuggestionTextField(
@@ -610,7 +612,7 @@ private fun decodeAttachmentThumbnail(file:File):android.graphics.Bitmap?{
             if(project.description.isNotBlank())Text(project.description,style=userTextStyle())
             ProjectInfoRow(AppStrings.t(lang,"start_date"),if(project.startAt>0)formatDay(project.startAt) else AppStrings.t(lang,"not_set"))
             ProjectInfoRow(AppStrings.t(lang,"due_date"),if(project.dueAt>0)formatDay(project.dueAt) else AppStrings.t(lang,"not_set"))
-            if(project.budget>0)ProjectInfoRow(AppStrings.t(lang,"budget"),"%,.0f ₸".format(project.budget),true)
+            if(project.budget>0)ProjectInfoRow(AppStrings.t(lang,"budget"),MoneyAmounts.display(project.budget),true)
             if(project.client.isNotBlank())ProjectInfoRow(AppStrings.t(lang,"client"),project.client,true)
             if(project.address.isNotBlank())ProjectInfoRow(AppStrings.t(lang,"address"),project.address,true)
             if(project.contact.isNotBlank())ProjectInfoRow(AppStrings.t(lang,"contact"),project.contact,true)
@@ -668,7 +670,7 @@ private fun decodeAttachmentThumbnail(file:File):android.graphics.Bitmap?{
         OutlinedTextField(amount,{amount=formatAmountInput(it)},label={Text(AppStrings.t(lang,"amount"))},textStyle=userTextStyle(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
         SuggestionTextField(cat,{cat=capitalizeSentences(it)},AppStrings.t(lang,"category"),db.getMoneyCategorySuggestions(cat),{cat=it},{db.hideSuggestion("money_category",it)},Modifier.fillMaxWidth())
         OutlinedTextField(note,{note=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"comment"))},textStyle=userTextStyle())
-    }},confirmButton={Button({parseAmountInput(amount)?.let{db.addMoneyEntry(type,it,cat,projectId,note);onAdded()}}){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
+    }},confirmButton={Button({parseAmountInput(amount)?.takeIf{it>0.0}?.let{db.addMoneyEntry(type,it,cat,projectId,note);onAdded()}}){Text(AppStrings.t(lang,"add"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
 }
 
 @Composable private fun ProjectFilesTab(project:Project,lang:String,revision:Int,onChanged:()->Unit){
@@ -705,7 +707,7 @@ private fun decodeAttachmentThumbnail(file:File):android.graphics.Bitmap?{
 
 @Composable private fun ProjectEditDialog(db:NoteDatabase,project:Project,lang:String,onDismiss:()->Unit,onSaved:()->Unit){
     val context=LocalContext.current
-    var name by remember{mutableStateOf(project.name)};var description by remember{mutableStateOf(project.description)};var status by remember{mutableStateOf(project.status)};var progress by remember{mutableFloatStateOf(project.progress.toFloat())};var startAt by remember{mutableLongStateOf(project.startAt)};var dueAt by remember{mutableLongStateOf(project.dueAt)};var budget by remember{mutableStateOf(if(project.budget>0)formatAmountInput(project.budget.toLong().toString()) else "")};var client by remember{mutableStateOf(project.client)};var address by remember{mutableStateOf(project.address)};var contact by remember{mutableStateOf(project.contact)}
+    var name by remember{mutableStateOf(project.name)};var description by remember{mutableStateOf(project.description)};var status by remember{mutableStateOf(project.status)};var progress by remember{mutableFloatStateOf(project.progress.toFloat())};var startAt by remember{mutableLongStateOf(project.startAt)};var dueAt by remember{mutableLongStateOf(project.dueAt)};var budget by remember{mutableStateOf(if(project.budget>0)MoneyAmounts.edit(project.budget) else "")};var client by remember{mutableStateOf(project.client)};var address by remember{mutableStateOf(project.address)};var contact by remember{mutableStateOf(project.contact)}
     AlertDialog(onDismissRequest=onDismiss,title={Text(AppStrings.t(lang,"edit_project"))},text={LazyColumn(Modifier.heightIn(max=560.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
         item{OutlinedTextField(name,{name=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"title"))},textStyle=userTextStyle(),singleLine=true,modifier=Modifier.fillMaxWidth())}
         item{OutlinedTextField(description,{description=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"details"))},textStyle=userTextStyle(),minLines=3,modifier=Modifier.fillMaxWidth())}
@@ -716,7 +718,7 @@ private fun decodeAttachmentThumbnail(file:File):android.graphics.Bitmap?{
         item{OutlinedTextField(client,{client=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"client"))},textStyle=userTextStyle(),singleLine=true,modifier=Modifier.fillMaxWidth())}
         item{OutlinedTextField(address,{address=capitalizeSentences(it)},label={Text(AppStrings.t(lang,"address"))},textStyle=userTextStyle(),singleLine=true,modifier=Modifier.fillMaxWidth())}
         item{OutlinedTextField(contact,{contact=it},label={Text(AppStrings.t(lang,"contact"))},textStyle=userTextStyle(),singleLine=true,modifier=Modifier.fillMaxWidth())}
-    }},confirmButton={Button({if(name.isNotBlank()){db.saveProject(project.id,name.trim(),description.trim(),status,progress.toInt(),startAt,dueAt,parseAmountInput(budget)?:0.0,client.trim(),address.trim(),contact.trim(),project.colorKey);onSaved()}}){Text(AppStrings.t(lang,"save"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
+    }},confirmButton={Button({if(name.isNotBlank()&&(budget.isBlank()||parseAmountInput(budget)!=null)){db.saveProject(project.id,name.trim(),description.trim(),status,progress.toInt(),startAt,dueAt,parseAmountInput(budget)?:0.0,client.trim(),address.trim(),contact.trim(),project.colorKey);onSaved()}}){Text(AppStrings.t(lang,"save"))}},dismissButton={TextButton(onDismiss){Text(AppStrings.t(lang,"cancel"))}})
 }
 
 @Composable private fun AddProjectJournalDialog(db:NoteDatabase,projectId:Long,lang:String,onDismiss:()->Unit,onAdded:()->Unit){
@@ -793,7 +795,7 @@ private fun launchDatePicker(context:android.content.Context,initial:Long,onSele
         Column(Modifier.fillMaxWidth().padding(horizontal=7.dp,vertical=6.dp),horizontalAlignment=Alignment.CenterHorizontally){
             Text(title,style=MaterialTheme.typography.labelMedium,maxLines=1,overflow=TextOverflow.Ellipsis)
             val prefix=if(signed&&value>0)"+" else if(signed&&value<0)"−" else ""
-            Text(prefix+"%,.0f ₸".format(kotlin.math.abs(value)),style=MaterialTheme.typography.titleSmall,color=valueColor,maxLines=1)
+            Text(prefix+MoneyAmounts.display(kotlin.math.abs(value)),style=MaterialTheme.typography.titleSmall,color=valueColor,maxLines=1)
         }
     }
 }
@@ -892,7 +894,7 @@ private fun moneyMonthPoints(entries:List<MoneyEntry>,lang:String):List<MoneyMon
     Card(Modifier.fillMaxWidth(),colors=noteCardColors(m.colorKey)){
         Column(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=7.dp)){
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-                Text("%,.0f ₸".format(m.amount),style=userTextStyle(15f,true),color=amountColor,modifier=Modifier.weight(1f),maxLines=1)
+                Text(MoneyAmounts.display(m.amount),style=userTextStyle(15f,true),color=amountColor,modifier=Modifier.weight(1f),maxLines=1)
                 if(onDelete!=null)IconButton({onDelete(m.id)},modifier=Modifier.size(30.dp)){Icon(Icons.Default.Delete,null,Modifier.size(18.dp))}
             }
             val label=m.category.ifBlank{m.note.ifBlank{AppStrings.t(lang,"comment")}}
@@ -907,7 +909,7 @@ private fun moneyMonthPoints(entries:List<MoneyEntry>,lang:String):List<MoneyMon
     var cat by rememberSaveable{mutableStateOf("")}
     var note by rememberSaveable{mutableStateOf("")}
     var colorKey by rememberSaveable{mutableStateOf("blue")}
-    fun submit(){parseAmountInput(amount)?.let{onAdd(it,cat.trim(),note.trim(),colorKey)}}
+    fun submit(){parseAmountInput(amount)?.takeIf{it>0.0}?.let{onAdd(it,cat.trim(),note.trim(),colorKey)}}
     BackHandler{onDismiss()}
     Scaffold(
         topBar={
@@ -1065,8 +1067,8 @@ private fun languagesLabel(lang:String):String=when(AppStrings.normalizeLanguage
 
 @Composable private fun SettingsScreen(db:NoteDatabase,settings:SettingsStore,lang:String,onLanguage:(String)->Unit,dark:Boolean,onDark:(Boolean)->Unit,fontScale:Float,onFont:(Float)->Unit,buttonScale:Float,onButtonScale:(Float)->Unit,bold:Boolean,onBold:(Boolean)->Unit,projectsEnabled:Boolean,onProjectsEnabled:(Boolean)->Unit){
     val context=LocalContext.current;var msg by remember{mutableStateOf<String?>(null)};var showPin by remember{mutableStateOf(false)};var showDisablePin by remember{mutableStateOf(false)};var showChangePin by remember{mutableStateOf(false)};var languageMenu by remember{mutableStateOf(false)};var archiveBackup by rememberSaveable{mutableStateOf(false)}
-    val compactSettings=buttonScale<=1.16f
-    val onePageSettings=buttonScale<=.90f
+    val compactSettings=buttonScale*LocalDensity.current.fontScale<=1.16f
+    val onePageSettings=buttonScale*LocalDensity.current.fontScale<=.90f
     val settingsOuterV=if(onePageSettings)0.dp else if(compactSettings)2.dp else 4.dp
     val settingsGap=if(onePageSettings)1.dp else if(compactSettings)3.dp else 4.dp
     val topCardPad=if(onePageSettings)1.dp else if(compactSettings)3.dp else 5.dp
@@ -1157,31 +1159,31 @@ private fun languagesLabel(lang:String):String=when(AppStrings.normalizeLanguage
     val scale=LocalButtonTextScale.current
     val compact=scale<=1.16f
     Row(
-        Modifier.fillMaxWidth().heightIn(min=if(compact)38.dp else 44.dp).padding(vertical=4.dp),
+        Modifier.fillMaxWidth().heightIn(min=48.dp).padding(vertical=4.dp),
         verticalAlignment=Alignment.CenterVertically
     ){
         Text(label,Modifier.weight(1f),maxLines=2)
         Box(
-            Modifier.width(if(compact)44.dp else 50.dp).height(if(compact)26.dp else 30.dp),
+            Modifier.width(56.dp).heightIn(min=48.dp),
             contentAlignment=Alignment.Center
         ){
-            Switch(value,onChange,modifier=Modifier.scale(if(compact).72f else .84f))
+            Switch(value,onChange)
         }
     }
 }
 @Composable private fun FontScaleRow(label:String,value:Float,onChange:(Float)->Unit,compact:Boolean){
     Row(
-        Modifier.fillMaxWidth().heightIn(min=if(compact)38.dp else 44.dp).padding(vertical=4.dp),
+        Modifier.fillMaxWidth().heightIn(min=48.dp).padding(vertical=4.dp),
         verticalAlignment=Alignment.CenterVertically
     ){
         Text(label,Modifier.weight(1.05f),maxLines=2)
         Box(
-            Modifier.weight(.95f).height(if(compact)22.dp else 28.dp),
+            Modifier.weight(.95f).heightIn(min=48.dp),
             contentAlignment=Alignment.Center
         ){
             Slider(
                 value,onChange,
-                modifier=Modifier.fillMaxWidth().scale(scaleX=1f,scaleY=if(compact).68f else .82f),
+                modifier=Modifier.fillMaxWidth(),
                 valueRange=.85f..1.45f,
                 steps=3
             )
@@ -1257,20 +1259,18 @@ private fun languagesLabel(lang:String):String=when(AppStrings.normalizeLanguage
 @OptIn(ExperimentalFoundationApi::class)
 @Composable private fun RowScope.TopActionPill(text:String,icon:androidx.compose.ui.graphics.vector.ImageVector,onClick:()->Unit,wide:Boolean=false){
     val uiScale=LocalButtonTextScale.current.coerceIn(.85f,1.45f)
-    val pillHeight=(40f*uiScale).dp
+    val pillHeight=(40f*uiScale).coerceAtLeast(48f).dp
     FilledTonalButton(
         onClick=onClick,
         shape=RoundedCornerShape((19f*uiScale).dp),
         colors=ButtonDefaults.filledTonalButtonColors(containerColor=MaterialTheme.colorScheme.tertiary,contentColor=MaterialTheme.colorScheme.onTertiary),
         contentPadding=PaddingValues(horizontal=(7f*uiScale).dp,vertical=0.dp),
-        modifier=Modifier.weight(1f).height(pillHeight)
+        modifier=Modifier.weight(1f).heightIn(min=pillHeight)
     ){
         Text(
             text,
-            modifier=Modifier.fillMaxWidth().basicMarquee(iterations=Int.MAX_VALUE,repeatDelayMillis=0,initialDelayMillis=0),
-            maxLines=1,
-            softWrap=false,
-            overflow=TextOverflow.Clip,
+            modifier=Modifier.fillMaxWidth(),
+            softWrap=true,
             textAlign=androidx.compose.ui.text.style.TextAlign.Center,
             style=MaterialTheme.typography.labelLarge
         )
@@ -1280,14 +1280,12 @@ private fun languagesLabel(lang:String):String=when(AppStrings.normalizeLanguage
 @Composable private fun MoneyTabPill(selected:Boolean,text:String,onClick:()->Unit,modifier:Modifier=Modifier){
     val uiScale=LocalButtonTextScale.current.coerceIn(.85f,1.45f)
     val shape=RoundedCornerShape((15f*uiScale).dp)
-    val pillHeight=(32f*uiScale).dp
+    val pillHeight=(32f*uiScale).coerceAtLeast(48f).dp
     val content: @Composable RowScope.() -> Unit={
         Text(
             text,
-            modifier=Modifier.fillMaxWidth().basicMarquee(iterations=Int.MAX_VALUE,repeatDelayMillis=0,initialDelayMillis=0),
-            maxLines=1,
-            softWrap=false,
-            overflow=TextOverflow.Clip,
+            modifier=Modifier.fillMaxWidth(),
+            softWrap=true,
             textAlign=androidx.compose.ui.text.style.TextAlign.Center,
             style=MaterialTheme.typography.labelLarge
         )
@@ -1297,14 +1295,14 @@ private fun languagesLabel(lang:String):String=when(AppStrings.normalizeLanguage
         shape=shape,
         colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.tertiary,contentColor=MaterialTheme.colorScheme.onTertiary),
         contentPadding=PaddingValues(horizontal=3.dp,vertical=0.dp),
-        modifier=modifier.height(pillHeight),
+        modifier=modifier.heightIn(min=pillHeight),
         content=content
     ) else OutlinedButton(
         onClick=onClick,
         shape=shape,
         colors=ButtonDefaults.outlinedButtonColors(contentColor=MaterialTheme.colorScheme.primary),
         contentPadding=PaddingValues(horizontal=3.dp,vertical=0.dp),
-        modifier=modifier.height(pillHeight),
+        modifier=modifier.heightIn(min=pillHeight),
         content=content
     )
 }
@@ -1313,20 +1311,18 @@ private fun languagesLabel(lang:String):String=when(AppStrings.normalizeLanguage
 @Composable private fun BottomTextNavPill(selected:Boolean,text:String,onClick:()->Unit,modifier:Modifier=Modifier){
     val uiScale=LocalButtonTextScale.current.coerceIn(.85f,1.45f)
     val shape=RoundedCornerShape((15f*uiScale).dp)
-    val pillHeight=(44f*uiScale).dp
+    val pillHeight=(44f*uiScale).coerceAtLeast(48f).dp
     val content: @Composable RowScope.() -> Unit={
         Text(
             text,
-            modifier=Modifier.fillMaxWidth().basicMarquee(iterations=Int.MAX_VALUE,repeatDelayMillis=0,initialDelayMillis=0),
-            maxLines=1,
-            softWrap=false,
-            overflow=TextOverflow.Clip,
+            modifier=Modifier.fillMaxWidth(),
+            softWrap=true,
             textAlign=androidx.compose.ui.text.style.TextAlign.Center,
             style=MaterialTheme.typography.labelLarge
         )
     }
-    if(selected) Button(onClick=onClick,shape=shape,colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.tertiary,contentColor=MaterialTheme.colorScheme.onTertiary),contentPadding=PaddingValues(horizontal=2.dp,vertical=0.dp),modifier=modifier.height(pillHeight),content=content)
-    else OutlinedButton(onClick=onClick,shape=shape,colors=ButtonDefaults.outlinedButtonColors(contentColor=MaterialTheme.colorScheme.primary),contentPadding=PaddingValues(horizontal=2.dp,vertical=0.dp),modifier=modifier.height(pillHeight),content=content)
+    if(selected) Button(onClick=onClick,shape=shape,colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.tertiary,contentColor=MaterialTheme.colorScheme.onTertiary),contentPadding=PaddingValues(horizontal=2.dp,vertical=0.dp),modifier=modifier.heightIn(min=pillHeight),content=content)
+    else OutlinedButton(onClick=onClick,shape=shape,colors=ButtonDefaults.outlinedButtonColors(contentColor=MaterialTheme.colorScheme.primary),contentPadding=PaddingValues(horizontal=2.dp,vertical=0.dp),modifier=modifier.heightIn(min=pillHeight),content=content)
 }
 
 @Composable private fun noteColor(key:String):Color{
@@ -1366,17 +1362,8 @@ private fun appendRecognizedText(current:String,recognized:String):String{
 private fun formatTime(ms:Long,lang:String)=DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT,AppStrings.locale(lang)).format(Date(ms))
 private fun formatDate(ms:Long,lang:String)=DateFormat.getDateTimeInstance(DateFormat.MEDIUM,DateFormat.SHORT,AppStrings.locale(lang)).format(Date(ms))
 private fun humanDuration(ms:Long):String{val s=(ms/1000).coerceAtLeast(0);return "%02d:%02d".format(s/60,s%60)}
-private fun formatAmountInput(input:String):String{
-    val cleaned=input.replace(" ","").replace('.',',').filter{it.isDigit()||it==','}
-    if(cleaned.isEmpty())return ""
-    val parts=cleaned.split(',',limit=2)
-    val intDigits=parts[0].filter(Char::isDigit).trimStart('0').ifEmpty{if(parts[0].isNotEmpty())"0" else ""}
-    val grouped=intDigits.reversed().chunked(3).joinToString(" ").reversed()
-    if(parts.size==1)return grouped
-    val decimals=parts[1].filter(Char::isDigit).take(2)
-    return grouped+","+decimals
-}
-private fun parseAmountInput(input:String):Double?=input.replace(" ","").replace(',','.').toDoubleOrNull()
+private fun formatAmountInput(input:String):String=MoneyAmounts.formatInput(input)
+private fun parseAmountInput(input:String):Double?=MoneyAmounts.parse(input)
 private fun capitalizeSentences(input:String):String{
     if(input.isEmpty())return input
     val out=StringBuilder(input.length);var capitalizeNext=true

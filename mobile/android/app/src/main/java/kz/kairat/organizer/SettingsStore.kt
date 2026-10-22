@@ -11,10 +11,12 @@ class SettingsStore(context: Context) {
         get() = prefs.getString("sync_error", "") ?: ""
         set(v) = prefs.edit().putString("sync_error", v).apply()
     internal fun saveSession(email:String,token:String,uid:String) {
-        check(prefs.edit().putString("sync_email",email).putString("sync_id_token",token)
-            .putString("sync_uid",uid).putString("sync_refresh_token","").putLong("sync_token_expiry",Long.MAX_VALUE).commit()) { "Could not save session" }
+        secure.update { it.put("sync_id_token", token).put("sync_uid", uid).put("sync_refresh_token", "").put("sync_token_expiry", Long.MAX_VALUE) }
+        check(prefs.edit().putString("sync_email",email).commit()) { "Could not save session" }
     }
-    private val prefs: SharedPreferences = context.getSharedPreferences("organizer_settings", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = SettingsPreferences.open(appContext)
+    private val secure = ProtectedSettings(appContext)
+    internal fun ensureSecureStorage() = secure.ensure()
 
     var darkTheme: Boolean
         get() = prefs.getBoolean("dark_theme", false)
@@ -64,23 +66,23 @@ class SettingsStore(context: Context) {
         get() = prefs.getString("sync_project_id", "") ?: ""
         set(v) = prefs.edit().putString("sync_project_id", v.trim()).apply()
     var syncApiKey: String
-        get() = prefs.getString("sync_api_key", "") ?: ""
-        set(v) = prefs.edit().putString("sync_api_key", v.trim()).apply()
+        get() = secure.string("sync_api_key")
+        set(v) = secure.put("sync_api_key", v.trim())
     var syncEmail: String
         get() = prefs.getString("sync_email", "") ?: ""
         set(v) = prefs.edit().putString("sync_email", v.trim()).apply()
     var syncIdToken: String
-        get() = prefs.getString("sync_id_token", "") ?: ""
-        set(v) = prefs.edit().putString("sync_id_token", v).apply()
+        get() = secure.string("sync_id_token")
+        set(v) = secure.put("sync_id_token", v)
     var syncRefreshToken: String
-        get() = prefs.getString("sync_refresh_token", "") ?: ""
-        set(v) = prefs.edit().putString("sync_refresh_token", v).apply()
+        get() = secure.string("sync_refresh_token")
+        set(v) = secure.put("sync_refresh_token", v)
     var syncUid: String
-        get() = prefs.getString("sync_uid", "") ?: ""
-        set(v) = prefs.edit().putString("sync_uid", v).apply()
+        get() = secure.string("sync_uid")
+        set(v) = secure.put("sync_uid", v)
     var syncTokenExpiry: Long
-        get() = prefs.getLong("sync_token_expiry", 0L)
-        set(v) = prefs.edit().putLong("sync_token_expiry", v).apply()
+        get() = secure.long("sync_token_expiry")
+        set(v) = secure.put("sync_token_expiry", v)
     var syncLastFingerprint: String
         get() = prefs.getString("sync_last_fingerprint", "") ?: ""
         set(v) = prefs.edit().putString("sync_last_fingerprint", v).apply()
@@ -90,24 +92,36 @@ class SettingsStore(context: Context) {
     var syncLastSuccessAt: Long
         get() = prefs.getLong("sync_last_success_at", 0L)
         set(v) = prefs.edit().putLong("sync_last_success_at", v).apply()
-    fun clearSyncSession() = prefs.edit()
-        .remove("sync_id_token").remove("sync_refresh_token").remove("sync_uid").remove("sync_token_expiry")
-        .remove("sync_last_fingerprint").remove("sync_last_cloud_updated_at").remove("sync_last_success_at").apply()
+    fun clearSyncSession() {
+        secure.remove("sync_id_token", "sync_refresh_token", "sync_uid", "sync_token_expiry")
+        check(prefs.edit().remove("sync_last_fingerprint").remove("sync_last_cloud_updated_at").remove("sync_last_success_at").commit())
+    }
 
-    fun isPinProtectionEnabled(): Boolean = prefs.getBoolean("pin_enabled", false) && hasPin()
-    fun setPinProtectionEnabled(enabled: Boolean) = prefs.edit().putBoolean("pin_enabled", enabled).apply()
-    fun hasPin(): Boolean = !prefs.getString("pin_hash", "").isNullOrBlank() && !prefs.getString("pin_salt", "").isNullOrBlank()
+    // A storage failure must never disable an existing PIN or reveal reminder content.
+    fun isPinProtectionEnabled(): Boolean = try { secure.boolean("pin_enabled") && hasPin() } catch (_: ProtectedSettings.Unavailable) { true }
+    fun setPinProtectionEnabled(enabled: Boolean) = secure.put("pin_enabled", enabled)
+    fun hasPin(): Boolean = secure.string("pin_hash").isNotBlank() && secure.string("pin_salt").isNotBlank()
 
     fun setPin(pin: String) {
         require(pin.length >= 4)
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }.toHex()
-        prefs.edit().putString("pin_salt", salt).putString("pin_hash", hashPin(pin, salt)).apply()
+        secure.update { it.put("pin_salt", salt).put("pin_hash", hashPin(pin, salt)).put("pin_attempts",0).put("pin_locked_until",0L) }
     }
-    fun verifyPin(pin: String): Boolean {
-        val salt = prefs.getString("pin_salt", null) ?: return false
-        val expected = prefs.getString("pin_hash", null) ?: return false
-        return constantTimeEquals(expected, hashPin(pin, salt))
-    }
+    fun pinRetrySeconds(): Long = try { ((secure.long("pin_locked_until")-System.currentTimeMillis()+999)/1000).coerceAtLeast(0) } catch (_: ProtectedSettings.Unavailable) { 30 }
+    fun verifyPin(pin: String): Boolean = try {
+        var accepted=false
+        secure.update { values ->
+            val now=System.currentTimeMillis()
+            if(values.optLong("pin_locked_until",0)>now) return@update
+            val salt=values.optString("pin_salt","");val expected=values.optString("pin_hash","")
+            accepted=salt.isNotEmpty()&&expected.isNotEmpty()&&constantTimeEquals(expected,hashPin(pin,salt))
+            val attempts=if(accepted||values.optLong("pin_locked_until",0)>0) 0 else values.optInt("pin_attempts",0)
+            if(accepted) values.put("pin_attempts",0).put("pin_locked_until",0L)
+            else if(attempts+1>=5) values.put("pin_attempts",0).put("pin_locked_until",now+30_000)
+            else values.put("pin_attempts",attempts+1).put("pin_locked_until",0L)
+        }
+        accepted
+    } catch (_: ProtectedSettings.Unavailable) { false }
     private fun hashPin(pin: String, salt: String): String = MessageDigest.getInstance("SHA-256")
         .digest((salt + ":" + pin).toByteArray(Charsets.UTF_8)).toHex()
     private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }

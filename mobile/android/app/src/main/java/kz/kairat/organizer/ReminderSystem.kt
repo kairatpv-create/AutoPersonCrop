@@ -148,19 +148,19 @@ class ReminderReceiver:BroadcastReceiver(){
 class BootReceiver:BroadcastReceiver(){override fun onReceive(context:Context,intent:Intent){ReminderNotifications.ensureChannel(context);ReminderScheduler.rescheduleAll(context);if(OrganizerCalendarRepository.hasCalendarPermission(context))BirthdayScheduler.rescheduleAll(context)}}
 
 object ReminderNotifications{
-    private const val CH="organizer_reminders_v3"
+    private fun channel(sound:Boolean,vibrate:Boolean)="organizer_reminders_v4_${if(sound)1 else 0}_${if(vibrate)1 else 0}"
     fun ensureChannel(c:Context){
         if(Build.VERSION.SDK_INT<26) return
         val lang=SettingsStore(c).language
         val nm=c.getSystemService(NotificationManager::class.java)
         val alarmUri=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM) ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
         val attrs=AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
-        nm.createNotificationChannel(NotificationChannel(CH,AppStrings.t(lang,"reminders"),NotificationManager.IMPORTANCE_HIGH).apply{
+        for(sound in listOf(false,true))for(vibrate in listOf(false,true)) nm.createNotificationChannel(NotificationChannel(channel(sound,vibrate),AppStrings.t(lang,"reminders")+" · "+(if(sound)"♪" else "—")+(if(vibrate)" ≋" else ""),NotificationManager.IMPORTANCE_HIGH).apply{
             description=AppStrings.t(lang,"notification_channel_desc")
             lockscreenVisibility=Notification.VISIBILITY_PRIVATE
-            enableVibration(true)
+            enableVibration(vibrate)
             vibrationPattern=longArrayOf(0,650,250,650,250,900)
-            setSound(alarmUri,attrs)
+            setSound(if(sound)alarmUri else null,attrs)
         })
     }
     fun show(c:Context,r:ReminderEntry){
@@ -172,7 +172,7 @@ object ReminderNotifications{
         if(protected)alertIntent.putExtra("require_pin",true)
         val alertPi=PendingIntent.getActivity(c,r.id.toInt(),alertIntent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val text=if(protected)SyncSnapshot.message(lang,"Откройте приложение и введите PIN.","Open the app and enter your PIN.") else r.details.ifBlank{r.title.ifBlank{AppStrings.t(lang,"reminder")}}
-        val b=NotificationCompat.Builder(c,CH)
+        val b=NotificationCompat.Builder(c,channel(r.sound,r.vibrate))
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(if(protected)AppStrings.t(lang,"reminder") else r.title.ifBlank{AppStrings.t(lang,"reminder")})
             .setContentText(text)

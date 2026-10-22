@@ -66,7 +66,6 @@ val LocalContentTextScale=staticCompositionLocalOf{1f}
         labelSmall=TextStyle(fontSize=uiBodySize,fontWeight=weight)
     )
     CompositionLocalProvider(
-        LocalDensity provides Density(density.density,1f),
         LocalButtonTextScale provides buttonTextScale,
         LocalContentTextScale provides contentTextScale
     ){MaterialTheme(colorScheme=if(dark)Dark else Light,typography=type,content=content)}

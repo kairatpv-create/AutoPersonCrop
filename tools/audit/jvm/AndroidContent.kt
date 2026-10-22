@@ -41,6 +41,7 @@ class ContentValues:LinkedHashMap<String,Any?>(){
 class SharedPreferences(private val file:File?=null) {
     private val values=mutableMapOf<String,Any?>()
     init { if(file?.isFile==true){val json=JSONObject(file.readText());json.keys().forEach{k->values[k]=json.get(k)}} }
+    val all:Map<String,Any?> get()=values.toMap()
     fun getBoolean(k:String,d:Boolean)=values[k] as? Boolean?:d
     fun getFloat(k:String,d:Float)=(values[k] as? Number)?.toFloat()?:d
     fun getLong(k:String,d:Long)=(values[k] as? Number)?.toLong()?:d
@@ -51,6 +52,7 @@ class SharedPreferences(private val file:File?=null) {
         private val removed=mutableSetOf<String>()
         fun putBoolean(k:String,v:Boolean)=apply{pending[k]=v}
         fun putFloat(k:String,v:Float)=apply{pending[k]=v}
+        fun putInt(k:String,v:Int)=apply{pending[k]=v}
         fun putLong(k:String,v:Long)=apply{pending[k]=v}
         fun putString(k:String,v:String?)=apply{pending[k]=v}
         fun remove(k:String)=apply{removed.add(k)}

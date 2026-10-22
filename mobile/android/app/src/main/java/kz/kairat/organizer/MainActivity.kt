@@ -21,6 +21,13 @@ class MainActivity:ComponentActivity(){
         openOrganizer()
     }
     private fun openOrganizer(){
+        try { SettingsStore(this).ensureSecureStorage() } catch (_: Exception) {
+            val ru=java.util.Locale.getDefault().language=="ru"
+            AlertDialog.Builder(this).setMessage(if(ru)"Не удалось открыть защищённые настройки. Данные сохранены. Разблокируйте телефон и повторите попытку." else "Could not open protected settings. Your data has been kept. Unlock the phone and try again.")
+                .setCancelable(false).setPositiveButton(if(ru)"Повторить" else "Retry"){_,_->openOrganizer()}
+                .setNegativeButton(if(ru)"Закрыть" else "Close"){_,_->finish()}.show()
+            return
+        }
         try{AttachmentStore.initialize(this)}catch(failure:RestoreJournal.RecoveryRequired){
             val ru=SettingsStore(this).language=="ru"
             AlertDialog.Builder(this).setMessage(failure.message).setCancelable(false)
