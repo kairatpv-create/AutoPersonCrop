@@ -46,6 +46,12 @@ class BackupImportActivity:ComponentActivity() {
     }
     override fun onResume(){
         super.onResume()
+        settings?.let{store->
+            androidx.core.view.WindowCompat.getInsetsController(window,window.decorView).apply{
+                isAppearanceLightStatusBars=!store.darkTheme
+                isAppearanceLightNavigationBars=!store.darkTheme
+            }
+        }
         if(settings?.isPinProtectionEnabled()==true)window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
     }
     override fun onNewIntent(newIntent:Intent){
@@ -87,7 +93,7 @@ class BackupImportActivity:ComponentActivity() {
     }
     if(!unlocked){UnlockScreen(lang,settings,onUnlock);return}
     Surface(Modifier.fillMaxSize()){
-        Column(Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(16.dp)){
+        Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(16.dp)){
             Text(AppStrings.t(lang,"app"),style=MaterialTheme.typography.headlineSmall)
             Text(SyncSnapshot.message(lang,"Восстановление из копии","Restore from backup"),style=MaterialTheme.typography.titleLarge)
             when{
