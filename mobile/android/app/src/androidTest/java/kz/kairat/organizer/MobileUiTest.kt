@@ -24,7 +24,7 @@ class MobileUiTest {
         val deadline=android.os.SystemClock.uptimeMillis()+15000
         while(android.os.SystemClock.uptimeMillis()<deadline){
             fun find(node:AccessibilityNodeInfo):AccessibilityNodeInfo?{
-                if(node.text?.toString()==label&&node.isVisibleToUser)return node
+                if(node.text?.toString()?.equals(label,ignoreCase=true)==true&&node.isVisibleToUser)return node
                 for(i in 0 until node.childCount)node.getChild(i)?.let{find(it)}?.let{return it}
                 return null
             }
