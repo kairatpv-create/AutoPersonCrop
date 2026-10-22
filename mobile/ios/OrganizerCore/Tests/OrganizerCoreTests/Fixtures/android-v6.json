@@ -1,0 +1,115 @@
+{
+  "reminders": [{
+    "createdAt": 1792663636454,
+    "targetId": 1,
+    "scheduleType": "weekly",
+    "daysMask": 85,
+    "sound": true,
+    "baseMinutes": 570,
+    "vibrate": true,
+    "targetType": "note",
+    "id": 1,
+    "dayMode": "single",
+    "soundKey": "system",
+    "triggerAt": 1900000000000
+  }],
+  "settings": {
+    "contentFontScale": 1.15,
+    "buttonFontScale": 1.1,
+    "projectsEnabled": true,
+    "backupMode": "manual",
+    "darkTheme": true,
+    "boldText": true,
+    "language": "ru",
+    "fontScale": 1.15,
+    "email": ""
+  },
+  "notes": [{
+    "createdAt": 1792663636222,
+    "colorKey": "blue",
+    "id": 1,
+    "title": "Заметка / Note 📝",
+    "body": "Первая строка\nSecond line \u2014 synthetic data",
+    "updatedAt": 1792663636222
+  }],
+  "projects": [{
+    "address": "Test street",
+    "description": "Synthetic only",
+    "dueAt": 1900000000000,
+    "createdAt": 1792663636432,
+    "contact": "test@example.invalid",
+    "name": "Тестовый проект",
+    "colorKey": "yellow",
+    "progress": 0,
+    "client": "Клиент",
+    "id": 1,
+    "startAt": 1700000000000,
+    "status": "active",
+    "budget": 987.65,
+    "updatedAt": 1792663636441
+  }],
+  "attachments": [{
+    "createdAt": 1792663636463,
+    "targetId": 1,
+    "size": 8,
+    "data": "AAECf4D/Cg0=",
+    "displayName": "fixture.bin",
+    "storedName": "1792663636458_1.bin",
+    "targetType": "note",
+    "id": 1,
+    "mimeType": "application/octet-stream",
+    "durationMs": 0
+  }],
+  "projectNoteLinks": [{
+    "noteId": 1,
+    "projectId": 1
+  }],
+  "format": "my-organizer-backup",
+  "version": 6,
+  "createdAt": 1792663636464,
+  "projectJournal": [{
+    "createdAt": 1792663636446,
+    "id": 1,
+    "text": "Тестовая запись журнала",
+    "projectId": 1
+  }],
+  "projectStages": [{
+    "dueAt": 1900000000000,
+    "createdAt": 1792663636435,
+    "id": 1,
+    "title": "Этап 1",
+    "projectId": 1,
+    "done": false
+  }],
+  "money": [
+    {
+      "note": "Synthetic income",
+      "createdAt": 1792663636453,
+      "amount": 1000.5,
+      "colorKey": "green",
+      "id": 2,
+      "type": "income",
+      "category": "Доход",
+      "projectName": ""
+    },
+    {
+      "note": "Synthetic expense",
+      "createdAt": 1792663636451,
+      "amount": 19.95,
+      "colorKey": "blue",
+      "id": 1,
+      "type": "expense",
+      "category": "Материалы",
+      "projectName": "Тестовый проект",
+      "projectId": 1
+    }
+  ],
+  "tasks": [{
+    "createdAt": 1792663636434,
+    "details": "Check all eight collections",
+    "id": 1,
+    "title": "Проверить копию",
+    "done": false,
+    "updatedAt": 1792663636434
+  }]
+}

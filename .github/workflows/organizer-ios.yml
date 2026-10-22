@@ -1,0 +1,46 @@
+name: Organizer Pro iPhone
+on:
+  push:
+    branches: [organizer-ios-20261022]
+    paths: ['mobile/ios/**', 'tools/ios/**', '.github/workflows/organizer-ios.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: organizer-ios-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  core:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record actual Apple toolchain
+        run: |
+          mkdir -p ios-evidence
+          xcodebuild -version | tee ios-evidence/xcode.txt
+          xcodebuild -showsdks | tee ios-evidence/sdks.txt
+          swift --version | tee ios-evidence/swift.txt
+      - name: Domain, backup and SQLite tests
+        run: swift test --package-path mobile/ios/OrganizerCore --parallel
+      - name: Cross-platform export and process-death rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          swift build --package-path mobile/ios/OrganizerCore --product OrganizerProbe
+          PROBE="$(swift build --package-path mobile/ios/OrganizerCore --show-bin-path)/OrganizerProbe"
+          FIXTURE="$PWD/mobile/ios/OrganizerCore/Tests/OrganizerCoreTests/Fixtures/android-v6.json"
+          "$PROBE" roundtrip "$RUNNER_TEMP/roundtrip.sqlite" "$FIXTURE" "$PWD/ios-evidence/ios-roundtrip.json"
+          "$PROBE" seed "$RUNNER_TEMP/crash.sqlite" "$FIXTURE"
+          set +e
+          "$PROBE" crash "$RUNNER_TEMP/crash.sqlite" unused
+          CRASH_STATUS=$?
+          set -e
+          test "$CRASH_STATUS" = 77
+          "$PROBE" verify "$RUNNER_TEMP/crash.sqlite" "$FIXTURE"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: organizer-ios-core-evidence
+          path: ios-evidence/
+          if-no-files-found: error
