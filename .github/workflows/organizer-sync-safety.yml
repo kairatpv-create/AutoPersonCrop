@@ -49,6 +49,8 @@ jobs:
           path: server-safety-results.json
           retention-days: 14
   android-emulator:
+    env:
+      ORGANIZER_CI_KEYSTORE: ${{ runner.temp }}/organizer-ci-test.jks
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -62,19 +64,35 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
+      - name: Create disposable test signing identity
+        run: |
+          keytool -genkeypair -noprompt -keystore "$ORGANIZER_CI_KEYSTORE" -storepass android -keypass android -alias androiddebugkey -dname "CN=Organizer Pro Synthetic CI" -keyalg RSA -keysize 2048 -validity 30
+          cat > "$RUNNER_TEMP/organizer-ci-signing.init.gradle" <<'GROOVY'
+          gradle.projectsEvaluated {
+            allprojects {
+              if (plugins.hasPlugin('com.android.application')) {
+                def debugSigning = extensions.getByName('android').signingConfigs.getByName('debug')
+                debugSigning.storeFile = new File(System.getenv('ORGANIZER_CI_KEYSTORE'))
+                debugSigning.storePassword = 'android'
+                debugSigning.keyPassword = 'android'
+                debugSigning.keyAlias = 'androiddebugkey'
+              }
+            }
+          }
+          GROOVY
       - name: Reconstruct version 71 storage baseline for synthetic update test
         run: |
           git fetch --depth=1 origin 86a0fcc51d41ac0f53cad9463d751df27e2b03a9
           mkdir legacy-version71
           git archive 86a0fcc51d41ac0f53cad9463d751df27e2b03a9 mobile/android | tar -x -C legacy-version71
           sed -i 's/compileSdk = 35/compileSdk = 36/' legacy-version71/mobile/android/app/build.gradle.kts
-          gradle --no-daemon --build-cache -p legacy-version71/mobile/android assembleDebug
+          gradle --no-daemon --build-cache --init-script "$RUNNER_TEMP/organizer-ci-signing.init.gradle" -p legacy-version71/mobile/android assembleDebug
       - name: Compile candidate Android, tests and release APKs
-        run: gradle --no-daemon --build-cache -p mobile/android assembleDebug assembleDebugAndroidTest assembleRelease
+        run: gradle --no-daemon --build-cache --init-script "$RUNNER_TEMP/organizer-ci-signing.init.gradle" -p mobile/android assembleDebug assembleDebugAndroidTest assembleRelease
       - name: Sign release staging APK for emulator testing only
         run: |
           mkdir organizer-apk-stage
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks "$HOME/.android/debug.keystore" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true --out organizer-apk-stage/Organizer-Pro-v0.9.39-staging.apk mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks "$ORGANIZER_CI_KEYSTORE" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true --out organizer-apk-stage/Organizer-Pro-v0.9.39-staging.apk mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs organizer-apk-stage/Organizer-Pro-v0.9.39-staging.apk > organizer-apk-stage/staging-signature.txt
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 organizer-apk-stage/Organizer-Pro-v0.9.39-staging.apk
           git rev-parse HEAD > organizer-apk-stage/source-commit.txt

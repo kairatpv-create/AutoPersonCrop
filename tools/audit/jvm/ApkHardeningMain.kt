@@ -14,6 +14,27 @@ private fun legacy(c:Context) {
         .putString("sync_email","synthetic@example.invalid").putBoolean("dark_theme",true).putString("language","en").commit())
 }
 fun main(){
+    d06Test("Failed interface preference commit retries migration without losing legacy credentials"){
+        val c=fresh();legacy(c);val old=c.getSharedPreferences("organizer_settings",0).all
+        System.setProperty("organizer.audit.failPreferencesCommit","true")
+        try { check(runCatching{SettingsStore(c)}.isFailure) } finally { System.clearProperty("organizer.audit.failPreferencesCommit") }
+        check(c.getSharedPreferences("organizer_settings",0).all==old)
+        val s=SettingsStore(c);s.ensureSecureStorage();check(s.darkTheme&&s.language=="en"&&s.verifyPin("2580")&&s.syncIdToken=="synthetic-bearer-secret")
+    }
+    d06Test("Interrupted legacy cleanup resumes from the already published encrypted credentials"){
+        val c=fresh();legacy(c);val s=SettingsStore(c)
+        System.setProperty("organizer.audit.failPreferencesCommit","true")
+        try { check(runCatching{s.ensureSecureStorage()}.isFailure) } finally { System.clearProperty("organizer.audit.failPreferencesCommit") }
+        check(ProtectedSettings(c).file.isFile)
+        val reopened=SettingsStore(Context(c.sandbox));reopened.ensureSecureStorage()
+        check(reopened.verifyPin("2580")&&reopened.syncIdToken=="synthetic-bearer-secret")
+    }
+    d06Test("A failed credential update retains the previous authenticated file and session"){
+        val c=fresh();legacy(c);val s=SettingsStore(c);s.ensureSecureStorage();val file=ProtectedSettings(c).file;val old=file.readBytes()
+        val broken=ProtectedSettings(c,io=object:AttachmentRestoreFiles(){override fun write(file:java.io.File,bytes:ByteArray){throw java.io.IOException("synthetic write failure")}})
+        check(runCatching{broken.put("sync_id_token","replacement")}.isFailure);check(old.contentEquals(file.readBytes()))
+        check(SettingsStore(c).syncIdToken=="synthetic-bearer-secret"&&SettingsStore(c).verifyPin("2580"))
+    }
     d06Test("Keystore facade migration retains legacy PIN, session and interface settings"){
         val c=fresh();legacy(c);val s=SettingsStore(c);s.ensureSecureStorage()
         check(s.isPinProtectionEnabled()&&s.verifyPin("2580")&&!s.verifyPin("0000"))

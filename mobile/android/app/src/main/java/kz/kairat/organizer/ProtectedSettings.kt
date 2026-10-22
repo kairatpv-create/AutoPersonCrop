@@ -101,7 +101,10 @@ internal object SettingsPreferences {
                     is Int -> editor.putInt(key, value)
                     is Float -> editor.putFloat(key, value)
                 }
-                check(editor.putBoolean("protected_preferences_migrated", true).commit()) { "Cannot migrate interface preferences" }
+                val saved=editor.putBoolean("protected_preferences_migrated", true).commit()
+                // SharedPreferences updates RAM even when commit() fails. Keep Retry from trusting that marker.
+                if(!saved)target.edit().remove("protected_preferences_migrated").apply()
+                check(saved) { "Cannot migrate interface preferences" }
             }
         }
         return target
