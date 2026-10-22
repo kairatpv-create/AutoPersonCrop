@@ -220,7 +220,7 @@ import java.util.Locale
 @Composable private fun NotesScreen(db:NoteDatabase,lang:String,onOpen:(Long)->Unit){
     var q by rememberSaveable{mutableStateOf("")};var refresh by remember{mutableIntStateOf(0)};val notes=remember(q,refresh){db.getNotes(q)}
     Column(Modifier.fillMaxSize().padding(horizontal=10.dp,vertical=6.dp)){
-        OutlinedTextField(q,{q=it},Modifier.fillMaxWidth().height(48.dp),leadingIcon={Icon(Icons.Default.Search,null,Modifier.size(20.dp))},placeholder={Text(AppStrings.t(lang,"search"),style=MaterialTheme.typography.bodyMedium)},singleLine=true,colors=OutlinedTextFieldDefaults.colors(focusedContainerColor=MaterialTheme.colorScheme.primaryContainer,unfocusedContainerColor=MaterialTheme.colorScheme.primaryContainer))
+        OutlinedTextField(q,{q=it},Modifier.fillMaxWidth().heightIn(min=56.dp),leadingIcon={Icon(Icons.Default.Search,null,Modifier.size(20.dp))},placeholder={Text(AppStrings.t(lang,"search"),style=MaterialTheme.typography.bodyMedium)},singleLine=true,colors=OutlinedTextFieldDefaults.colors(focusedContainerColor=MaterialTheme.colorScheme.primaryContainer,unfocusedContainerColor=MaterialTheme.colorScheme.primaryContainer))
         Spacer(Modifier.height(5.dp))
         if(notes.isEmpty()) EmptyState(AppStrings.t(lang,"no_notes"))
         else LazyColumn(verticalArrangement=Arrangement.spacedBy(5.dp),contentPadding=PaddingValues(bottom=4.dp)){
@@ -735,7 +735,15 @@ private fun decodeAttachmentThumbnail(file:File):android.graphics.Bitmap?{
 }
 
 private fun projectStatusText(lang:String,status:String)=AppStrings.t(lang,when(status){"in_progress"->"in_progress";"paused"->"paused";"completed"->"completed";else->"planned"})
-private fun projectStatusColor(status:String)=when(status){"completed"->Color(0xFF2E7D32);"paused"->Color(0xFFF57C00);"in_progress"->Color(0xFF1565C0);else->Color(0xFF6A1B9A)}
+@Composable private fun projectStatusColor(status:String):Color{
+    val dark=MaterialTheme.colorScheme.background.luminance()<.35f
+    return when(status){
+        "completed"->if(dark)Color(0xFF81C784) else Color(0xFF2E7D32)
+        "paused"->if(dark)Color(0xFFFFCC80) else Color(0xFFF57C00)
+        "in_progress"->if(dark)Color(0xFF90CAF9) else Color(0xFF1565C0)
+        else->if(dark)Color(0xFFCE93D8) else Color(0xFF6A1B9A)
+    }
+}
 private fun formatDay(ms:Long)=DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(ms))
 private fun launchDatePicker(context:android.content.Context,initial:Long,onSelected:(Long)->Unit){val c=java.util.Calendar.getInstance().apply{timeInMillis=initial};android.app.DatePickerDialog(context,{_,y,m,d->val out=java.util.Calendar.getInstance().apply{set(y,m,d,9,0,0);set(java.util.Calendar.MILLISECOND,0)};onSelected(out.timeInMillis)},c.get(java.util.Calendar.YEAR),c.get(java.util.Calendar.MONTH),c.get(java.util.Calendar.DAY_OF_MONTH)).show()}
 
