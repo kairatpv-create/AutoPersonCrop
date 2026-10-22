@@ -11,16 +11,16 @@ p=argparse.ArgumentParser()
 p.add_argument('--source',type=Path,required=True)
 p.add_argument('--jars',type=Path,required=True)
 p.add_argument('--output',type=Path,required=True)
-p.add_argument('--suite',choices=['audit','backup-validation','restore-integrity','attachment-validation','attachment-restore','restore-recovery','restore-recovery-probe','import-safety','import-safety-probe'],default='audit')
+p.add_argument('--suite',choices=['audit','backup-validation','restore-integrity','attachment-validation','attachment-restore','restore-recovery','restore-recovery-probe','import-safety','import-safety-probe','sync-safety','sync-safety-probe'],default='audit')
 a=p.parse_args()
 source=a.source.resolve()/'app/src/main/java/kz/kairat/organizer'
 out=a.output.resolve();out.mkdir(parents=True,exist_ok=True)
 stubdir=Path(__file__).resolve().parent/'jvm'
 files=[source/(n+'.kt') for n in ['Models','AppStrings','NoteDatabase','SettingsStore','BackupManager','AttachmentStore']]
-for optional in ['BackupValidation','AttachmentRestoreFiles','RestoreJournal','BackupImportLimits','BackupImportReader','RestoreSafety']:
+for optional in ['BackupValidation','AttachmentRestoreFiles','RestoreJournal','BackupImportLimits','BackupImportReader','RestoreSafety','SyncSnapshot','SyncStateStore','SyncConflictStore']:
     if (source/(optional+'.kt')).exists():
         files.append(source/(optional+'.kt'))
-if a.suite=='audit':
+if a.suite in ('audit','sync-safety','sync-safety-probe'):
     cloud=(source/'CloudSync.kt').read_text()
     cloud=cloud.split('private fun syncText(',1)[0]
     cloud='\n'.join(l for l in cloud.splitlines() if not l.startswith(('import androidx.','import kotlinx.','import android.app.Activity')))
@@ -31,7 +31,7 @@ if a.suite=='audit':
     files.append(out/'CloudSyncCore.kt')
 main={'audit':'AuditMain','backup-validation':'BackupValidationMain','restore-integrity':'RestoreIntegrityMain',
       'attachment-validation':'AttachmentValidationMain','attachment-restore':'AttachmentRestoreMain','restore-recovery':'RestoreRecoveryMain',
-      'restore-recovery-probe':'RecoveryProbeMain','import-safety':'ImportSafetyMain','import-safety-probe':'ImportSafetyProbeMain'}[a.suite]
+      'restore-recovery-probe':'RecoveryProbeMain','import-safety':'ImportSafetyMain','import-safety-probe':'ImportSafetyProbeMain','sync-safety':'SyncSafetyMain','sync-safety-probe':'SyncSafetyProbeMain'}[a.suite]
 files += [f for f in sorted(stubdir.glob('*.kt')) if not f.name.endswith('Main.kt') or f.stem==main]
 classpath=os.pathsep.join(str(x.resolve()) for x in sorted(a.jars.glob('*.jar')))
 assert classpath,'No compiler jars supplied'

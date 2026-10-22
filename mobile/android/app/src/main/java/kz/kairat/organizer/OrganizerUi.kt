@@ -64,14 +64,15 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@Composable fun OrganizerApp(){
+@Composable fun OrganizerApp(pinRequest:String=""){
     val context=LocalContext.current
     val db=remember{NoteDatabase(context)}; val store=remember{SettingsStore(context)}
     var dark by rememberSaveable{mutableStateOf(store.darkTheme)}; var font by rememberSaveable{mutableFloatStateOf(store.fontScale)}; var buttonFont by rememberSaveable{mutableFloatStateOf(store.buttonFontScale)}; var bold by rememberSaveable{mutableStateOf(store.boldText)}; var lang by rememberSaveable{mutableStateOf(store.language)}
     var unlocked by rememberSaveable{mutableStateOf(!store.isPinProtectionEnabled())}
+    var handledPinRequest by rememberSaveable{mutableStateOf("")}
     LaunchedEffect(Unit){syncAndroidAppLocale(context,lang)}
     OrganizerTheme(dark,font,buttonFont,bold){
-        if(!unlocked) UnlockScreen(lang,store){unlocked=true}
+        if(!unlocked||(store.isPinProtectionEnabled()&&pinRequest.isNotBlank()&&handledPinRequest!=pinRequest)) UnlockScreen(lang,store){unlocked=true;handledPinRequest=pinRequest}
         else OrganizerHome(db,store,lang,onLanguage={newLang->store.language=newLang;lang=newLang;syncAndroidAppLocale(context,newLang)},dark=dark,onDark={dark=it;store.darkTheme=it},fontScale=font,onFont={font=it;store.fontScale=it},buttonScale=buttonFont,onButtonScale={buttonFont=it;store.buttonFontScale=it},bold=bold,onBold={bold=it;store.boldText=it},onLock={unlocked=false})
     }
 }

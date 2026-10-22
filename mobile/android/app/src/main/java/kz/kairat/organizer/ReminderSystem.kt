@@ -157,7 +157,7 @@ object ReminderNotifications{
         val attrs=AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
         nm.createNotificationChannel(NotificationChannel(CH,AppStrings.t(lang,"reminders"),NotificationManager.IMPORTANCE_HIGH).apply{
             description=AppStrings.t(lang,"notification_channel_desc")
-            lockscreenVisibility=Notification.VISIBILITY_PUBLIC
+            lockscreenVisibility=Notification.VISIBILITY_PRIVATE
             enableVibration(true)
             vibrationPattern=longArrayOf(0,650,250,650,250,900)
             setSound(alarmUri,attrs)
@@ -167,21 +167,23 @@ object ReminderNotifications{
         val lang=SettingsStore(c).language
         val nm=c.getSystemService(NotificationManager::class.java)
         ensureChannel(c)
-        val alertIntent=Intent(c,ReminderAlertActivity::class.java).putExtra("id",r.id).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val protected=SettingsStore(c).isPinProtectionEnabled()
+        val alertIntent=Intent(c,if(protected)MainActivity::class.java else ReminderAlertActivity::class.java).putExtra("id",r.id).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        if(protected)alertIntent.putExtra("require_pin",true)
         val alertPi=PendingIntent.getActivity(c,r.id.toInt(),alertIntent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val text=r.details.ifBlank{r.title.ifBlank{AppStrings.t(lang,"reminder")}}
+        val text=if(protected)SyncSnapshot.message(lang,"Откройте приложение и введите PIN.","Open the app and enter your PIN.") else r.details.ifBlank{r.title.ifBlank{AppStrings.t(lang,"reminder")}}
         val b=NotificationCompat.Builder(c,CH)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(r.title.ifBlank{AppStrings.t(lang,"reminder")})
+            .setContentTitle(if(protected)AppStrings.t(lang,"reminder") else r.title.ifBlank{AppStrings.t(lang,"reminder")})
             .setContentText(text)
             .setAutoCancel(false)
             .setOngoing(false)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setContentIntent(alertPi)
-            .setFullScreenIntent(alertPi,true)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setOnlyAlertOnce(false)
+        if(!protected)b.setFullScreenIntent(alertPi,true)
         if(Build.VERSION.SDK_INT<26){
             if(r.sound)b.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)) else b.setSilent(true)
             if(r.vibrate)b.setVibrate(longArrayOf(0,650,250,650,250,900))

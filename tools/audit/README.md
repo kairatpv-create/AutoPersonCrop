@@ -135,3 +135,31 @@ It executes the original Express routes with real Express/bcrypt/JWT modules
 and an in-memory `pg` test double. It binds only to loopback. It does not test
 real PostgreSQL concurrency, persistence, TLS, Render configuration or backups.
 Dependencies and lockfile for the host run remain outside the repository.
+
+## Mobile sync safety and publication preparation
+
+`--suite sync-safety` runs account ownership, durable acknowledgements, three-way
+record comparisons, conflicting edits/deletions/ID collisions, 409 retries,
+parallel callers, changes during network requests, offline/reopen/reconnect,
+local attachment identity, retained conflict copies and synthetic account
+removal. HTTP exchange is a synthetic in-memory transport; actual SQL remains
+SQLite JDBC. No production account is contacted.
+
+`--suite sync-safety-probe` uses the same public app APIs against the preceding
+D14 source and the new source. Three loopback HTTP probes require preservation
+of divergent initial snapshots/future due dates, pending edits after 409 and
+legacy account ownership. All three must fail on the old source and pass here.
+
+`run_sync_server_safety.cjs SERVER_JS OUTPUT_JSON` uses real Express, bcrypt and
+JWT with an in-memory pg adapter by default. Set ORGANIZER_AUDIT_NODE_MODULES to
+the dependencies directory. The CI workflow additionally supplies a real local
+PostgreSQL 16 instance: ORGANIZER_SYNTHETIC_PG_URL must name only localhost or
+127.0.0.1 database organizer_synthetic_safety and ORGANIZER_SYNTHETIC_ONLY=1.
+It tests first-write locking, revision CAS, malformed snapshots and reauthenticated
+account deletion including concurrent sync. Never supply a production URL.
+
+`run_android_safety.sh` installs app/test APKs only on a disposable emulator,
+checks synthetic-only guards, runs real Android instrumentation, force-stop and
+abrupt restore termination/recovery. See ANDROID_SAFETY_TESTS_RU.md for exact
+coverage and limits. Test APKs are not distributed. The public branch workflow
+stores only synthetic reports, not application credentials or user data.

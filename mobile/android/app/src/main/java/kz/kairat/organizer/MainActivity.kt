@@ -9,11 +9,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 class MainActivity:ComponentActivity(){
     private var ready=false
+    private var pinRequest by androidx.compose.runtime.mutableStateOf("")
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
+        if(intent.getBooleanExtra("require_pin",false))pinRequest=java.util.UUID.randomUUID().toString()
         openOrganizer()
     }
     private fun openOrganizer(){
@@ -28,8 +32,12 @@ class MainActivity:ComponentActivity(){
         WindowCompat.setDecorFitsSystemWindows(window,true)
         ReminderNotifications.ensureChannel(this)
         if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS),1001)
-        setContent{OrganizerApp()}
+        setContent{OrganizerApp(pinRequest)}
         if(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))scheduleReminders()
+    }
+    override fun onNewIntent(newIntent:android.content.Intent){
+        super.onNewIntent(newIntent);setIntent(newIntent)
+        if(newIntent.getBooleanExtra("require_pin",false))pinRequest=java.util.UUID.randomUUID().toString()
     }
     override fun onResume(){
         super.onResume()

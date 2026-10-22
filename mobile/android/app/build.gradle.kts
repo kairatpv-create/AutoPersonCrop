@@ -6,14 +6,15 @@ plugins {
 
 android {
     namespace = "kz.kairat.organizer"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "kz.kairat.organizer"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 71
         versionName = "0.9.38"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures {
@@ -42,5 +43,7 @@ dependencies {
     implementation("androidx.compose.material3:material3:1.3.2")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
     debugImplementation("androidx.compose.ui:ui-tooling:1.8.2")
 }

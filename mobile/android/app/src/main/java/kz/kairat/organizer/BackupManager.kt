@@ -14,7 +14,9 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 object BackupManager {
-    fun createBackup(db:NoteDatabase,settings:SettingsStore):String{
+    fun createBackup(db:NoteDatabase,settings:SettingsStore):String = createSnapshot(db,settings,true)
+    internal fun createCloudBackup(db:NoteDatabase,settings:SettingsStore):String = createSnapshot(db,settings,false)
+    private fun createSnapshot(db:NoteDatabase,settings:SettingsStore,local:Boolean):String{
         val root=JSONObject(); root.put("format","my-organizer-backup"); root.put("version",6); root.put("createdAt",System.currentTimeMillis())
         root.put("notes",JSONArray().apply{db.getNotes().forEach{n->put(JSONObject().apply{put("id",n.id);put("title",n.title);put("body",n.body);put("createdAt",n.createdAt);put("updatedAt",n.updatedAt);put("colorKey",n.colorKey)})}})
         root.put("tasks",JSONArray().apply{db.getTasks().forEach{t->put(JSONObject().apply{put("id",t.id);put("title",t.title);put("details",t.details);put("done",t.done);put("createdAt",t.createdAt);put("updatedAt",t.updatedAt)})}})
@@ -26,15 +28,17 @@ object BackupManager {
         root.put("projectNoteLinks",JSONArray().apply{db.getProjectNoteLinks().forEach{l->put(JSONObject().apply{put("projectId",l.projectId);put("noteId",l.noteId)})}})
         root.put("money",JSONArray().apply{db.getMoneyEntries().forEach{m->put(JSONObject().apply{put("id",m.id);put("type",m.type);put("amount",m.amount);put("category",m.category);if(m.projectId!=null)put("projectId",m.projectId);put("projectName",m.projectName);put("note",m.note);put("createdAt",m.createdAt);put("colorKey",m.colorKey)})}})
         root.put("reminders",JSONArray().apply{db.getReminders().forEach{r->put(JSONObject().apply{put("id",r.id);put("targetType",r.targetType);put("targetId",r.targetId);put("triggerAt",r.triggerAt);put("sound",r.sound);put("vibrate",r.vibrate);put("soundKey",r.soundKey);put("createdAt",r.createdAt);put("scheduleType",r.scheduleType);put("daysMask",r.daysMask);put("dayMode",r.dayMode);put("baseMinutes",r.baseMinutes)})}})
-        root.put("settings",exportedSettings(settings))
-        root.put("attachments",AttachmentStore.exportBackup())
+        if(local){
+            root.put("settings",exportedSettings(settings))
+            root.put("attachments",AttachmentStore.exportBackup())
+        }else{root.put("version",7);root.put("createdAt",0L);root.put("cloudSchema","organizer-sync-v3")}
         return root.toString(2)
     }
     internal fun exportedSettings(settings:SettingsStore)=JSONObject().apply{put("darkTheme",settings.darkTheme);put("fontScale",settings.fontScale);put("contentFontScale",settings.fontScale);put("buttonFontScale",settings.buttonFontScale);put("boldText",settings.boldText);put("projectsEnabled",settings.projectsEnabled);put("backupMode",settings.backupMode);put("email",settings.backupEmail);put("language",settings.language)}
     fun restore(json:String,db:NoteDatabase,lang:String="en"):RestoredPreferences{
         return restore(json,db,lang,AttachmentRestoreFiles())
     }
-    internal fun restore(json:String,db:NoteDatabase,lang:String,files:AttachmentRestoreFiles):RestoredPreferences{
+    internal fun restore(json:String,db:NoteDatabase,lang:String,files:AttachmentRestoreFiles,beforeReplace:()->Unit = {}):RestoredPreferences{
         val root=BackupValidation.parse(json,lang)
         fun JSONArray?.objs()=sequence{val a=this@objs?:return@sequence;for(i in 0 until a.length())yield(a.getJSONObject(i))}
         val notes=root.optJSONArray("notes").objs().map{o->Note(o.optLong("id"),o.optString("title"),o.optString("body"),o.optLong("createdAt"),o.optLong("updatedAt"),o.optString("colorKey","blue"))}.toList()
@@ -50,7 +54,7 @@ object BackupManager {
         val reminders=root.optJSONArray("reminders").objs().map{o->ReminderEntry(o.optLong("id"),o.optString("targetType"),o.optLong("targetId"),o.optLong("triggerAt"),o.optBoolean("sound",true),o.optBoolean("vibrate",true),o.optString("soundKey","system"),o.optLong("createdAt"),"","",o.optString("scheduleType","once"),o.optInt("daysMask",0),o.optString("dayMode","single"),o.optInt("baseMinutes",540))}.toList()
         val preferences=preferences(root.optJSONObject("settings")?:JSONObject())
         val attachments=root.optJSONArray("attachments")
-        if(attachments==null)db.replaceAll(notes,tasks,projects,money,reminders,stages,journal,links)
+        if(attachments==null)db.replaceAll(notes,tasks,projects,money,reminders,stages,journal,links,beforeReplace=beforeReplace)
         else AttachmentStore.withDatabaseBackup(attachments,lang,files,db,root.optJSONObject("settings")){install,token,safety->
             db.replaceAll(notes,tasks,projects,money,reminders,stages,journal,links,beforeCommit=install,restoreToken=token,beforeReplace=safety)
         }

@@ -1,0 +1,89 @@
+name: Verify mobile sync and publication preparation
+on:
+  push:
+    branches: [organizer-sync-release-safety-20261022]
+    paths:
+      - 'mobile/android/**'
+      - 'organizer-sync-server/**'
+      - 'tools/audit/**'
+      - '.github/workflows/organizer-sync-safety.yml'
+permissions:
+  contents: read
+concurrency:
+  group: organizer-sync-safety-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  server-postgres:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: synthetic
+          POSTGRES_PASSWORD: synthetic-only-local
+          POSTGRES_DB: organizer_synthetic_safety
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: organizer-sync-server
+      - name: Test HTTP routes and real PostgreSQL concurrency
+        env:
+          ORGANIZER_SYNTHETIC_ONLY: '1'
+          ORGANIZER_SYNTHETIC_PG_URL: postgres://synthetic:synthetic-only-local@127.0.0.1:5432/organizer_synthetic_safety
+          ORGANIZER_AUDIT_NODE_MODULES: ${{ github.workspace }}/organizer-sync-server/node_modules
+        run: node tools/audit/run_sync_server_safety.cjs organizer-sync-server/server.js server-safety-results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synthetic-postgres-test-results
+          path: server-safety-results.json
+          retention-days: 14
+  android-emulator:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install SDK 36 for publication preparation
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Compile Android and test APKs once
+        run: gradle --no-daemon --build-cache -p mobile/android assembleDebug assembleDebugAndroidTest
+      - name: Enable KVM for the disposable emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run real Android data, restart, crash and offline checks
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ORGANIZER_SYNTHETIC_ONLY: '1'
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: bash tools/audit/run_android_safety.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synthetic-android-test-results
+          path: android-safety-evidence/
+          retention-days: 14

@@ -72,6 +72,22 @@ object AttachmentStore {
     private fun queryName(uri:Uri):String? { var name:String?=null; app.contentResolver.query(uri,arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),null,null,null)?.use{c->if(c.moveToFirst())name=c.getString(0)}; return name }
     fun humanSize(size:Long)=when{size<1024->"$size B";size<1024*1024->"%.1f KB".format(size/1024.0);else->"%.1f MB".format(size/1024.0/1024.0)}
 
+    /** Refuse numeric-ID reuse while a local-only file still belongs to another record generation. */
+    @Synchronized internal fun checkCloudTargets(old:JSONObject,next:JSONObject,lang:String){
+        val path=indexFile
+        if(!path.exists())return
+        val index=try{JSONArray(path.readText()).also{BackupValidation.attachmentIndex(it,lang)}}catch(e:Exception){throw SyncSnapshot.Conflict(lang)}
+        for(i in 0 until index.length()){
+            val attachment=index.getJSONObject(i)
+            val section=when(attachment.getString("targetType")){"note"->"notes";"task"->"tasks";"project"->"projects";else->throw SyncSnapshot.Conflict(lang)}
+            val id=attachment.getLong("targetId")
+            fun find(root:JSONObject):JSONObject?{val rows=root.getJSONArray(section);for(j in 0 until rows.length())if(rows.getJSONObject(j).getLong("id")==id)return rows.getJSONObject(j);return null}
+            val before=find(old);val after=find(next)
+            // Deletion would leave files orphaned and a later reused ID could attach them to a different record.
+            if(before==null||after==null||before.getLong("createdAt")!=after.getLong("createdAt"))throw SyncSnapshot.Conflict(lang)
+        }
+    }
+
     @Synchronized fun exportBackup():JSONArray{ val a=JSONArray(); readIndex().forEach{e->val f=file(e); if(f.exists())a.put(JSONObject().apply{put("id",e.id);put("targetType",e.targetType);put("targetId",e.targetId);put("displayName",e.displayName);put("storedName",e.storedName);put("mimeType",e.mimeType);put("size",e.size);put("createdAt",e.createdAt);put("durationMs",e.durationMs);put("data",Base64.getEncoder().encodeToString(f.readBytes()))})}; return a }
     fun restoreBackup(a:JSONArray){withPreparedBackup(a,"en",AttachmentRestoreFiles()){install->install()}}
 

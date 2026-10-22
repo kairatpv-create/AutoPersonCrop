@@ -6,6 +6,14 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 
 class SettingsStore(context: Context) {
+    internal val appContext = context.applicationContext
+    var syncError: String
+        get() = prefs.getString("sync_error", "") ?: ""
+        set(v) = prefs.edit().putString("sync_error", v).apply()
+    internal fun saveSession(email:String,token:String,uid:String) {
+        check(prefs.edit().putString("sync_email",email).putString("sync_id_token",token)
+            .putString("sync_uid",uid).putString("sync_refresh_token","").putLong("sync_token_expiry",Long.MAX_VALUE).commit()) { "Could not save session" }
+    }
     private val prefs: SharedPreferences = context.getSharedPreferences("organizer_settings", Context.MODE_PRIVATE)
 
     var darkTheme: Boolean

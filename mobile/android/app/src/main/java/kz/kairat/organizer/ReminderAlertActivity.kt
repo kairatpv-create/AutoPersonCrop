@@ -17,6 +17,10 @@ import androidx.compose.ui.unit.dp
 class ReminderAlertActivity:ComponentActivity(){
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
+        if(SettingsStore(this).isPinProtectionEnabled()){
+            startActivity(android.content.Intent(this,MainActivity::class.java).putExtra("require_pin",true).addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP))
+            finish();return
+        }
         if(android.os.Build.VERSION.SDK_INT>=27){setShowWhenLocked(true);setTurnScreenOn(true)}
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.setBackgroundDrawableResource(android.R.color.transparent)
