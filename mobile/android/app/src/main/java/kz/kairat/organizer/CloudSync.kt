@@ -231,7 +231,7 @@ private fun syncText(lang:String,key:String):String{
                     (context as? Activity)?.recreate()
                     return@LaunchedEffect
                 }
-                if(r.exceptionOrNull()?.message?.contains("Сессия завершена")==true)CloudSync.logout(settings)
+                if(r.exceptionOrNull()?.message?.contains("Сессия завершена")==true)withContext(Dispatchers.IO){CloudSync.logout(settings)}
             }
             delay(30000)
         }
@@ -266,7 +266,7 @@ private fun syncText(lang:String,key:String):String{
         confirmButton={TextButton(onClick={showPrivacy=false}){Text(SyncSnapshot.message(lang,"Закрыть","Close"))}})
     if(deleting)AlertDialog(onDismissRequest={if(!busy){deleting=false;deletePassword=""}},
         title={Text(SyncSnapshot.message(lang,"Удалить аккаунт?","Delete account?"))},
-        text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
+        text={Column(modifier=Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)){
             Text(SyncSnapshot.message(lang,"Аккаунт и синхронизированные данные на сервере будут удалены без возможности отмены. Локальные заметки, финансы и вложения останутся на этом устройстве. Копии на других устройствах и созданные вами файлы также сохранятся.","Your account and synced server data will be permanently deleted. Local notes, finances and attachments will remain on this device. Copies on other devices and files you exported will also remain."))
             OutlinedTextField(deleteEmail,{deleteEmail=it},label={Text("Email")},singleLine=true)
             OutlinedTextField(deletePassword,{deletePassword=it},label={Text(syncText(lang,"password"))},singleLine=true,visualTransformation=PasswordVisualTransformation())
@@ -328,11 +328,18 @@ private fun syncText(lang:String,key:String):String{
                     Text(if(status.isNotBlank())status else syncText(lang,"enabled"),color=if(error)MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,style=MaterialTheme.typography.labelMedium)
                     if(error){
                         TextButton(onClick={BackupManager.shareBackup(context,BackupManager.createBackup(db,settings),lang=lang)}){Text(SyncSnapshot.message(lang,"Сохранить копию данных","Export local backup"))}
-                        TextButton(onClick={runCatching{BackupManager.shareBackup(context,CloudSync.exportConflict(settings,true),lang=lang)}.onFailure{status=SyncSnapshot.message(lang,"Сохранённая облачная копия конфликта недоступна.","The saved cloud conflict copy is unavailable.")}}){Text(SyncSnapshot.message(lang,"Сохранить облачную копию конфликта","Export cloud conflict copy"))}
+                        TextButton(enabled=!busy,onClick={
+                            busy=true
+                            scope.launch{
+                                val result=runCatching{withContext(Dispatchers.IO){CloudSync.exportConflict(settings,true)}}
+                                busy=false
+                                result.onSuccess{BackupManager.shareBackup(context,it,lang=lang)}.onFailure{status=SyncSnapshot.message(lang,"Сохранённая облачная копия конфликта недоступна.","The saved cloud conflict copy is unavailable.")}
+                            }
+                        }){Text(SyncSnapshot.message(lang,"Сохранить облачную копию конфликта","Export cloud conflict copy"))}
                     }
                     TextButton(enabled=!busy,onClick={deleting=true;deletePassword="";deleteEmail=""}){Text(SyncSnapshot.message(lang,"Удалить аккаунт","Delete account"))}
                 }
-                TextButton({CloudSync.logout(settings);logged=false;status=""},enabled=!busy,modifier=Modifier.heightIn(min=if(compact)28.dp else 30.dp),contentPadding=PaddingValues(horizontal=10.dp,vertical=0.dp)){Text(syncText(lang,"logout"),style=MaterialTheme.typography.bodySmall)}
+                TextButton({busy=true;scope.launch{withContext(Dispatchers.IO){CloudSync.logout(settings)};busy=false;logged=false;status=""}},enabled=!busy,modifier=Modifier.heightIn(min=if(compact)28.dp else 30.dp),contentPadding=PaddingValues(horizontal=10.dp,vertical=0.dp)){Text(syncText(lang,"logout"),style=MaterialTheme.typography.bodySmall)}
             }
         }
         TextButton(onClick={showPrivacy=true}){Text(SyncSnapshot.message(lang,"Данные и приватность","Data and privacy"))}

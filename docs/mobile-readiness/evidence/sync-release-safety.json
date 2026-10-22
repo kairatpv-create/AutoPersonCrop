@@ -462,7 +462,7 @@
     "mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "bbc24401e68fc737944bb09671f5409c90fd05b4367c6fe3cf25baa59807c807",
     "mobile/android/app/src/main/java/kz/kairat/organizer/CalendarSystem.kt": "372c60e55625bf97680ba570488c6dcbf497a53ded224dea542960495106510a",
     "mobile/android/app/src/main/java/kz/kairat/organizer/CalendarUi.kt": "196160db119388c37c6d13a5ce83a969847c31f587ff09a8a709f2da1e12be09",
-    "mobile/android/app/src/main/java/kz/kairat/organizer/CloudSync.kt": "87e84766b26b7aabb8e6f63e0621d3362d42f3166a9341a93f65e7ca50c6760d",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/CloudSync.kt": "b23eec0d10ec0907808ac23fe746f65eaa29203e31cf6bd6320363ff8be5adfa",
     "mobile/android/app/src/main/java/kz/kairat/organizer/MainActivity.kt": "0da5d7fa937f500cefede323e3dd9cfa377730a0630100f34dde12ce82a5f196",
     "mobile/android/app/src/main/java/kz/kairat/organizer/Models.kt": "fa51ad21112e70d4d27b6e0774d8c8630581231335a17fd8e2fe63419ef89b2d",
     "mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "4188205755e7a45d24ed77d89a83b24c4a4ea05025e54df951aff6614cd07761",
@@ -800,5 +800,10 @@
     "No real user data or production API writes.",
     "Conflicting edits/new numeric-ID collisions are retained and refused, not silently resolved.",
     "No Render deployment, iOS work, store upload or signing change."
-  ]
+  ],
+  "ui_followup": {
+    "description": "Keep logout/conflict export off the main thread while the sync coordinator waits on network; make deletion confirmation scrollable.",
+    "cloud_non_ui_prefix_unchanged": true,
+    "prefix_sha256": "5a6df1c89c45f57b959b7269a518b64ef7f0a3d90874c3ccce6ee03054d747a7"
+  }
 }
