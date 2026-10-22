@@ -1,0 +1,214 @@
+{
+  "date": "2026-10-22",
+  "syntheticOnly": true,
+  "github": {
+    "runId": 39746013844,
+    "url": "https://github.com/kairatpv-create/AutoPersonCrop/actions/runs/39746013844",
+    "sourceCommit": "8b74aaafc897272e5667a8002201d24765da9673",
+    "sourceTree": "d3ec0f7d1a981a99896703caa20286d2416d6d68",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-10-22T08:12:22Z",
+    "completedAt": "2026-10-22T08:17:38Z",
+    "jobs": [
+      {
+        "id": 119714527475,
+        "name": "server-postgres",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 119714527901,
+        "name": "android-emulator",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "android": {
+    "platform": "Android emulator API 36",
+    "syntheticOnly": true,
+    "passed": 30,
+    "groups": {
+      "upgrade-seed": 1,
+      "upgrade-verify": 1,
+      "data-offline-account": 14,
+      "apk-hardening": 8,
+      "restart-seed": 1,
+      "restart-verify": 1,
+      "crash-recovery": 1,
+      "release-upgrade": 1,
+      "ui-navigation": 2
+    },
+    "expectedAbruptRestoreTermination": true,
+    "realPhone": false
+  },
+  "serverPostgres": {
+    "suite": "sync-server-safety",
+    "database": "real disposable PostgreSQL",
+    "passed": 31,
+    "total": 31,
+    "results": [
+      {
+        "name": "Synthetic accounts register with bcrypt and distinct stable JWT subjects",
+        "result": "PASS"
+      },
+      {
+        "name": "The authenticated account advertises deletion support",
+        "result": "PASS"
+      },
+      {
+        "name": "Unauthenticated sync and deletion are refused",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject invalid JSON before database changes",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject incomplete notes-only JSON before database changes",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject array root before database changes",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject missing collections before database changes",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject wrong collection type: notes",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject wrong collection type: tasks",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject wrong collection type: projects",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject wrong collection type: projectStages",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject wrong collection type: projectJournal",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject wrong collection type: projectNoteLinks",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject wrong collection type: money",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject wrong collection type: reminders",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject invalid baseRev: -1",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject invalid baseRev: 0.5",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject invalid baseRev: \"0\"",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject invalid baseRev: null",
+        "result": "PASS"
+      },
+      {
+        "name": "Reject invalid baseRev: 9007199254740992",
+        "result": "PASS"
+      },
+      {
+        "name": "Two simultaneous first uploads preserve one winner and return the other as 409",
+        "result": "PASS"
+      },
+      {
+        "name": "Wrong field type and duplicate record IDs cannot replace an existing snapshot",
+        "result": "PASS"
+      },
+      {
+        "name": "A complete empty v7 snapshot remains valid",
+        "result": "PASS"
+      },
+      {
+        "name": "The standalone external deletion page is served without the deferred web app",
+        "result": "PASS"
+      },
+      {
+        "name": "Missing confirmation and another account email do not delete the user",
+        "result": "PASS"
+      },
+      {
+        "name": "Wrong password cannot delete the user or cloud snapshot",
+        "result": "PASS"
+      },
+      {
+        "name": "Correct reauthentication deletes only the selected account and cascades its snapshot",
+        "result": "PASS"
+      },
+      {
+        "name": "Old JWTs cannot read, upload, or delete after account deletion",
+        "result": "PASS"
+      },
+      {
+        "name": "The same email can register again with a distinct account identity and no old snapshot",
+        "result": "PASS"
+      },
+      {
+        "name": "Concurrent deletion and upload never resurrect the deleted user or its sync row",
+        "result": "PASS"
+      },
+      {
+        "name": "Unknown API routes return JSON 404",
+        "result": "PASS"
+      }
+    ]
+  },
+  "build": {
+    "result": "BUILD SUCCESSFUL",
+    "candidateElapsedSeconds": 25,
+    "tasks": [
+      "assembleDebug",
+      "assembleDebugAndroidTest",
+      "assembleRelease"
+    ],
+    "cacheUsed": true
+  },
+  "apkVerification": "apk-0939-verification.json",
+  "hostReport": "apk-0939-host-tests.json",
+  "artifacts": [
+    {
+      "id": 12411068152,
+      "name": "synthetic-android-test-results",
+      "archiveSha256": "93e5b08d4ebc50ccd366ceaf2e79f96e637e19081a7fc3330db36cc4324ed145",
+      "downloadDigestVerified": true
+    },
+    {
+      "id": 12411063466,
+      "name": "synthetic-postgres-test-results",
+      "archiveSha256": "0b8b8154fb8eceac1703fb51e833a3711a52ff30a6d494d00dce9fd1d9a30af8",
+      "downloadDigestVerified": true
+    },
+    {
+      "id": 12410803615,
+      "name": "organizer-0.9.39-tested-staging",
+      "archiveSha256": "4340969ca667bfe8e4c02677dc057f9730feb84f64ad255c0cc1564954f2a9d1",
+      "downloadDigestVerified": true
+    }
+  ],
+  "realUserDataUsed": false,
+  "productionServerDeployed": false,
+  "realPhoneTest": false,
+  "scope": "Final successful run only; earlier failed and cancelled runs are not counted as passes."
+}

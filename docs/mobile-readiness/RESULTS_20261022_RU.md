@@ -1,5 +1,7 @@
 # Результат трёх этапов — 22.10.2026
 
+Исторический отчёт предыдущего этапа. Последующий Android APK **0.9.39 (72)**, результаты 594 host / 30 Android / 31 PostgreSQL и проверка исходной подписи описаны в [ANDROID_APK_0939_RU.md](ANDROID_APK_0939_RU.md).
+
 Ветка: `organizer-sync-release-safety-20261022`. Основа: `365c73ec93cb606998690c5323c21530647bb585`. Проверенный код: [`d295e6b8e5139950aa7b16fbdb722b3fcf588b1e`](https://github.com/kairatpv-create/AutoPersonCrop/commit/d295e6b8e5139950aa7b16fbdb722b3fcf588b1e).
 
 ## 1. Безопасная синхронизация D01–D03

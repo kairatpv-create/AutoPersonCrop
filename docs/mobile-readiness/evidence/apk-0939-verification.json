@@ -1,0 +1,51 @@
+{
+  "identity": {
+    "package": "kz.kairat.organizer",
+    "versionName": "0.9.39",
+    "versionCode": 72,
+    "minSdk": 26,
+    "targetSdk": 36,
+    "debuggable": false
+  },
+  "sha256": "d12d12cc3a74468511dd1cdc8d8c5867843622019c816c26797b9b7bd9a97a09",
+  "bytes": 11568515,
+  "stagingSha256": "757b2b35f0b691aa1cc44ae76aebaeef3db429e8f646c2d41fca18fc2cdb834b",
+  "testedPayloadUnchanged": true,
+  "nativeLibraries": [
+    {
+      "path": "lib/arm64-v8a/libandroidx.graphics.path.so",
+      "zipOffset": 11010048,
+      "loadAlignment": 16384
+    },
+    {
+      "path": "lib/armeabi-v7a/libandroidx.graphics.path.so",
+      "zipOffset": 11026432,
+      "loadAlignment": 16384
+    },
+    {
+      "path": "lib/x86/libandroidx.graphics.path.so",
+      "zipOffset": 11042816,
+      "loadAlignment": 16384
+    },
+    {
+      "path": "lib/x86_64/libandroidx.graphics.path.so",
+      "zipOffset": 11059200,
+      "loadAlignment": 16384
+    }
+  ],
+  "zipAndElf16KiBChecks": true,
+  "realPhoneTest": false,
+  "storePublication": false,
+  "fileName": "Organizer-Pro-v0.9.39-72.apk",
+  "sourceCommit": "8b74aaafc897272e5667a8002201d24765da9673",
+  "ciRunId": 39746013844,
+  "signing": {
+    "certificateSha256": "a0564fdcf4e365a0077cbb0f56cf4ddce9538a45ba772b1793ab3f549b8f90b2",
+    "matchesOriginalVersion71": true,
+    "v2Verified": true,
+    "v3Verified": true,
+    "privateKeySentToCI": false
+  },
+  "finalOwnerSignedApkRunOnEmulator": false,
+  "stagingRunOnEmulator": true
+}

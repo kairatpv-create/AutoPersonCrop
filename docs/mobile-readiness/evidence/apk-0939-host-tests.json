@@ -1,0 +1,342 @@
+{
+  "date": "2026-10-22",
+  "syntheticOnly": true,
+  "hostTotal": 594,
+  "hostPassed": 594,
+  "regressionTotal": 565,
+  "newHostChecks": 29,
+  "suites": [
+    {
+      "suite": "apk-hardening",
+      "exit": 0,
+      "passed": 29,
+      "total": 29,
+      "failed": []
+    },
+    {
+      "suite": "backup-validation",
+      "exit": 0,
+      "passed": 235,
+      "total": 235,
+      "failed": []
+    },
+    {
+      "suite": "restore-integrity",
+      "exit": 0,
+      "passed": 67,
+      "total": 67,
+      "failed": []
+    },
+    {
+      "suite": "attachment-validation",
+      "exit": 0,
+      "passed": 64,
+      "total": 64,
+      "failed": []
+    },
+    {
+      "suite": "attachment-restore",
+      "exit": 0,
+      "passed": 17,
+      "total": 17,
+      "failed": []
+    },
+    {
+      "suite": "restore-recovery",
+      "exit": 0,
+      "passed": 68,
+      "total": 68,
+      "failed": []
+    },
+    {
+      "suite": "restore-recovery-probe",
+      "exit": 0,
+      "passed": 1,
+      "total": 1,
+      "failed": []
+    },
+    {
+      "suite": "import-safety",
+      "exit": 0,
+      "passed": 52,
+      "total": 52,
+      "failed": []
+    },
+    {
+      "suite": "import-safety-probe",
+      "exit": 0,
+      "passed": 2,
+      "total": 2,
+      "failed": []
+    },
+    {
+      "suite": "sync-safety",
+      "exit": 0,
+      "passed": 56,
+      "total": 56,
+      "failed": []
+    },
+    {
+      "suite": "sync-safety-probe",
+      "exit": 0,
+      "passed": 3,
+      "total": 3,
+      "failed": []
+    }
+  ],
+  "newCases": [
+    {
+      "result": "PASS",
+      "name": "Failed interface preference commit retries migration without losing legacy credentials"
+    },
+    {
+      "result": "PASS",
+      "name": "Interrupted legacy cleanup resumes from the already published encrypted credentials"
+    },
+    {
+      "result": "PASS",
+      "name": "A failed credential update retains the previous authenticated file and session"
+    },
+    {
+      "result": "PASS",
+      "name": "Keystore facade migration retains legacy PIN, session and interface settings"
+    },
+    {
+      "result": "PASS",
+      "name": "Encryption failure leaves legacy credentials and database untouched"
+    },
+    {
+      "result": "PASS",
+      "name": "Disk failure before publication keeps old credentials"
+    },
+    {
+      "result": "PASS",
+      "name": "Corrupt encrypted settings fail closed without overwriting their bytes"
+    },
+    {
+      "result": "PASS",
+      "name": "Logout cannot resurrect credentials from the legacy file"
+    },
+    {
+      "result": "PASS",
+      "name": "Fractional budget survives edit round trip: 0.0"
+    },
+    {
+      "result": "PASS",
+      "name": "Fractional budget survives edit round trip: 0.01"
+    },
+    {
+      "result": "PASS",
+      "name": "Fractional budget survives edit round trip: 19.95"
+    },
+    {
+      "result": "PASS",
+      "name": "Fractional budget survives edit round trip: 987.65"
+    },
+    {
+      "result": "PASS",
+      "name": "Fractional budget survives edit round trip: 1234567.89"
+    },
+    {
+      "result": "PASS",
+      "name": "Fractional budget survives edit round trip: 12.3456789"
+    },
+    {
+      "result": "PASS",
+      "name": "Fractional budget survives edit round trip: 1.0E20"
+    },
+    {
+      "result": "PASS",
+      "name": "Reject invalid monetary input without changing meaning: NaN"
+    },
+    {
+      "result": "PASS",
+      "name": "Reject invalid monetary input without changing meaning: Infinity"
+    },
+    {
+      "result": "PASS",
+      "name": "Reject invalid monetary input without changing meaning: 1e309"
+    },
+    {
+      "result": "PASS",
+      "name": "Reject invalid monetary input without changing meaning: -100"
+    },
+    {
+      "result": "PASS",
+      "name": "Reject invalid monetary input without changing meaning: 1,2,3"
+    },
+    {
+      "result": "PASS",
+      "name": "Reject invalid monetary input without changing meaning: 1.2.3"
+    },
+    {
+      "result": "PASS",
+      "name": "Reject invalid monetary input without changing meaning: 12x34"
+    },
+    {
+      "result": "PASS",
+      "name": "Reject invalid monetary input without changing meaning: "
+    },
+    {
+      "result": "PASS",
+      "name": "Reject invalid financial write: NaN"
+    },
+    {
+      "result": "PASS",
+      "name": "Reject invalid financial write: Infinity"
+    },
+    {
+      "result": "PASS",
+      "name": "Reject invalid financial write: -Infinity"
+    },
+    {
+      "result": "PASS",
+      "name": "Reject invalid financial write: -1.0"
+    },
+    {
+      "result": "PASS",
+      "name": "Reject invalid financial write: 0.0"
+    },
+    {
+      "result": "PASS",
+      "name": "Reject unknown financial type and missing project without creating rows"
+    }
+  ],
+  "hostAdapters": [
+    "SQLite JDBC",
+    "Android Context/SharedPreferences adapters",
+    "AES/GCM synthetic key file: NOT Android Keystore"
+  ],
+  "androidKeystoreTestStatus": "PASS: real Android Keystore instrumentation in run 39746013844; host cipher remains a synthetic adapter",
+  "compiledManifestsVerified": {
+    "apk-verified-sync-safety": {
+      "compiledFiles": 30,
+      "manifestSha256": "c2941776c65f4e0d219e5a6f1e359da65337ed9334af31c1825aed59847807c9"
+    },
+    "apk-verified-restore-recovery": {
+      "compiledFiles": 29,
+      "manifestSha256": "45ea2cddcb300c22fac1cdad2117efc5e0256fe76e7f4f70cafe77edb3a93e99"
+    },
+    "apk-verified-import-safety": {
+      "compiledFiles": 29,
+      "manifestSha256": "d8090ec73118a479ecb44a46465b68df93957d49d4c8066a7f1413805df786f1"
+    },
+    "apk-verified-restore-integrity": {
+      "compiledFiles": 29,
+      "manifestSha256": "3f85ccf2abf5ea6551786456a19d8f74c34fbbe47f42dd759708c57e1d337d21"
+    },
+    "apk-verified-attachment-validation": {
+      "compiledFiles": 29,
+      "manifestSha256": "3e475031425082194125bb71e283de636cfd8dc8ed612462f07c816e04c797ad"
+    },
+    "apk-verified-attachment-restore": {
+      "compiledFiles": 29,
+      "manifestSha256": "9cd97642a86b7b7ca24de9515939b472e11f02d2f4918b974a8423ee25407f29"
+    },
+    "apk-verified-import-safety-probe": {
+      "compiledFiles": 29,
+      "manifestSha256": "72ed7f32a6d744dfaffd7a5ebe2650dd0c57726be72c833e63ffb121c5079e8e"
+    },
+    "apk-verified-restore-recovery-probe": {
+      "compiledFiles": 29,
+      "manifestSha256": "2c0716f5fb21841f0ac29cc9cf683beb98862eb36756f12f1978d5f990eafa32"
+    },
+    "apk-verified-backup-validation": {
+      "compiledFiles": 29,
+      "manifestSha256": "d351527ce72b199aa1069f6e7ded9ad01f4a99b31bebd6c83264b917f639df8b"
+    },
+    "apk-verified-apk-hardening": {
+      "compiledFiles": 29,
+      "manifestSha256": "a638dab88914414d3102da367cc93baaa3acb0b45629dc2098ffc466514a8427"
+    },
+    "apk-verified-sync-safety-probe": {
+      "compiledFiles": 30,
+      "manifestSha256": "78831865a553d2098f7d68821cb2912aee4ecccf523cff9357a8465b1869599f"
+    }
+  },
+  "sourceSha256": {
+    "mobile/android/app/src/androidTest/java/kz/kairat/organizer/ApkHardeningTest.kt": "e079620aeb8172396fd885f078a1f7381a1e6e655a7046d39638bee0fb07d863",
+    "mobile/android/app/src/androidTest/java/kz/kairat/organizer/LegacyUpgradeTest.kt": "3fb1049dd55eec8374cbe3477500984c61cd80185151bc1885039e9f823c5a07",
+    "mobile/android/app/src/androidTest/java/kz/kairat/organizer/MobileSafetyTest.kt": "7280a6688e52a6b7f7bf738c7b4ca812caa79166f4699e944672c198ba74d0b2",
+    "mobile/android/app/src/androidTest/java/kz/kairat/organizer/MobileUiTest.kt": "e1f675ba106f141c43a1b142b319a5b21a8b08591d5dee8e0afc7ee80875459d",
+    "mobile/android/app/src/main/AndroidManifest.xml": "db64011766e515d1813036d3518b39c1096168dfd9f243e214225f9d62a274a7",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AppStrings.kt": "f3051419482fc2cac774523def59027532a9c29119a51448360d398c418ae128",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentRestoreFiles.kt": "58915da86a928cb969acd2359188660616c1b8f14abee3ecf550dc015fac1ec0",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/AttachmentStore.kt": "c0962ffb2d9e3e6db920224d04f990b8c120bd4aadb6fedb77b814b044c4747f",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupImportLimits.kt": "3adeddcd324dd94c8a15ca457b59374e81299a5275e87a3f218b9235e834cd84",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupImportReader.kt": "1563553ae25907593445fc58f387933ba067c177083cd63f38257c676cd1c932",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupManager.kt": "7996aef8f4c5177c0846ca43161c6d59cf7b77130e3a149c690b71f984cf8998",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/BackupValidation.kt": "bbc24401e68fc737944bb09671f5409c90fd05b4367c6fe3cf25baa59807c807",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/CalendarSystem.kt": "372c60e55625bf97680ba570488c6dcbf497a53ded224dea542960495106510a",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/CalendarUi.kt": "196160db119388c37c6d13a5ce83a969847c31f587ff09a8a709f2da1e12be09",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/CloudSync.kt": "b23eec0d10ec0907808ac23fe746f65eaa29203e31cf6bd6320363ff8be5adfa",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/MainActivity.kt": "f204c3a7e96d7049649d376d682ad3fe46882b5d8c5c2a6e19b362f51d0bfc47",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/Models.kt": "fa51ad21112e70d4d27b6e0774d8c8630581231335a17fd8e2fe63419ef89b2d",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/MoneyAmounts.kt": "c2f218045b7b3c1c4ef4d61425c16684f08c11cd3f8a68c1d5e9c21a506cfed4",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/NoteDatabase.kt": "085707e4f6363f3b5fb68a334cf65cc0aac3b4f50e034f512d5bff5b353c3700",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/OrganizerApplication.kt": "150be007aefa383a355e882f958296dd70fedc0763c73aa4feca6f354483c1e5",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/OrganizerUi.kt": "257f00abe41a37124cf739136953be7a1d5605028b296f0330b2081506f95990",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/PrivacyNotice.kt": "3f5651d11edd142288f3070297d1ff2301f3c567c7a6958b1139e299357838db",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/ProtectedSettings.kt": "05c8948e60cdd2aa82aa9dc53ce3d3962a020918398bc422458b203a4290463e",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/ProtectedSettingsCipher.kt": "00a4870abbf361b33e0d4ac9a322eec7af2691a8a1a2a4256a2bec4263cfc76f",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/ReminderAlertActivity.kt": "74d0d110f0e8944253fd3d6cc12030f0574979707f08e54eb2118b50840d03a8",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/ReminderSystem.kt": "d819b6a720e985d2a4c4fed479695d11681b8dc01813eb445f6d624526c874f5",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/RestoreJournal.kt": "b3392ec12106f8ab2f5d9212f1184705b06a549cad9f0c8e994bf0693de6e099",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/RestoreSafety.kt": "dc9a1fa0f20b645eba0e2bbd1e290e90ba5f50f953e9360804ee447e85124510",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/SettingsStore.kt": "49402173405894bc8571903a6ab84794bab6c06e486b366d3fd6628b41027f14",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/SyncConflictStore.kt": "d1ad734b7299fc103fa35a171ab9fc513162c75f0936e5bb58569949e39a927f",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/SyncSnapshot.kt": "8ce9fe62a25867be8bf3301f98c5c5f6c53336dff8d0f4847bb2366b6a5f78cc",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/SyncStateStore.kt": "9533885c92bd51b0f234e81699de0492b5d305051076a59bbb5eb58ef7bc1398",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/Theme.kt": "2558273b2d39a8596d1047f223e56bdddbfc2ab3cdd5f0749b9a54ebd350e097",
+    "mobile/android/app/src/main/java/kz/kairat/organizer/VoiceRecorder.kt": "cb73f0fc13671142a63d602da06fe5240d6ed3409d37f08a424266b56a1bef12",
+    "mobile/android/app/src/main/res/drawable/ic_app_icon_approved.xml": "4541b4c6b4a910b5b29d9965169f30bbeea7506cc1e5dc4805a5c7fce5a894aa",
+    "mobile/android/app/src/main/res/drawable/ic_notification.xml": "1dd34180fcf89e1a92a35876607cad796e95a56526702bcfec6d849fbb47d4df",
+    "mobile/android/app/src/main/res/values-de/strings.xml": "cacdc507e7c757d1895527ca3f640bd4e9731eeb23ab80ec422b25a8840027a8",
+    "mobile/android/app/src/main/res/values-en/strings.xml": "cacdc507e7c757d1895527ca3f640bd4e9731eeb23ab80ec422b25a8840027a8",
+    "mobile/android/app/src/main/res/values-es/strings.xml": "d9d1e2e22b1f7159e0fe05fcf3b5b6a85ba429c2e18c69266c0cd29481da06e6",
+    "mobile/android/app/src/main/res/values-fr/strings.xml": "e3b631f48a9e63a1a7bdaa9aa8ac933e78cf5fa57513c732dcf6a38a6fbb0c03",
+    "mobile/android/app/src/main/res/values-kk/strings.xml": "18ca4c0b98c30bda6e154620e6f14a2ed9a3fa95a98eb4e4c2720eb93fbe0c45",
+    "mobile/android/app/src/main/res/values-tr/strings.xml": "07c3299ddc879cfa7edaffab26fd8ab1587b76f0abc7ce51a0c6a829349f7b06",
+    "mobile/android/app/src/main/res/values-zh-rCN/strings.xml": "e3122ac0bddd910eb16209f4237ca9d85d3c958ec4c08cf97a40a95502272952",
+    "mobile/android/app/src/main/res/values/colors.xml": "f17ed855fac46d430b9aca731b5a0b1b488c923a1e22b372b15f204949c871b5",
+    "mobile/android/app/src/main/res/values/strings.xml": "0f725ef544cd4bc7b5f37e1776750a8957b0b771fb5d1a01c51c16c0c8e86820",
+    "mobile/android/app/src/main/res/values/styles.xml": "8eb1a82d400391c3bd9cd90607272c28635cc5a53978c0d3e2973c36f77d9a13",
+    "mobile/android/app/src/main/res/xml/backup_rules.xml": "66836544f70fb489403e4747dee49eb6b61c9ea0e8e9015bc89ec033e0e5ea91",
+    "mobile/android/app/src/main/res/xml/data_extraction_rules.xml": "0d53cac278c6705060d1bc2d25034f90b90ed0504c856c03a0c9cdadcdbd66b5",
+    "mobile/android/app/src/main/res/xml/file_paths.xml": "e00fc88875b0d3d713154f0952f7a75faa932abe941c52ea397ca5d133b3cfee",
+    "mobile/android/app/src/main/res/xml/locales_config.xml": "1816db92c5e1eb54b6a8265df21bb2cbe171ec6b48a67d8697341cd2c420517d",
+    "tools/audit/README.md": "2be4957c214a978f5d6bdca8d02aead09b44a38fd12698fbebb3b1434513127c",
+    "tools/audit/SignOrganizerApk.java": "f66ca1c890ed7445cd949698fc18c72a3d50904538ff2992592c8332e4a0d3ea",
+    "tools/audit/inspect_apk_candidate.py": "68712901d56fad47d1d5be23ce5490c615198a3b609fb70153eef1fd324221c9",
+    "tools/audit/jvm/AndroidContent.kt": "1303e849251b7fada5ed1650625b7e9088828bf120ea40f51626e6cba7006e9d",
+    "tools/audit/jvm/AndroidCursor.kt": "302bc45c6fc1a39e458b3b13a62219af7027613efd9bbe62e0a3507a9dbbd636",
+    "tools/audit/jvm/AndroidOs.kt": "cf4e6d466170130e414de4981389a942b12df3439732d159a8a433a06d0422fc",
+    "tools/audit/jvm/AndroidProvider.kt": "be3a2dfa0d04583945a94cd1ba9e8bc009fd9b402efbf461c4029eb10c3ef0a9",
+    "tools/audit/jvm/AndroidSQLite.kt": "a8c8f521c2b00acc83fe2888a21e37a6cc1f71969efc5355a2f52b4ebed2aa9d",
+    "tools/audit/jvm/AndroidUri.kt": "c19c6b1ba5ec2a2fcd12ec44813782407467732c6a053bbf73e9f9c1ebfd515b",
+    "tools/audit/jvm/ApkHardeningMain.kt": "6047420fc2647d458adcedaea318a449306f052fcd2bee2be8b41e73c86bb665",
+    "tools/audit/jvm/AttachmentFixtures.kt": "c0c5e1913f384350ace9f4ac63b9a0fa777549e58c0fecf3a98d92f95cb75ba1",
+    "tools/audit/jvm/AttachmentRestoreMain.kt": "97d9a86c7b56149aeda268360809de38ff5cf4d517af298bc4b24bc30ce3774a",
+    "tools/audit/jvm/AttachmentValidationMain.kt": "f883436d4920e4a521e1ef3b6fe150880fdb8ed62699af1a268fdba0e8165edd",
+    "tools/audit/jvm/AuditMain.kt": "2c6e782877b403cd9f69f38d06adaf9b384c2745ed2efa87d12073a852bb85c5",
+    "tools/audit/jvm/BackupValidationMain.kt": "921b1ce178939f01f5fecdab9705f8edde2fce2d27a9bbc7bd53f8901b020b26",
+    "tools/audit/jvm/FileProvider.kt": "3020b150a3880104842bbf38ecd10bda305fe6e2eba8eb659e0a2bcec3f4e576",
+    "tools/audit/jvm/ImportSafetyMain.kt": "a53f0ce234190fb6980a4cab5a688d1fb7bdd4f7b39e52d0cee22955d2f1babd",
+    "tools/audit/jvm/ImportSafetyProbeMain.kt": "0141a05dfca0f587f73820c6044cb671e4efa15f16034f1f2f31880a5e5dc6a4",
+    "tools/audit/jvm/ProtectedSettingsCipher.kt": "c30019c5754f8fb36c0e976cb14890d71c722f7a0758560ad62f7a9833d68eac",
+    "tools/audit/jvm/RecoveryProbeMain.kt": "44f60c7e206c17dfe9eb3e65e3dcde3274fa2f9ff18004ff30f872ae3faf1cc7",
+    "tools/audit/jvm/RecoveryWorker.kt": "c0e9da76e31b893f8ef355cdd46c90fe156bbdf41682f5b21c42e99d507eb8d8",
+    "tools/audit/jvm/RestoreIntegrityMain.kt": "fd29cab72cc091a460562a7909935eb8c2a87e6617c21393c6461d6401ce65bb",
+    "tools/audit/jvm/RestoreRecoveryMain.kt": "eb9e131648106ff8c132ab0e12f09d3fd7c42bd1d33a564e448306c76cbcdd65",
+    "tools/audit/jvm/Schedulers.kt": "f4af96d5abed34f4c2c87dd7fd35539b7a1ae559cc1d99974af4c1f6c1a0a7f5",
+    "tools/audit/jvm/SyncSafetyMain.kt": "8d24a11b69df6f9dfacc3f217031af021be10affc486697e05789fd425cac464",
+    "tools/audit/jvm/SyncSafetyProbeMain.kt": "d75bc4e0da794907f0b0889a1643bf836a779a21b529d9614735a5dc0ca0f0c0",
+    "tools/audit/run_android_safety.sh": "98b9a6cbfabc512fe02f70b05ffe8381d2470f65a26c3118796ad59dd5a4cf24",
+    "tools/audit/run_jvm_audit.py": "375faa43d7f10ef9cee78f75c6400cba91663dd8ab7b471cb82fe0f27b36a0d3",
+    "tools/audit/run_server_audit.cjs": "2c88bd38503ec714c54314ef4bc7d076e948bed96c228fa76fc80e3549fb9ea5",
+    "tools/audit/run_sync_server_safety.cjs": "1613e7ca466f16d1b52c6246381627a3f219d67dbcf10401f169aeeb7dd55778"
+  },
+  "realUserDataUsed": false,
+  "sourceCommit": "8b74aaafc897272e5667a8002201d24765da9673",
+  "compiledSourceEntriesChecked": 321
+}
