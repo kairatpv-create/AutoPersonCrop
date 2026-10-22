@@ -220,6 +220,20 @@ fun main(){
         check(JSONObject(cloud).toString(2).toByteArray().size>850000){"Indented bytes: ${JSONObject(cloud).toString(2).toByteArray().size}"}
         f.sync();check(r.payload==f.cloud())
     }
+    d06Test("Android system restore without noBackup state retains the original owner even for a reused email"){
+        val r=Remote();val f=SyncFixture();f.db.save(null,"A private","keep");f.attach(1);f.sync();CloudSync.logout(f.s);f.db.close()
+        val restored=Context(Files.createTempDirectory("organizer-system-restore-synthetic-").toFile())
+        File(f.c.sandbox,"organizer.db").copyTo(File(restored.sandbox,"organizer.db"))
+        f.c.filesDir.copyRecursively(restored.filesDir,overwrite=true)
+        File(f.c.sandbox,"shared_prefs").copyRecursively(File(restored.sandbox,"shared_prefs"),overwrite=true)
+        check(!File(restored.noBackupFilesDir,"sync-state/state.json").exists())
+        AttachmentStore.initialize(restored);val db=NoteDatabase(restored);val s=SettingsStore(restored)
+        s.syncIdToken=token(2);s.syncEmail="a@example.invalid"
+        val before=JSONObject(BackupManager.createBackup(db,s)).apply{remove("createdAt")};val files=d06Files(restored.filesDir);val cloud=r.payload
+        check(runCatching{CloudSync.syncOnce(db,s,"en",restored)}.isFailure)
+        check(before.similar(JSONObject(BackupManager.createBackup(db,s)).apply{remove("createdAt")}));check(d06Files(restored.filesDir)==files);check(r.payload==cloud)
+        check(SyncStateStore(restored,"en").read()!!.owner=="organizer-pro:1");db.close()
+    }
     CloudSync.testTransport=null
     d06Finish("sync-safety")
 }

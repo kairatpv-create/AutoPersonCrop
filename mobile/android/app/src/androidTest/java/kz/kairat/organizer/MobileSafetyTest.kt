@@ -35,7 +35,7 @@ private fun root(name:String)=File(InstrumentationRegistry.getInstrumentation().
 private fun context(directory:File)=SyntheticContext(InstrumentationRegistry.getInstrumentation().targetContext,directory).also{AttachmentStore.initialize(it)}
 private fun files(dir:File)=dir.walkTopDown().filter{it.isFile}.associate{it.relativeTo(dir).path to MessageDigest.getInstance("SHA-256").digest(it.readBytes()).joinToString(""){b->"%02x".format(b)}}
 private fun data(db:NoteDatabase,s:SettingsStore)=JSONObject(BackupManager.createBackup(db,s)).apply{remove("createdAt")}.toString()
-private fun session(s:SettingsStore){val email="synthetic@example.invalid";val claims=JSONObject().put("sub","1").put("email",email);s.syncEmail=email;s.syncIdToken="header."+Base64.getUrlEncoder().withoutPadding().encodeToString(claims.toString().toByteArray())+".synthetic"}
+private fun session(s:SettingsStore,id:Int=1){val email="synthetic@example.invalid";val claims=JSONObject().put("sub",id.toString()).put("email",email);s.syncEmail=email;s.syncIdToken="header."+Base64.getUrlEncoder().withoutPadding().encodeToString(claims.toString().toByteArray())+".synthetic"}
 
 @RunWith(AndroidJUnit4::class)
 class MobileSafetyTest {
@@ -64,12 +64,44 @@ class MobileSafetyTest {
         CloudSync.syncOnce(db,settings,"en",c);offline=true;db.save(null,"offline note","pending");val expected=data(db,settings);assertTrue(runCatching{CloudSync.syncOnce(db,settings,"en",c)}.isFailure);assertEquals(expected,data(db,settings));db.close();db=NoteDatabase(c);assertEquals(expected,data(db,settings));offline=false;CloudSync.syncOnce(db,settings,"en",c);assertEquals(SyncSnapshot.parse(BackupManager.createCloudBackup(db,settings),"en"),remote)
     }
     @Test fun accountSwitchAfterLogoutDoesNotSendData(){session(settings);CloudSync.testTransport={path,_,_,_->assertEquals("/api/account",path);CloudSync.HttpResult(200,JSONObject().put("email",settings.syncEmail))};val before=data(db,settings);CloudSync.logout(settings);assertTrue(runCatching{CloudSync.auth(settings,"other@example.invalid","synthetic-password",false)}.isFailure);assertEquals(before,data(db,settings))}
+    @Test fun restoredDatabaseKeepsOwnerWhenNoBackupStateIsAbsent(){
+        session(settings)
+        CloudSync.testTransport={path,method,_,_->when{
+            path=="/api/account"->CloudSync.HttpResult(200,JSONObject().put("email","synthetic@example.invalid"))
+            method=="GET"->CloudSync.HttpResult(200,JSONObject().put("exists",false).put("rev",0).put("payload",JSONObject.NULL))
+            else->CloudSync.HttpResult(200,JSONObject().put("ok",true).put("rev",1))
+        }}
+        CloudSync.syncOnce(db,settings,"en",c);CloudSync.logout(settings);db.close()
+        val restored=context(root(UUID.randomUUID().toString()))
+        c.getDatabasePath("organizer.db").copyTo(restored.getDatabasePath("organizer.db"))
+        c.filesDir.copyRecursively(restored.filesDir,overwrite=true)
+        // Model OS restoration of ordinary preferences while noBackupFilesDir is intentionally absent.
+        val old=c.getSharedPreferences("organizer_sync_owner",Context.MODE_PRIVATE)
+        assertTrue(restored.getSharedPreferences("organizer_sync_owner",Context.MODE_PRIVATE).edit()
+            .putString("owner",old.getString("owner",null)).putString("email",old.getString("email",null)).commit())
+        val restoredDb=NoteDatabase(restored);val restoredSettings=SettingsStore(restored);session(restoredSettings,2)
+        try{
+            val before=data(restoredDb,restoredSettings);val bytes=files(restored.filesDir)
+            assertFalse(File(restored.noBackupFilesDir,"sync-state/state.json").exists())
+            assertTrue(runCatching{CloudSync.syncOnce(restoredDb,restoredSettings,"en",restored)}.isFailure)
+            assertEquals(before,data(restoredDb,restoredSettings));assertEquals(bytes,files(restored.filesDir))
+        }finally{restoredDb.close()}
+    }
     @Test fun pinProtectedNotificationDoesNotExposePrivateContent(){
         settings.setPinProtectionEnabled(true)
         val id=db.addReminder("note",1,System.currentTimeMillis()+60000,true,false)
         val reminder=db.getReminder(id)!!
         ReminderNotifications.show(c,reminder)
-        val notification=c.getSystemService(android.app.NotificationManager::class.java).activeNotifications.first{it.id==id.toInt()}.notification
+        val manager=c.getSystemService(android.app.NotificationManager::class.java)
+        assertTrue("Synthetic app notification permission must be granted",manager.areNotificationsEnabled())
+        // notify() enqueues work in system_server; it does not synchronously publish the notification.
+        val deadline=android.os.SystemClock.uptimeMillis()+5000
+        var published:android.app.Notification?=null
+        while(published==null&&android.os.SystemClock.uptimeMillis()<deadline){
+            published=manager.activeNotifications.firstOrNull{it.id==id.toInt()}?.notification
+            if(published==null)Thread.sleep(50)
+        }
+        val notification=checkNotNull(published){"The protected notification was not published within 5 seconds"}
         assertFalse(notification.extras.getString(android.app.Notification.EXTRA_TITLE).orEmpty().contains("Synthetic note"))
         assertFalse(notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString().contains("private body"))
         assertNull(notification.fullScreenIntent)
