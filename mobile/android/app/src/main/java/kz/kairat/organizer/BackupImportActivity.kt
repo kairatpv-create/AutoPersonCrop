@@ -48,6 +48,12 @@ class BackupImportActivity:ComponentActivity() {
         super.onResume()
         if(settings?.isPinProtectionEnabled()==true)window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
     }
+    override fun onNewIntent(newIntent:Intent){
+        super.onNewIntent(newIntent)
+        // Mail/file apps may reuse the top activity. Never keep the previous attachment preview.
+        setIntent(newIntent)
+        recreate()
+    }
     override fun onPause(){
         if(settings?.isPinProtectionEnabled()==true)unlocked=false
         super.onPause()

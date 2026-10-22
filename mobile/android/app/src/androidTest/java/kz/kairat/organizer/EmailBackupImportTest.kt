@@ -56,10 +56,43 @@ class EmailBackupImportTest {
     }
     private fun backup(db:NoteDatabase,s:SettingsStore)=JSONObject(BackupManager.createBackup(db,s)).apply{remove("createdAt")}.toString()
     private fun uri(file:File)=FileProvider.getUriForFile(context,"${context.packageName}.files",file)
+    private fun screenshot(name:String){
+        instrumentation.waitForIdleSync()
+        val image=checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        File(context.getExternalFilesDir(null),"synthetic-ui").apply{mkdirs()}.resolve("$name.png").outputStream().use{
+            image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)
+        }
+        image.recycle()
+    }
     private fun prepare():SettingsStore {
         check(InstrumentationRegistry.getArguments().getString("syntheticOnly")=="1")
         AttachmentStore.initialize(context)
         return SettingsStore(context).also{it.language="en";it.fontScale=.85f;it.buttonFontScale=.85f}
+    }
+
+    @Test fun openingAnotherEmailAttachmentReplacesThePreviousPreview(){
+        val s=prepare();s.setPinProtectionEnabled(false);val db=NoteDatabase(context)
+        val before=backup(db,s)
+        val valid=File(context.cacheDir,"synthetic-mail-first.json").apply{writeText(BackupManager.createBackup(db,s))}
+        val invalid=File(context.cacheDir,"synthetic-mail-second.json").apply{writeText("{\"notes\":[]}")}
+        val activity=start(uri(valid),"application/json")
+        try{
+            find("Restore backup");screenshot("email-import-confirm")
+            instrumentation.runOnMainSync{
+                activity.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri(invalid),"application/json")
+                    .setClass(context,BackupImportActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+            find("Could not restore the backup");screenshot("email-import-error")
+            assertEquals(before,backup(db,s));click(AppStrings.t("en","cancel"))
+        }finally{
+            instrumentation.runOnMainSync{
+                androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED)
+                    .filterIsInstance<BackupImportActivity>().toList().forEach{it.finish()}
+            }
+            valid.delete();invalid.delete();db.close()
+        }
     }
 
     @Test fun malformedEmailAttachmentsLeaveRecordsAndFilesUnchanged(){

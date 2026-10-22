@@ -66,7 +66,10 @@ class MobileUiTest {
         settings.syncIdToken="synthetic-disabled-cloud-token";settings.setPinProtectionEnabled(false)
         val credentials=File(context.noBackupFilesDir,"protected-settings/credentials.bin").readBytes()
         val requests=java.util.concurrent.atomic.AtomicInteger()
-        CloudSync.testTransport={_,_,_,_->requests.incrementAndGet();throw java.io.IOException("Unexpected cloud request")}
+        // These UI tests also run against release. Kotlin internal accessor suffixes differ by variant.
+        val transportField=CloudSync::class.java.getDeclaredField("testTransport").apply{isAccessible=true}
+        val transport:(String,String,String?,String?)->CloudSync.HttpResult={_,_,_,_->requests.incrementAndGet();throw java.io.IOException("Unexpected cloud request")}
+        transportField.set(null,transport)
         try{
             for(lang in listOf("ru","en")){
                 settings.language=lang;settings.fontScale=.85f;settings.buttonFontScale=.85f;settings.darkTheme=false
@@ -90,7 +93,7 @@ class MobileUiTest {
                     assertArrayEquals(credentials,File(context.noBackupFilesDir,"protected-settings/credentials.bin").readBytes())
                 }finally{instrumentation.runOnMainSync{activity.finish()}}
             }
-        }finally{CloudSync.testTransport=null;settings.syncIdToken=originalToken;db.close()}
+        }finally{transportField.set(null,null);settings.syncIdToken=originalToken;db.close()}
     }
 
     @Test fun zipBackupCanBeSharedAndBothSavedFormatsRemainReadable(){
