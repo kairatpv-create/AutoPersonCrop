@@ -1,0 +1,154 @@
+{
+  "date": "2026-10-23",
+  "repository": "kairatpv-create/AutoPersonCrop",
+  "branch": "organizer-ios-20261022",
+  "sourceCommit": "8ec96fd4c7e054cbba328f0501a8eb1df6286641",
+  "workflow": {
+    "id": 39891498068,
+    "url": "https://github.com/kairatpv-create/AutoPersonCrop/actions/runs/39891498068",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "id": 120212078578,
+        "name": "core",
+        "conclusion": "success"
+      },
+      {
+        "id": 120212368964,
+        "name": "iphone",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "toolchain": {
+    "runner": "macos-26-arm64",
+    "xcode": "26.6 (17F113)",
+    "swift": "6.3.3",
+    "iPhoneOSSDK": "26.5",
+    "simulatorRuntime": "26.5"
+  },
+  "validation": {
+    "sourceCommit": "8ec96fd4c7e054cbba328f0501a8eb1df6286641",
+    "runId": 39891498068,
+    "core": {
+      "testCount": 43,
+      "passed": true,
+      "sqliteProcessDeathRollback": true
+    },
+    "androidInterop": {
+      "json": true,
+      "zip": true,
+      "records": true,
+      "amounts": true,
+      "links": true,
+      "preferences": true,
+      "attachmentBytes": true,
+      "hostAdapters": true,
+      "realDevice": false
+    },
+    "iphoneSmall": {
+      "integrationTestsPassed": 20,
+      "includes13StoragePINTests": true,
+      "includes7FakeNotificationSchedulerTests": true,
+      "uiTestsPassed": 7
+    },
+    "iphoneLarge": {
+      "layoutTestsPassed": 1,
+      "scenarios": [
+        "ru-light-normal",
+        "en-light-normal",
+        "ru-dark-1.45-bold",
+        "en-dark-1.45-bold"
+      ]
+    },
+    "syntheticDataOnly": true,
+    "realIPhoneManualQA": false
+  },
+  "devices": {
+    "small": "iPhone SE (3rd generation)",
+    "large": "iPhone 17 Pro Max"
+  },
+  "archiveVerification": {
+    "bundleIdentifier": "com.organizerpro.mobile",
+    "version": "1.0.0",
+    "build": "1",
+    "minimumOS": "17.0",
+    "sdk": "iphoneos26.5",
+    "xcode": "2660",
+    "architecture": "Non-fat file: /Users/runner/work/_temp/Organizer-Pro-iOS-UNSIGNED.xcarchive/Products/Applications/OrganizerPro.app/OrganizerPro is architecture: arm64",
+    "binarySHA256": "ddcd1262ad9fea273915a6de5a848cc3ecc54c11358e00ed0547ce480e8fdf69",
+    "debugHooksAbsent": true,
+    "privacyManifestPresent": true,
+    "signatureVerified": false,
+    "archiveSignedForDistribution": false,
+    "appStoreUploaded": false
+  },
+  "artifacts": [
+    {
+      "id": 12475722596,
+      "name": "organizer-iphone-build-and-tests",
+      "sizeBytes": 28775931,
+      "githubReportedDigest": "sha256:383890cb19f550f5e794699025fb8c21f21967ae8df60c8fc42650a996b647cf",
+      "expiresAt": "2026-11-22T03:08:34Z",
+      "sourceCommit": "8ec96fd4c7e054cbba328f0501a8eb1df6286641",
+      "url": "https://github.com/kairatpv-create/AutoPersonCrop/actions/runs/39891498068/artifacts/12475722596"
+    },
+    {
+      "id": 12474737319,
+      "name": "organizer-ios-core-evidence",
+      "sizeBytes": 276312,
+      "githubReportedDigest": "sha256:66b5c0bcd7828c7448e8f213d8cfa15ac879d45156094ed7692a9e8cc8094330",
+      "expiresAt": "2027-01-21T02:47:33Z",
+      "sourceCommit": "8ec96fd4c7e054cbba328f0501a8eb1df6286641",
+      "url": "https://github.com/kairatpv-create/AutoPersonCrop/actions/runs/39891498068/artifacts/12474737319"
+    }
+  ],
+  "screenshots": {
+    "smallNamedOriginals": 37,
+    "largeNamedOriginals": 20,
+    "reviewed": [
+      "SE RU/EN light/dark 1.45 bold and restore preview/confirmation/restored empty state",
+      "17 Pro Max RU light, RU dark large, EN dark settings, RU dark large finances"
+    ],
+    "marketingScreenshotsApproved": false
+  },
+  "android": {
+    "baseline": "5a4cf457e02ce01254bf8232f837a89ea5e494c7",
+    "appSource": "663b949f175ea380695cd967ce3e7c493c7b866e",
+    "version": "0.9.40 (73)",
+    "sourceModified": false,
+    "versionModified": false,
+    "signatureModified": false,
+    "renderOrServerSourceModified": false,
+    "comparison": "https://github.com/kairatpv-create/AutoPersonCrop/compare/5a4cf457e02ce01254bf8232f837a89ea5e494c7...8ec96fd4c7e054cbba328f0501a8eb1df6286641"
+  },
+  "existingAppleRegistration": {
+    "source": "User-provided; App Store Connect state not read",
+    "bundleId": "com.organizerpro.mobile",
+    "appleAppId": "6825404169",
+    "sku": "ORGANIZER-PRO-IOS-001",
+    "newRegistrationCreated": false
+  },
+  "distribution": {
+    "signedIPAProduced": false,
+    "distributionSignatureVerified": false,
+    "testFlightUploaded": false,
+    "publiclyReleased": false,
+    "verifiedAppleSigningAssetsAvailable": false,
+    "remaining": [
+      "Existing Apple Team ID and valid distribution certificate/private key and App Store profile",
+      "Confirm the existing App Store version and unused build number",
+      "Physical iPhone media, real notification delivery, permission, offline and mail/file handoff QA",
+      "Final App Privacy, public policy/support URLs, age rating, export compliance and store screenshots",
+      "Separate approval before any TestFlight upload, tester invitation or release"
+    ]
+  },
+  "limitations": [
+    "All automated app tests used simulators; no physical iPhone was tested",
+    "Seven notification scheduler integration tests use fake delivery, not OS alert delivery",
+    "Android interoperability uses real Kotlin data code with host Android adapters and SQLite, not Android instrumentation",
+    "Artifact digests are reported by GitHub; archive binary digest was computed by validate_archive.py on the macOS runner"
+  ],
+  "userDataUsed": false,
+  "productionInfrastructureChanged": false
+}
