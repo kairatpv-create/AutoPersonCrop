@@ -223,6 +223,12 @@ struct BackupDocument: FileDocument {
     }
     func reschedule() { if automaticScheduling { reminders.update(snapshot, protected: pinEnabled || pinUnavailable, language: lang) } }
     #if DEBUG
+    private var testImportHandled = false
+    func openUITestImportIfNeeded() {
+        guard isUITest, !testImportHandled, let encoded = ProcessInfo.processInfo.environment["ORGANIZER_UI_IMPORT"], let data = Data(base64Encoded: encoded), data.count < 128 * 1024 else { return }
+        testImportHandled = true
+        do { let url = files.appendingPathComponent("test-attachment.json"); try data.write(to: url); importBackup(url) } catch { report(error) }
+    }
     private func configureUITest() {
         // Compiled out of Release. Data lives in the test app's disposable simulator container.
         let args = ProcessInfo.processInfo.arguments

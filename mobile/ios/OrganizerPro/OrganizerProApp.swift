@@ -10,7 +10,12 @@ import SwiftUI
             RootView().environmentObject(model)
                 .preferredColorScheme(model.dark ? .dark : .light)
                 .environment(\.locale, model.locale)
-                .onAppear { gate.attach(model); model.clearTemporaryFiles() }
+                .onAppear {
+                    gate.attach(model); model.clearTemporaryFiles()
+                    #if DEBUG
+                    model.openUITestImportIfNeeded()
+                    #endif
+                }
                 .onOpenURL { model.importBackup($0) }
                 .onChange(of: phase) { _, next in gate.phase(next); if next == .active { model.reschedule() } }
         }

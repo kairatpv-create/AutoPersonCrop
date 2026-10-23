@@ -8,9 +8,9 @@ available=[r for r in runtimes if r.get('isAvailable') and 'iOS' in r['name']]
 runtime=max(available,key=lambda r:tuple(int(x) for x in r['version'].split('.')))
 phones=[d for d in types if 'iPhone' in d['name']]
 small=[d for d in phones if d['name']=='iPhone SE (3rd generation)']
-large=[d for d in phones if 'Pro Max' in d['name']]
+large=sorted([d for d in phones if 'Pro Max' in d['name']],key=lambda d:tuple(int(x) for x in __import__('re').findall(r'\d+',d['name'])),reverse=True)
 def create(candidates,label):
-    for device in reversed(candidates):
+    for device in candidates:
         result=subprocess.run(['xcrun','simctl','create','Organizer QA '+label,device['identifier'],runtime['identifier']],text=True,capture_output=True)
         if result.returncode==0:return {'name':device['name'],'id':result.stdout.strip(),'runtime':runtime['version']}
     raise RuntimeError('No compatible '+label+' iPhone type')

@@ -14,7 +14,7 @@ assert 'NSAppTransportSecurity' not in info
 assert (app/'PrivacyInfo.xcprivacy').is_file()
 assert not (app/'Fixtures').exists()
 binary=app/info['CFBundleExecutable'];data=binary.read_bytes()
-for marker in [b'ORGANIZER_UI_FIXTURE',b'-ui-testing',b'-test-session',b'-test-pin']:
+for marker in [b'ORGANIZER_UI_FIXTURE',b'ORGANIZER_UI_IMPORT',b'-ui-testing',b'-test-session',b'-test-pin']:
  assert marker not in data, 'DEBUG-only test hook leaked into Release'
 architecture=subprocess.check_output(['xcrun','lipo','-info',str(binary)],text=True).strip()
 assert 'arm64' in architecture

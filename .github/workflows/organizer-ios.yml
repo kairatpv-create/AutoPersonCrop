@@ -82,7 +82,7 @@ jobs:
           xcrun simctl bootstatus "$IOS_LARGE_UDID" -b
           xcodebuild -project mobile/ios/OrganizerPro.xcodeproj -scheme OrganizerPro -sdk iphonesimulator -destination "platform=iOS Simulator,id=$IOS_LARGE_UDID" -derivedDataPath "$RUNNER_TEMP/organizer-derived" -resultBundlePath ios-evidence/large-iphone.xcresult -parallel-testing-enabled NO -only-testing:OrganizerProUITests/LayoutTests test-without-building CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- 2>&1 | tee ios-evidence/large-tests.log
       - name: Compile an unsigned Release archive for physical iPhone
-        if: always() && steps.build.outcome == 'success'
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -99,6 +99,7 @@ jobs:
           for result in ios-evidence/*.xcresult; do
             if [ -d "$result" ]; then
               xcrun xcresulttool export attachments --path "$result" --output-path "${result%.xcresult}-screenshots" || true
+              python3 tools/ios/normalize_screenshots.py "${result%.xcresult}-screenshots" || true
               xcrun xcresulttool get test-results summary --path "$result" > "${result%.xcresult}-summary.json" || true
             fi
           done
