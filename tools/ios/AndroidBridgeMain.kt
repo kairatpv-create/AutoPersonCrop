@@ -39,7 +39,7 @@ fun main(args:Array<String>) {
             File(out,"android-v7.json").writeText(BackupManager.createCloudBackup(db,settings))
             println("Exported synthetic fixtures using Android BackupManager, SQLite and AttachmentStore")
         } else {
-            val input=File(args[1]).readText()
+            val input=File(args[1]).inputStream().use { BackupImportReader.read(it,context.cacheDir,"en") }
             BackupManager.restore(input,db,"en")
             val restored=JSONObject(BackupManager.createBackup(db,settings))
             val expected=JSONObject(File(args[2]).readText())

@@ -14,6 +14,7 @@ do {
     case "roundtrip":
         try store.restore(BackupCodec.decode(Data(contentsOf: URL(fileURLWithPath: args[3]))))
         try store.export(zip: false).write(to: URL(fileURLWithPath: args[4]))
+        try store.export(zip: true).write(to: URL(fileURLWithPath: args[4]).deletingPathExtension().appendingPathExtension("zip"))
     case "seed": try store.restore(BackupCodec.decode(Data(contentsOf: URL(fileURLWithPath: args[3]))))
     case "crash": try store.restore(.empty()) { exit(77) }
     case "verify":

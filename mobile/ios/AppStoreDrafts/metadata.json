@@ -1,0 +1,44 @@
+{
+  "status": "Draft for the existing App Store Connect record; not submitted",
+  "appleAppId": "6825404169",
+  "bundleId": "com.organizerpro.mobile",
+  "sku": "ORGANIZER-PRO-IOS-001",
+  "developer": "Kairat Kaliyev",
+  "primaryLanguage": "ru",
+  "categories": [
+    "PRODUCTIVITY",
+    "FINANCE"
+  ],
+  "price": "free",
+  "inAppPurchases": false,
+  "subscriptions": false,
+  "version": "1.0.0",
+  "build": "1",
+  "supportEmail": "kairat.pv@gmail.com",
+  "privacyPolicyURL": null,
+  "supportURL": null,
+  "localizations": {
+    "ru": {
+      "name": "Органайзер Про",
+      "subtitle": "Заметки, проекты и финансы",
+      "keywords": "заметки,органайзер,планер,задачи,проекты,финансы,расходы,доходы,напоминания,списки,дневник",
+      "description": "Планируйте дела и ведите личные записи в Органайзере Про.\n\n• Создавайте заметки и задачи.\n• Ведите проекты: сроки, этапы, бюджет, журнал и связанные заметки.\n• Записывайте доходы и расходы, смотрите итоги и категории.\n• Добавляйте фотографии, файлы и голосовые записи.\n• Настраивайте напоминания и просматривайте календарь.\n• Выбирайте светлую или тёмную тему, язык и удобный размер текста.\n• Защищайте вход PIN-кодом.\n\nОсновные записи доступны без интернета. Сохраняйте полную копию в Файлы или отправляйте её через своё почтовое приложение. Восстанавливайте записи из файла или сохранённого вложения.\n\nРазрешения на камеру, микрофон, речь, календарь и уведомления запрашиваются при выборе соответствующей функции. Для диктовки могут потребоваться службы Apple и интернет. Отображение уведомлений зависит от настроек iPhone.\n\nПриложение предназначено для личного планирования и учёта. Русский и английский интерфейсы."
+    },
+    "en": {
+      "name": "Organizer Pro: Smart Life",
+      "subtitle": "Notes, projects & expenses",
+      "keywords": "notes,organizer,planner,tasks,projects,expenses,income,budget,reminders,lists,offline,journal",
+      "description": "Plan your days and keep your personal records with Organizer Pro.\n\n• Create notes and tasks.\n• Manage projects with dates, stages, budgets, a journal and linked notes.\n• Record income and expenses and review totals and categories.\n• Add photos, files and voice recordings.\n• Set reminders and view your calendar.\n• Choose a light or dark theme, language and comfortable text size.\n• Protect app access with a PIN.\n\nYour main records work offline. Save a full backup to Files or send it using your e-mail app. Restore from a file or a saved attachment.\n\nCamera, microphone, speech, calendar and notification permissions are requested when you choose those features. Dictation may require Apple services and an internet connection. Alert presentation follows iPhone settings.\n\nDesigned for personal planning and record keeping. Russian and English interfaces."
+    }
+  },
+  "reviewNotes": "No sign-in or review account is required. The app is a local productivity and personal expense record keeper; it provides no banking, investment, trading or payment services. Notes → Create adds a note. Projects → Create adds a project; project details contain stages, finances, files and journal. Settings contains Save to file and Restore from file. The save dialog offers Files or the system share sheet for an e-mail app. JSON/ZIP imports are validated, previewed and require explicit confirmation; PIN is required when enabled. Calendar, microphone, camera, speech and notification access are optional. There are no subscriptions or in-app purchases. Review the notification scheduling guidance in Reminders. Fresh installation has no PIN; reviewers can set their own in Settings.",
+  "pendingBeforeSubmission": [
+    "Verify the existing App Store Connect version and unused build number",
+    "Existing Apple Team ID and valid distribution signing assets",
+    "Physical iPhone and real e-mail attachment checks",
+    "Approve and host privacy policy and support page at public URLs",
+    "Review App Privacy including optional Apple Speech processing",
+    "Complete current age-rating and export-compliance questions",
+    "Approve store screenshots and final upload"
+  ]
+}

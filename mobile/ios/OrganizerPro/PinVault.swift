@@ -4,7 +4,7 @@ import CommonCrypto
 
 /// Device-only Keychain record. PIN controls app access; iOS Data Protection encrypts the database.
 final class PinVault {
-    enum Failure: Error { case unavailable, rejected, invalid }
+    enum Failure: Error { case unavailable, keychain(OSStatus), rejected, invalid }
     private struct State: Codable { var enabled: Bool; var salt: Data; var hash: Data; var attempts: Int; var until: Double }
     private let service: String
     private let account: String
@@ -15,6 +15,7 @@ final class PinVault {
         var q = query; q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?; let status = SecItemCopyMatching(q as CFDictionary, &result)
         if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess else { throw Failure.keychain(status) }
         guard status == errSecSuccess, let data = result as? Data, let state = try? JSONDecoder().decode(State.self, from: data),
               state.salt.count == 16, state.hash.count == 32, (0..<5).contains(state.attempts), state.until.isFinite, state.until >= 0 else { throw Failure.unavailable }
         return state
@@ -28,8 +29,9 @@ final class PinVault {
         let result = SecItemUpdate(query as CFDictionary, attrs as CFDictionary)
         if result == errSecItemNotFound {
             attrs.merge(query) { _, new in new }
-            guard SecItemAdd(attrs as CFDictionary, nil) == errSecSuccess else { throw Failure.unavailable }
-        } else if result != errSecSuccess { throw Failure.unavailable }
+            let added = SecItemAdd(attrs as CFDictionary, nil)
+            guard added == errSecSuccess else { throw Failure.keychain(added) }
+        } else if result != errSecSuccess { throw Failure.keychain(result) }
     }
     private func derive(_ pin: String, salt: Data) throws -> Data {
         var output = Data(count: 32)

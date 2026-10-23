@@ -20,7 +20,8 @@ struct BackupDocument: FileDocument {
     var data: Data
     init(data: Data = Data()) { self.data = data }
     init(configuration: ReadConfiguration) throws {
-        guard let data = configuration.file.regularFileContents else { throw OrganizerError.invalid("file") }; self.data = data
+        guard let data = configuration.file.regularFileContents else { throw OrganizerError.invalid("file") }
+        guard data.count <= BackupCodec.maxJSON else { throw OrganizerError.tooLarge }; self.data = data
     }
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
 }
@@ -197,10 +198,10 @@ struct BackupDocument: FileDocument {
         } catch { report(error) }
     }
     func temporary(data: Data, name: String) throws -> URL {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("organizer-private", isDirectory: true)
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("organizer-private/" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.complete])
         let safeName = URL(fileURLWithPath: name).lastPathComponent
-        let url = folder.appendingPathComponent(UUID().uuidString + "-" + (safeName.isEmpty ? "attachment" : safeName))
+        let url = folder.appendingPathComponent(safeName.isEmpty ? "attachment" : safeName)
         try data.write(to: url, options: [.atomic, .completeFileProtection]); return url
     }
     func clearTemporaryFiles() {

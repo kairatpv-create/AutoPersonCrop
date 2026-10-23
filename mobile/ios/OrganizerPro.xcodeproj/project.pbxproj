@@ -373,6 +373,7 @@
 				"ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME" = "AccentColor";
 				"SWIFT_EMIT_LOC_STRINGS" = "YES";
 				"LD_RUNPATH_SEARCH_PATHS" = "$(inherited) @executable_path/Frameworks";
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "OrganizerPro/Simulator.entitlements";
 				"SWIFT_OPTIMIZATION_LEVEL" = "-Onone";
 				"DEBUG_INFORMATION_FORMAT" = "dwarf";
 				"SWIFT_ACTIVE_COMPILATION_CONDITIONS" = "DEBUG $(inherited)";
@@ -400,6 +401,7 @@
 				"ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME" = "AccentColor";
 				"SWIFT_EMIT_LOC_STRINGS" = "YES";
 				"LD_RUNPATH_SEARCH_PATHS" = "$(inherited) @executable_path/Frameworks";
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "OrganizerPro/Simulator.entitlements";
 				"SWIFT_OPTIMIZATION_LEVEL" = "-O";
 				"DEBUG_INFORMATION_FORMAT" = "dwarf-with-dsym";
 			};

@@ -8,7 +8,7 @@ permissions:
   contents: read
 concurrency:
   group: organizer-ios-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   core:
     runs-on: macos-26
@@ -18,6 +18,7 @@ jobs:
       - name: Record actual Apple toolchain
         run: |
           mkdir -p ios-evidence
+          git rev-parse HEAD > ios-evidence/source-commit.txt
           xcodebuild -version | tee ios-evidence/xcode.txt
           xcodebuild -showsdks | tee ios-evidence/sdks.txt
           swift --version | tee ios-evidence/swift.txt
@@ -64,21 +65,22 @@ jobs:
           set -euo pipefail
           xcrun simctl boot "$IOS_SMALL_UDID"
           xcrun simctl bootstatus "$IOS_SMALL_UDID" -b
-          xcodebuild -project mobile/ios/OrganizerPro.xcodeproj -scheme OrganizerPro -configuration Debug -sdk iphonesimulator -destination "platform=iOS Simulator,id=$IOS_SMALL_UDID" -derivedDataPath "$RUNNER_TEMP/organizer-derived" build-for-testing CODE_SIGNING_ALLOWED=NO 2>&1 | tee ios-evidence/build.log
+          xcodebuild -project mobile/ios/OrganizerPro.xcodeproj -scheme OrganizerPro -configuration Debug -sdk iphonesimulator -destination "platform=iOS Simulator,id=$IOS_SMALL_UDID" -derivedDataPath "$RUNNER_TEMP/organizer-derived" build-for-testing CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- 2>&1 | tee ios-evidence/build.log
+          codesign -d --entitlements :- "$RUNNER_TEMP/organizer-derived/Build/Products/Debug-iphonesimulator/OrganizerPro.app" > ios-evidence/simulator-entitlements.plist 2>/dev/null
       - name: Keychain, import, data and small iPhone UI tests
         shell: bash
         run: |
           set -euo pipefail
-          xcodebuild -project mobile/ios/OrganizerPro.xcodeproj -scheme OrganizerPro -sdk iphonesimulator -destination "platform=iOS Simulator,id=$IOS_SMALL_UDID" -derivedDataPath "$RUNNER_TEMP/organizer-derived" -resultBundlePath ios-evidence/small-iphone.xcresult -parallel-testing-enabled NO test-without-building CODE_SIGNING_ALLOWED=NO 2>&1 | tee ios-evidence/small-tests.log
+          xcodebuild -project mobile/ios/OrganizerPro.xcodeproj -scheme OrganizerPro -sdk iphonesimulator -destination "platform=iOS Simulator,id=$IOS_SMALL_UDID" -derivedDataPath "$RUNNER_TEMP/organizer-derived" -resultBundlePath ios-evidence/small-iphone.xcresult -parallel-testing-enabled NO test-without-building CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- 2>&1 | tee ios-evidence/small-tests.log
       - name: Large iPhone RU and EN layout tests
-        if: always() && steps.build.outcome == 'success'
+        if: success() && steps.build.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
           xcrun simctl shutdown "$IOS_SMALL_UDID" || true
           xcrun simctl boot "$IOS_LARGE_UDID"
           xcrun simctl bootstatus "$IOS_LARGE_UDID" -b
-          xcodebuild -project mobile/ios/OrganizerPro.xcodeproj -scheme OrganizerPro -sdk iphonesimulator -destination "platform=iOS Simulator,id=$IOS_LARGE_UDID" -derivedDataPath "$RUNNER_TEMP/organizer-derived" -resultBundlePath ios-evidence/large-iphone.xcresult -parallel-testing-enabled NO -only-testing:OrganizerProUITests/LayoutTests test-without-building CODE_SIGNING_ALLOWED=NO 2>&1 | tee ios-evidence/large-tests.log
+          xcodebuild -project mobile/ios/OrganizerPro.xcodeproj -scheme OrganizerPro -sdk iphonesimulator -destination "platform=iOS Simulator,id=$IOS_LARGE_UDID" -derivedDataPath "$RUNNER_TEMP/organizer-derived" -resultBundlePath ios-evidence/large-iphone.xcresult -parallel-testing-enabled NO -only-testing:OrganizerProUITests/LayoutTests test-without-building CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- 2>&1 | tee ios-evidence/large-tests.log
       - name: Compile an unsigned Release archive for physical iPhone
         if: always() && steps.build.outcome == 'success'
         shell: bash
@@ -86,6 +88,7 @@ jobs:
           set -euo pipefail
           xcodebuild -project mobile/ios/OrganizerPro.xcodeproj -scheme OrganizerPro -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/organizer-release" -archivePath "$RUNNER_TEMP/Organizer-Pro-iOS-UNSIGNED.xcarchive" archive CODE_SIGNING_ALLOWED=NO 2>&1 | tee ios-evidence/archive.log
           plutil -convert json -o ios-evidence/release-app-info.json "$RUNNER_TEMP/Organizer-Pro-iOS-UNSIGNED.xcarchive/Products/Applications/OrganizerPro.app/Info.plist"
+          python3 tools/ios/validate_archive.py "$RUNNER_TEMP/Organizer-Pro-iOS-UNSIGNED.xcarchive" --output ios-evidence/release-verification.json
           xcrun lipo -info "$RUNNER_TEMP/Organizer-Pro-iOS-UNSIGNED.xcarchive/Products/Applications/OrganizerPro.app/OrganizerPro" | tee ios-evidence/architectures.txt
           if strings "$RUNNER_TEMP/Organizer-Pro-iOS-UNSIGNED.xcarchive/Products/Applications/OrganizerPro.app/OrganizerPro" | grep -E 'ORGANIZER_UI_FIXTURE|-ui-testing|-test-session'; then exit 1; fi
           ditto -c -k --keepParent "$RUNNER_TEMP/Organizer-Pro-iOS-UNSIGNED.xcarchive" ios-evidence/Organizer-Pro-iOS-UNSIGNED.xcarchive.zip

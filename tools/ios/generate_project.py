@@ -45,7 +45,7 @@ for name,kind in [('OrganizerPro','application'),('OrganizerProTests','bundle.un
     objects[product_group]['children'].append(product)
     settings={'PRODUCT_NAME':'$(TARGET_NAME)','PRODUCT_BUNDLE_IDENTIFIER':'com.organizerpro.mobile'+('' if kind=='application' else '.'+name.lower()),'TARGETED_DEVICE_FAMILY':'1','SUPPORTED_PLATFORMS':'iphoneos iphonesimulator','SUPPORTS_MACCATALYST':'NO','SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD':'NO','CODE_SIGN_STYLE':'Automatic','DEVELOPMENT_TEAM':'','MARKETING_VERSION':'1.0.0','CURRENT_PROJECT_VERSION':'1','GENERATE_INFOPLIST_FILE':'YES'}
     dependencies=[]
-    if kind=='application': settings.update({'GENERATE_INFOPLIST_FILE':'NO','INFOPLIST_FILE':name+'/Info.plist','ASSETCATALOG_COMPILER_APPICON_NAME':'AppIcon','ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME':'AccentColor','SWIFT_EMIT_LOC_STRINGS':'YES','LD_RUNPATH_SEARCH_PATHS':'$(inherited) @executable_path/Frameworks'})
+    if kind=='application': settings.update({'GENERATE_INFOPLIST_FILE':'NO','INFOPLIST_FILE':name+'/Info.plist','ASSETCATALOG_COMPILER_APPICON_NAME':'AppIcon','ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME':'AccentColor','SWIFT_EMIT_LOC_STRINGS':'YES','LD_RUNPATH_SEARCH_PATHS':'$(inherited) @executable_path/Frameworks','CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]':name+'/Simulator.entitlements'})
     else:
         proxy=obj(name+'proxy','PBXContainerItemProxy',containerPortal=ident('project'),proxyType=1,remoteGlobalIDString=app_target_id,remoteInfo='OrganizerPro')
         dependencies=[obj(name+'dependency','PBXTargetDependency',target=app_target_id,targetProxy=proxy)]
