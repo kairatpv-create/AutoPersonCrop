@@ -1,0 +1,40 @@
+name: Inspect Organizer iPhone test evidence
+on:
+  push:
+    branches: [organizer-ios-20261022]
+    paths: ['.github/workflows/organizer-ios-diagnostics.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: organizer-iphone-build-and-tests
+          run-id: 39889268421
+          github-token: ${{ github.token }}
+          path: previous-evidence
+      - name: Inspect only the synthetic failing restore test
+        run: |
+          python3 - <<'PY'
+          import pathlib,json,subprocess,base64
+          folder=pathlib.Path("previous-evidence/small-iphone-screenshots")
+          manifest=json.loads((folder/"manifest.json").read_text())
+          for test in manifest:
+              if "testValidEmptyBackupNeedsExplicitConfirmation" not in test["testIdentifier"]:continue
+              print("TEST",test["testIdentifier"])
+              for a in test.get("attachments",[]):
+                  p=folder/a["exportedFileName"]
+                  print("ATTACHMENT",json.dumps(a))
+                  data=p.read_bytes()
+                  if p.suffix.lower() in [".txt",".json"] and len(data)<250000:
+                      print("TEXT_ATTACHMENT_BEGIN",p.name);print(data.decode("utf-8",errors="replace"));print("TEXT_ATTACHMENT_END")
+                  elif p.suffix.lower() in [".png",".jpg",".jpeg",".heic"] and "launch-" not in a.get("suggestedHumanReadableName","") and "en-empty-backup-preview" not in a.get("suggestedHumanReadableName",""):
+                      out=pathlib.Path("/tmp")/("review-"+p.stem+".png")
+                      subprocess.run(["sips","-Z","750","-s","format","png",str(p),"--out",str(out)],check=True,stdout=subprocess.DEVNULL)
+                      print("ORGANIZER_QA_IMAGE "+json.dumps({"name":a.get("suggestedHumanReadableName",p.name),"data":base64.b64encode(out.read_bytes()).decode()}),flush=True)
+          PY
