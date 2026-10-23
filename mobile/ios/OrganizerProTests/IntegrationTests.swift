@@ -64,7 +64,8 @@ final class IntegrationTests: XCTestCase {
     }
     @MainActor func testPINIsUnaffectedByBackupRestore() throws {
         let m = model(); try m.configurePIN("2468", old: "")
-        XCTAssertTrue(m.restore(BackupPreview(snapshot: BackupCodec.decode(fixture()), name: "Synthetic")))
+        let snapshot = try BackupCodec.decode(fixture())
+        XCTAssertTrue(m.restore(BackupPreview(snapshot: snapshot, name: "Synthetic")))
         XCTAssertTrue(m.pinEnabled); m.lock(); XCTAssertTrue(m.unlock("2468"))
     }
     @MainActor func testStageProgressIsAtomicAndJournalDeleteDoesNotChangeIt() throws {

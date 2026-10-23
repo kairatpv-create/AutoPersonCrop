@@ -86,8 +86,9 @@ struct FilesSection: View {
         .onAppear { refreshRecovery() }.onDisappear { audio.stop(); audio.stopPlayback() }
     }
     @ViewBuilder var fileButtons: some View {
+        let photoTitle = model.t("Фото", "Photo")
         Button { fileOwner = ownerCreatedAt; picking = true } label: { Label(model.t("Файл", "File"), systemImage: "paperclip") }.buttonStyle(.bordered)
-        PhotosPicker(selection: $photo, matching: .images, preferredItemEncoding: .current) { Label(model.t("Фото", "Photo"), systemImage: "photo") }.buttonStyle(.bordered)
+        PhotosPicker(selection: $photo, matching: .images, preferredItemEncoding: .current) { Label(photoTitle, systemImage: "photo") }.buttonStyle(.bordered)
         if UIImagePickerController.isSourceTypeAvailable(.camera) {
             Button { cameraOwner = ownerCreatedAt; Task { if await AVCaptureDevice.requestAccess(for: .video) { camera = true } else { model.notice = AppNotice(message: model.t("Разрешите доступ к камере в Настройках iPhone.", "Allow camera access in iPhone Settings.")) } } } label: { Label(model.t("Камера", "Camera"), systemImage: "camera") }.buttonStyle(.bordered)
         }
