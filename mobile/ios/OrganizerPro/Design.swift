@@ -3,6 +3,7 @@ import OrganizerCore
 
 enum Brand {
     static let blue = Color(hex: 0x0A84D8)
+    static func accent(_ dark: Bool) -> Color { dark ? Color(hex: 0x5AC8FA) : blue }
     static let yellow = Color(hex: 0xFFD43B)
     static let ink = Color(hex: 0x082D42)
     static func background(_ dark: Bool) -> Color { Color(hex: dark ? 0x06151D : 0xF4FBFF) }
@@ -24,7 +25,7 @@ struct UserText: View {
     var strong = false
     var lines: Int? = nil
     init(_ text: String, strong: Bool = false, lines: Int? = nil) { self.text = text; self.strong = strong; self.lines = lines }
-    var body: some View { Text(text).font(.system(size: point * model.contentScale, weight: strong ? .semibold : model.bold ? .semibold : .regular)).lineLimit(lines).fixedSize(horizontal: false, vertical: true) }
+    var body: some View { Text(text).font(.system(size: point * model.contentScale, weight: strong ? (model.bold ? .bold : .semibold) : model.bold ? .semibold : .regular)).lineLimit(lines).fixedSize(horizontal: false, vertical: true) }
 }
 struct Card<Content: View>: View {
     @EnvironmentObject private var model: AppModel
@@ -33,8 +34,9 @@ struct Card<Content: View>: View {
     var body: some View { VStack(alignment: .leading, spacing: 10) { content }.frame(maxWidth: .infinity, alignment: .leading).padding(14).background(Brand.card(model.dark, color: color), in: RoundedRectangle(cornerRadius: 16)) }
 }
 struct Pill: ButtonStyle {
+    var bold = false
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.fontWeight(.semibold).foregroundStyle(Brand.ink).padding(.horizontal, 14).padding(.vertical, 12).frame(minHeight: 44).background(Brand.yellow, in: RoundedRectangle(cornerRadius: 22)).opacity(configuration.isPressed ? 0.7 : 1)
+        configuration.label.fontWeight(bold ? .bold : .semibold).foregroundStyle(Brand.ink).padding(.horizontal, 14).padding(.vertical, 12).frame(minHeight: 44).background(Brand.yellow, in: RoundedRectangle(cornerRadius: 22)).opacity(configuration.isPressed ? 0.7 : 1)
     }
 }
 struct ColorPickerRow: View {

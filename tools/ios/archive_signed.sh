@@ -18,7 +18,7 @@ python3 - <<'PY'
 import os,plistlib
 options={'method':'app-store-connect','destination':'export','signingStyle':'manual','teamID':os.environ['IOS_TEAM_ID'],
  'provisioningProfiles':{'com.organizerpro.mobile':os.environ['IOS_PROFILE_NAME']},
- 'manageAppVersionAndBuildNumber':False,'uploadSymbols':True,'stripSwiftSymbols':True}
+ 'manageAppVersionAndBuildNumber':False,'stripSwiftSymbols':True}
 with open(os.environ['IOS_EXPORT_OPTIONS'],'wb') as file:plistlib.dump(options,file)
 PY
 xcodebuild -project mobile/ios/OrganizerPro.xcodeproj -scheme OrganizerPro -configuration Release \

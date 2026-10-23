@@ -17,6 +17,10 @@ class OrganizerUITestCase: XCTestCase {
         screenshot("launch-\(language)-\(dark ? "dark" : "light")-\(large ? "large" : "normal")")
     }
     func tap(_ id: String) { let element = app.buttons[id]; XCTAssertTrue(element.waitForExistence(timeout: 10), id); XCTAssertTrue(element.isHittable, "Covered or offscreen: " + id); element.tap() }
+    func reveal(_ element: XCUIElement) {
+        for _ in 0..<6 { if element.exists && element.isHittable { return }; app.swipeUp() }
+        XCTAssertTrue(element.exists && element.isHittable, "Could not reveal " + element.identifier)
+    }
     func textInput(_ id: String) -> XCUIElement {
         let element = app.descendants(matching: .any).matching(identifier: id).firstMatch
         XCTAssertTrue(element.waitForExistence(timeout: 5), id)
@@ -75,10 +79,11 @@ final class OrganizerUITests: OrganizerUITestCase {
         for key in ["notes","tasks","projects","projectStages","projectJournal","projectNoteLinks","money","reminders","attachments"] { backup[key] = [] as [Any] }
         let data = try JSONSerialization.data(withJSONObject: backup)
         try launch(importData: data)
-        XCTAssertTrue(app.buttons["confirmRestore"].waitForExistence(timeout: 10)); screenshot("en-empty-backup-preview")
+        XCTAssertTrue(app.navigationBars["Restore"].waitForExistence(timeout: 10)); reveal(app.buttons["confirmRestore"]); screenshot("en-empty-backup-preview")
         app.buttons["Cancel"].tap(); tap("tab-money"); XCTAssertTrue(app.staticTexts["Synthetic expense"].waitForExistence(timeout: 5))
         app.terminate(); try launch(seed: false, importData: data)
-        tap("confirmRestore"); let restore = app.buttons["Restore"].firstMatch; XCTAssertTrue(restore.waitForExistence(timeout: 5)); restore.tap()
+        XCTAssertTrue(app.navigationBars["Restore"].waitForExistence(timeout: 10)); reveal(app.buttons["confirmRestore"])
+        tap("confirmRestore"); tap("dialogRestore")
         XCTAssertTrue(app.staticTexts["No notes yet"].waitForExistence(timeout: 8)); tap("tab-money"); XCTAssertTrue(app.staticTexts["No entries yet"].waitForExistence(timeout: 5))
     }
 }

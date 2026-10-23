@@ -6,14 +6,14 @@ struct ProjectsView: View {
     @State private var search = ""
     var body: some View {
         Page {
-            TextField(model.t("Поиск проектов", "Search projects"), text: $search).textFieldStyle(.roundedBorder)
+            TextField(model.t("Поиск проектов", "Search projects"), text: $search, prompt: Text(model.t("Поиск проектов", "Search projects")).foregroundColor(model.dark ? Color(white: 0.75) : .secondary)).textFieldStyle(.roundedBorder)
             if model.records("projects").isEmpty { EmptyCard(title: model.t("Проектов пока нет", "No projects yet"), symbol: "folder") }
             ForEach(model.records("projects").filter { search.isEmpty || ($0.text("name") + " " + $0.text("description") + " " + $0.text("client")).localizedCaseInsensitiveContains(search) }.sorted { $0.int("updatedAt") > $1.int("updatedAt") }) { project in
                 NavigationLink(value: Route.project(project.id)) {
                     Card(color: project.text("colorKey", "blue")) {
                         UserText(project.text("name"), strong: true); UserText(project.text("description"), lines: 2)
                         HStack { Text(statusTitle(project.text("status"), model)); Spacer(); Text("\(project.int("progress"))%") }
-                        ProgressView(value: min(100, max(0, Double(project.int("progress")))), total: 100).tint(Brand.blue)
+                        ProgressView(value: min(100, max(0, Double(project.int("progress")))), total: 100).tint(Brand.accent(model.dark))
                         if project.int("dueAt") > 0 { Label(model.date(project.int("dueAt")), systemImage: "calendar") }
                     }
                 }.buttonStyle(.plain).accessibilityIdentifier("project-\(project.id)")
@@ -65,13 +65,13 @@ struct ProjectDetail: View {
             LabeledContent(model.t("Срок", "Due"), value: model.date(p.int("dueAt")))
             forField(model.t("Клиент", "Client"), p.text("client")); forField(model.t("Адрес", "Address"), p.text("address")); forField(model.t("Контакт", "Contact"), p.text("contact"))
         }
-        Button { model.show(.reminder("project", id, nil)) } label: { Label(model.t("Напомнить о проекте", "Project reminder"), systemImage: "bell") }.buttonStyle(Pill())
+        Button { model.show(.reminder("project", id, nil)) } label: { Label(model.t("Напомнить о проекте", "Project reminder"), systemImage: "bell") }.buttonStyle(Pill(bold: model.bold))
         Button(model.t("Удалить проект", "Delete project"), role: .destructive) { deleting = true }.padding(.top)
     }
     @ViewBuilder func forField(_ name: String, _ value: String) -> some View { if !value.isEmpty { VStack(alignment: .leading) { Text(name).foregroundStyle(.secondary); UserText(value).textSelection(.enabled) } } }
     var stages: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Button(model.t("Добавить этап", "Add stage")) { model.show(.stage(id)) }.buttonStyle(Pill())
+            Button(model.t("Добавить этап", "Add stage")) { model.show(.stage(id)) }.buttonStyle(Pill(bold: model.bold))
             ForEach(model.records("projectStages").filter { $0.int("projectId") == id }) { stage in
                 Card {
                     HStack(alignment: .top) {
@@ -85,7 +85,7 @@ struct ProjectDetail: View {
     }
     var journal: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Button(model.t("Добавить запись", "Add journal entry")) { model.show(.journal(id)) }.buttonStyle(Pill())
+            Button(model.t("Добавить запись", "Add journal entry")) { model.show(.journal(id)) }.buttonStyle(Pill(bold: model.bold))
             ForEach(model.records("projectJournal").filter { $0.int("projectId") == id }.sorted { $0.int("createdAt") > $1.int("createdAt") }) { entry in
                 Card { UserText(entry.text("text")); HStack { Text(model.date(entry.int("createdAt"), time: true)).font(.caption); Spacer(); Button(role: .destructive) { deleteEntry = ("projectJournal", entry.id) } label: { Image(systemName: "trash").frame(minWidth: 44, minHeight: 44) }.accessibilityLabel(model.t("Удалить запись", "Delete entry")) } }
             }
@@ -105,7 +105,7 @@ struct ProjectEditor: View {
     @State private var budget = "0"
     @State private var due = false
     @State private var loaded = false
-    var key: String { "project:\(original?.id.description ?? "new")" }
+    var key: String { model.editorDraftKey("project", record: original) }
     func text(_ key: String) -> Binding<String> { Binding(get: { record.text(key) }, set: { record.set(key, $0) }) }
     func date(_ key: String) -> Binding<Date> { Binding(get: { Date(milliseconds: record.int(key, Snapshot.now)) }, set: { record.set(key, $0.milliseconds) }) }
     var body: some View {
@@ -152,18 +152,19 @@ struct ProjectEntryEditor: View {
     @State private var due = false
     @State private var date = Date()
     @State private var loaded = false
-    var key: String { "\(kind):\(projectID):new" }
+    @State private var ownerCreatedAt: Int64?
+    var key: String { "\(kind):\(projectID):\(ownerCreatedAt?.description ?? "unavailable"):new" }
     var body: some View {
         Form { TextField(model.t(kind == "projectStages" ? "Название этапа" : "Запись", kind == "projectStages" ? "Stage title" : "Entry"), text: $text, axis: .vertical).lineLimit(4...15)
             if kind == "projectStages" { Toggle(model.t("Указать срок", "Set a due date"), isOn: $due); if due { DatePicker(model.t("Срок", "Due"), selection: $date, displayedComponents: .date) } }
         }.navigationTitle(model.t(kind == "projectStages" ? "Новый этап" : "Журнал проекта", kind == "projectStages" ? "New stage" : "Project journal"))
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(model.t("Закрыть", "Close")) { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button(model.t("Сохранить", "Save")) {
-                guard model.snapshot.record("projects", id: projectID) != nil else { model.report(OrganizerError.storage("missing project")); return }
+                guard model.projectMatches(projectID, createdAt: ownerCreatedAt) else { model.report(OrganizerError.ownerChanged); return }
                 var r = OrganizerRecord(["projectId": .integer(projectID)])
                 if kind == "projectStages" { r.set("title", text); r.set("done", false); r.set("dueAt", due ? date.milliseconds : 0) } else { r.set("text", text) }
-                if model.save(kind, record: r) != nil { model.draft(key, record: nil); loaded = false; dismiss() }
+                if model.save(kind, record: r, expectedProjectCreatedAt: ownerCreatedAt) != nil { model.draft(key, record: nil); loaded = false; dismiss() }
             }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) } }
-            .onAppear { guard !loaded else { return }; if let draft = model.draft(key) { text = draft.text("text"); due = draft.flag("due"); date = Date(milliseconds: draft.int("date", Snapshot.now)) }; loaded = true }
+            .onAppear { guard !loaded else { return }; ownerCreatedAt = model.snapshot.record("projects", id: projectID)?.int("createdAt"); if let draft = model.draft(key) { text = draft.text("text"); due = draft.flag("due"); date = Date(milliseconds: draft.int("date", Snapshot.now)) }; loaded = true }
             .onChange(of: text) { _, _ in persist() }.onChange(of: due) { _, _ in persist() }.onChange(of: date) { _, _ in persist() }
     }
     func persist() { if loaded { model.draft(key, record: OrganizerRecord(["text": .string(text), "due": .bool(due), "date": .integer(date.milliseconds)])) } }

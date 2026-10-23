@@ -115,7 +115,7 @@ struct BackupDocument: FileDocument {
         let message: String
         if case OrganizerError.invalid = error { message = t("Копия повреждена, неполна или имеет неподдерживаемый формат. Существующие данные и вложения не изменены.", "The backup is damaged, incomplete or unsupported. Your existing data and attachments have not been changed.") }
         else if case OrganizerError.tooLarge = error { message = t("Файл слишком большой. Максимум: копия — 64 МБ, одно вложение — 25 МБ, все вложения — 48 МБ.", "The file is too large. Limits: backup 64 MB, one attachment 25 MB, all attachments 48 MB.") }
-        else if case OrganizerError.ownerChanged = error { message = t("Объект изменился, пока загружалось вложение. Выберите его повторно. Несохранённая аудиозапись осталась на устройстве.", "The item changed while the attachment was loading. Please select it again. An unsaved recording has been kept on this device.") }
+        else if case OrganizerError.ownerChanged = error { message = t("Объект изменился или был восстановлен из другой копии. Откройте его повторно. Черновик и несохранённая аудиозапись остались на устройстве.", "The item changed or was restored from another backup. Open it again. Your draft and any unsaved recording have been kept on this device.") }
         else { message = t("Не удалось завершить действие. Данные сохранены. Повторите попытку.", "The action could not be completed. Your data has been kept. Please try again.") }
         notice = AppNotice(message: message)
     }
@@ -124,9 +124,19 @@ struct BackupDocument: FileDocument {
         if saved { reschedule() }; return saved
     }
     func setting(_ key: String, value: JSONValue) { mutate { var s = $0.settings; s.fields[key] = value; $0.settings = s } }
-    @discardableResult func save(_ collection: String, record: OrganizerRecord) -> Int64? {
+    @discardableResult func save(_ collection: String, record: OrganizerRecord, expectedProjectCreatedAt: Int64? = nil) -> Int64? {
         var saved = record
         let success = mutate { state in
+            if ["notes", "tasks", "projects"].contains(collection), saved.fields["id"] != nil {
+                guard let current = state.record(collection, id: saved.id), current.int("createdAt") == saved.int("createdAt") else { throw OrganizerError.ownerChanged }
+            }
+            if collection == "money" {
+                guard ["income", "expense"].contains(saved.text("type")), saved.number("amount").isFinite, saved.number("amount") > 0 else { throw OrganizerError.storage("invalid money") }
+            }
+            if ["money", "projectStages", "projectJournal"].contains(collection), saved.fields["id"] == nil, saved.fields["projectId"] != nil {
+                guard let project = state.record("projects", id: saved.int("projectId")), let expectedProjectCreatedAt, project.int("createdAt") == expectedProjectCreatedAt else { throw OrganizerError.ownerChanged }
+                if collection == "money" { saved.set("projectName", project.text("name")) }
+            }
             if saved.fields["id"] == nil { saved.set("id", try state.nextID(collection)); saved.set("createdAt", Snapshot.now) }
             if ["notes", "tasks", "projects"].contains(collection) { saved.set("updatedAt", Snapshot.now) }
             state.upsert(collection, record: saved)
@@ -145,6 +155,14 @@ struct BackupDocument: FileDocument {
         }
     }
     func records(_ name: String) -> [OrganizerRecord] { snapshot.records(name) }
+    func editorDraftKey(_ kind: String, record: OrganizerRecord?) -> String {
+        guard let record else { return kind + ":new" }
+        return "\(kind):\(record.id):\(record.int("createdAt"))"
+    }
+    func projectMatches(_ id: Int64, createdAt: Int64?) -> Bool {
+        guard let createdAt, let current = snapshot.record("projects", id: id) else { return false }
+        return current.int("createdAt") == createdAt
+    }
     func draft(_ name: String) -> OrganizerRecord? { do { return try store?.draft(name: name) } catch { report(error); return nil } }
     func draft(_ name: String, record: OrganizerRecord?) { do { guard let store else { throw OrganizerError.storage("unavailable") }; try store.saveDraft(name: name, record: record) } catch { report(error) } }
     func amount(_ value: Decimal) -> String {

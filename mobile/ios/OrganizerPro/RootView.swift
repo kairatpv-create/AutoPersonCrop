@@ -5,6 +5,7 @@ enum Route: Hashable { case note(Int64), project(Int64), tasks, reminders, calen
 enum MainTab: String, CaseIterable { case notes, projects, money, settings }
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.dynamicTypeSize) private var dynamicType
     @State private var tab = MainTab.notes
     @State private var path: [Route] = []
     @ScaledMetric(relativeTo: .body) private var point = 15
@@ -52,7 +53,7 @@ struct RootView: View {
                         .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
                 }
             }
-        }.font(.system(size: point * model.buttonScale, weight: model.bold ? .semibold : .regular)).tint(Brand.blue)
+        }.font(.system(size: point * model.buttonScale, weight: model.bold ? .semibold : .regular)).tint(Brand.accent(model.dark))
             .sheet(item: $model.presentation, onDismiss: { model.nextPresentation() }) { SheetHost(presentation: $0).environmentObject(model).preferredColorScheme(model.dark ? .dark : .light).environment(\.locale, model.locale) }
             .fileImporter(isPresented: $model.importer, allowedContentTypes: [.json, .zip], allowsMultipleSelection: false) { result in
                 switch result { case .success(let urls): if let url = urls.first { model.importBackup(url) }; case .failure(let error): if (error as NSError).code != NSUserCancelledError { model.report(error) } }
@@ -79,25 +80,31 @@ struct RootView: View {
     }
     var header: some View {
         HStack(spacing: 8) {
-            NavigationLink(value: Route.calendar) { Image(systemName: "calendar").frame(minWidth: 22) }.buttonStyle(Pill()).accessibilityLabel(model.t("Календарь", "Calendar"))
-            NavigationLink(value: Route.reminders) { Text(model.t("Напоминания", "Reminders")).frame(maxWidth: .infinity).multilineTextAlignment(.center) }.buttonStyle(Pill())
+            NavigationLink(value: Route.calendar) { Image(systemName: "calendar").frame(minWidth: 22) }.buttonStyle(Pill(bold: model.bold)).accessibilityLabel(model.t("Календарь", "Calendar"))
+            NavigationLink(value: Route.reminders) { Text(model.t("Напоминания", "Reminders")).lineLimit(1).minimumScaleFactor(0.65).frame(maxWidth: .infinity) }.buttonStyle(Pill(bold: model.bold))
             Button { switch tab { case .notes: model.show(.note(nil)); case .projects: model.show(.project(nil)); case .money: model.show(.money("expense", nil)); case .settings: break } } label: {
-                Text(model.t("Создать", "Create")).frame(maxWidth: .infinity)
-            }.buttonStyle(Pill()).accessibilityIdentifier("createButton")
+                Text(model.t("Создать", "Create")).lineLimit(1).minimumScaleFactor(0.65).frame(maxWidth: .infinity)
+            }.buttonStyle(Pill(bold: model.bold)).accessibilityIdentifier("createButton")
         }.padding(10).background(Brand.header(model.dark))
     }
     func title(_ tab: MainTab) -> String {
         switch tab { case .notes: return model.t("Заметки", "Notes"); case .projects: return model.t("Проекты", "Projects"); case .money: return model.t("Финансы", "Finances"); case .settings: return model.t("Настройки", "Settings") }
     }
+    func symbol(_ tab: MainTab) -> String {
+        switch tab { case .notes: return "note.text"; case .projects: return "folder"; case .money: return "chart.bar"; case .settings: return "gearshape" }
+    }
     var bottomBar: some View {
         HStack(spacing: 5) {
             ForEach(tabs, id: \.self) { item in
                 Button { tab = item; path = [] } label: {
-                    Text(title(item)).fontWeight(.semibold).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, minHeight: 44).padding(.vertical, 5).padding(.horizontal, 3)
+                    Group {
+                        if dynamicType.isAccessibilitySize { Image(systemName: symbol(item)).font(.title2) }
+                        else { Text(title(item)).fontWeight(model.bold ? .bold : .semibold).lineLimit(1).minimumScaleFactor(0.55) }
+                    }.frame(maxWidth: .infinity, minHeight: 44).padding(.vertical, 5).padding(.horizontal, 3)
                         .foregroundStyle(tab == item ? Brand.ink : model.dark ? .white : Brand.blue)
                         .background(tab == item ? Brand.yellow : Brand.header(model.dark), in: RoundedRectangle(cornerRadius: 17))
-                        .overlay(RoundedRectangle(cornerRadius: 17).stroke(Brand.blue.opacity(0.45), lineWidth: tab == item ? 0 : 1))
-                }.accessibilityIdentifier("tab-\(item.rawValue)").accessibilityAddTraits(tab == item ? [.isSelected] : [])
+                        .overlay(RoundedRectangle(cornerRadius: 17).stroke(Brand.accent(model.dark).opacity(0.45), lineWidth: tab == item ? 0 : 1))
+                }.accessibilityLabel(title(item)).accessibilityIdentifier("tab-\(item.rawValue)").accessibilityAddTraits(tab == item ? [.isSelected] : [])
             }
         }.padding(.horizontal, 6).padding(.vertical, 7).background(Brand.header(model.dark))
     }

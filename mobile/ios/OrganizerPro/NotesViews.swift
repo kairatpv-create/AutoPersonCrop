@@ -7,7 +7,7 @@ struct NotesView: View {
     var notes: [OrganizerRecord] { model.records("notes").filter { search.isEmpty || ($0.text("title") + " " + $0.text("body")).localizedCaseInsensitiveContains(search) }.sorted { $0.int("updatedAt") > $1.int("updatedAt") } }
     var body: some View {
         Page {
-            TextField(model.t("Поиск по заметкам", "Search notes"), text: $search).textFieldStyle(.roundedBorder).accessibilityIdentifier("noteSearch")
+            TextField(model.t("Поиск по заметкам", "Search notes"), text: $search, prompt: Text(model.t("Поиск по заметкам", "Search notes")).foregroundColor(model.dark ? Color(white: 0.75) : .secondary)).textFieldStyle(.roundedBorder).accessibilityIdentifier("noteSearch")
             if notes.isEmpty { EmptyCard(title: model.t("Пока нет заметок", "No notes yet"), symbol: "note.text") }
             ForEach(notes) { note in
                 NavigationLink(value: Route.note(note.id)) {
@@ -33,7 +33,7 @@ struct NoteDetail: View {
                 Page {
                     Card(color: note.text("colorKey", "blue")) { UserText(note.text("title"), strong: true); UserText(note.text("body")).textSelection(.enabled); Text(model.date(note.int("updatedAt"), time: true)).font(.caption).foregroundStyle(.secondary) }
                     HStack {
-                        Button(model.t("Редактировать", "Edit")) { model.show(.note(note)) }.buttonStyle(Pill())
+                        Button(model.t("Редактировать", "Edit")) { model.show(.note(note)) }.buttonStyle(Pill(bold: model.bold))
                         Button { model.show(.reminder("note", id, nil)) } label: { Label(model.t("Напомнить", "Remind"), systemImage: "bell") }.buttonStyle(.bordered)
                     }
                     FilesSection(targetType: "note", targetID: id)
@@ -55,7 +55,7 @@ struct NoteEditor: View {
     @State private var loaded = false
     @State private var speechBase = ""
     @ScaledMetric(relativeTo: .body) private var point = 17
-    var key: String { "note:\(original?.id.description ?? "new")" }
+    var key: String { model.editorDraftKey("note", record: original) }
     var body: some View {
         Form {
             Section {
@@ -65,7 +65,7 @@ struct NoteEditor: View {
             }
             Section {
                 Button { if speech.listening { speech.stop() } else { speechBase = text; speech.start(language: model.lang, canStart: { !model.locked }) } } label: { Label(speech.listening ? model.t("Остановить диктовку", "Stop dictation") : model.t("Диктовать", "Dictate"), systemImage: speech.listening ? "stop.circle" : "mic") }
-                Text(model.t("Распознавание речи использует службы Apple и может требовать интернет. Текст сохраняется только после вашего подтверждения.", "Speech recognition uses Apple services and may need an internet connection. Save the text when you are ready.")).font(.caption).foregroundStyle(.secondary)
+                Text(model.t("Распознавание речи использует службы Apple и может требовать интернет. Текст можно редактировать; черновик сохраняется на устройстве.", "Speech recognition uses Apple services and may need an internet connection. You can edit the text; a draft is saved on this device.")).font(.caption).foregroundStyle(.secondary)
                 if let error = speech.error { Text(model.t("Диктовка недоступна. Проверьте разрешения на микрофон и распознавание речи в Настройках iPhone.", "Dictation is unavailable. Check microphone and speech permissions in iPhone Settings.") + " " + error).font(.caption) }
             }
         }.navigationTitle(model.t(original == nil ? "Новая заметка" : "Редактировать", original == nil ? "New note" : "Edit note"))
@@ -93,7 +93,7 @@ struct TasksView: View {
     @State private var deleting: OrganizerRecord?
     var body: some View {
         Page {
-            Button(model.t("Новая задача", "New task")) { model.show(.task(nil)) }.buttonStyle(Pill())
+            Button(model.t("Новая задача", "New task")) { model.show(.task(nil)) }.buttonStyle(Pill(bold: model.bold))
             if model.records("tasks").isEmpty { EmptyCard(title: model.t("Задач пока нет", "No tasks yet"), symbol: "checklist") }
             ForEach(model.records("tasks").sorted { a, b in a.flag("done") == b.flag("done") ? a.int("updatedAt") > b.int("updatedAt") : !a.flag("done") }) { task in
                 Card {
@@ -116,7 +116,7 @@ struct TaskEditor: View {
     @State private var title = ""
     @State private var details = ""
     @State private var loaded = false
-    var key: String { "task:\(original?.id.description ?? "new")" }
+    var key: String { model.editorDraftKey("task", record: original) }
     var body: some View {
         Form { TextField(model.t("Заголовок", "Title"), text: $title, axis: .vertical); TextField(model.t("Описание", "Details"), text: $details, axis: .vertical).lineLimit(4...12) }
             .navigationTitle(model.t("Задача", "Task"))

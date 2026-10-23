@@ -39,6 +39,12 @@ jobs:
           set -e
           test "$CRASH_STATUS" = 77
           "$PROBE" verify "$RUNNER_TEMP/crash.sqlite" "$FIXTURE"
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Restore Swift JSON and ZIP with the real Android code
+        run: python3 tools/ios/verify_android_roundtrip.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -100,6 +106,7 @@ jobs:
             if [ -d "$result" ]; then
               xcrun xcresulttool export attachments --path "$result" --output-path "${result%.xcresult}-screenshots" || true
               python3 tools/ios/normalize_screenshots.py "${result%.xcresult}-screenshots" || true
+              python3 tools/ios/review_screenshots.py "${result%.xcresult}-screenshots" || true
               xcrun xcresulttool get test-results summary --path "$result" > "${result%.xcresult}-summary.json" || true
             fi
           done

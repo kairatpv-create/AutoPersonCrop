@@ -85,4 +85,49 @@ final class IntegrationTests: XCTestCase {
         let reopened = AppModel(files: first.files, vault: PinVault(service: service), automaticScheduling: false)
         XCTAssertTrue(reopened.pinEnabled); XCTAssertTrue(reopened.locked); XCTAssertTrue(reopened.unlock("2468"))
     }
+
+    @MainActor func testRestoreWithReusedIDsDoesNotApplyOldDraftOrStaleEditor() throws {
+        let m = model(), db = try XCTUnwrap(m.store)
+        XCTAssertTrue(m.restore(BackupPreview(snapshot: try BackupCodec.decode(fixture()), name: "Original")))
+        let collections = ["notes", "tasks", "projects"]
+        var originals: [String: OrganizerRecord] = [:]
+        var replacement = try db.fullSnapshot()
+        for collection in collections {
+            let original = try XCTUnwrap(m.records(collection).first); originals[collection] = original
+            let key = m.editorDraftKey(collection, record: original)
+            m.draft(key, record: OrganizerRecord(["text": .string("Unsaved original " + collection)]))
+            var restored = original; restored.set("createdAt", original.int("createdAt") + 60_000)
+            replacement.upsert(collection, record: restored)
+        }
+        XCTAssertTrue(m.restore(BackupPreview(snapshot: replacement, name: "Different owners, same IDs")))
+        let before = try db.fullSnapshot()
+        for collection in collections {
+            let original = try XCTUnwrap(originals[collection]), restored = try XCTUnwrap(m.records(collection).first)
+            let oldKey = m.editorDraftKey(collection, record: original), newKey = m.editorDraftKey(collection, record: restored)
+            XCTAssertNotEqual(oldKey, newKey); XCTAssertNil(m.draft(newKey))
+            XCTAssertEqual(m.draft(oldKey)?.text("text"), "Unsaved original " + collection)
+            XCTAssertNil(m.save(collection, record: original)); XCTAssertNotNil(m.notice)
+        }
+        XCTAssertEqual(try db.fullSnapshot(), before)
+        XCTAssertEqual(try db.attachment(m.records("attachments")[0].text("storedName")), Data([0,1,2,127,128,255,10,13]))
+    }
+    @MainActor func testFinancialDraftCannotLinkToAReusedProjectID() throws {
+        let m = model(), db = try XCTUnwrap(m.store)
+        XCTAssertTrue(m.restore(BackupPreview(snapshot: try BackupCodec.decode(fixture()), name: "Original")))
+        let original = try XCTUnwrap(m.records("projects").first)
+        let draftKey = "money:expense:all:new"
+        m.draft(draftKey, record: OrganizerRecord(["amount": .string("42.50"), "project": .integer(original.id), "projectCreatedAt": .integer(original.int("createdAt"))]))
+        var replacement = try db.fullSnapshot(), restored = original
+        restored.set("createdAt", original.int("createdAt") + 60_000); restored.set("name", "Restored replacement project")
+        replacement.upsert("projects", record: restored)
+        XCTAssertTrue(m.restore(BackupPreview(snapshot: replacement, name: "Replacement")))
+        let before = try db.fullSnapshot()
+        let entry = OrganizerRecord(["type": .string("expense"), "amount": .number(42.5), "category": .string("Synthetic"), "note": .string(""), "colorKey": .string("yellow"), "projectName": .string("Stale name"), "projectId": .integer(original.id)])
+        XCTAssertFalse(m.projectMatches(original.id, createdAt: original.int("createdAt")))
+        XCTAssertNil(m.save("money", record: entry, expectedProjectCreatedAt: original.int("createdAt")))
+        XCTAssertEqual(try db.fullSnapshot(), before); XCTAssertEqual(m.draft(draftKey)?.text("amount"), "42.50")
+        XCTAssertNotNil(m.save("money", record: entry, expectedProjectCreatedAt: restored.int("createdAt")))
+        XCTAssertEqual(m.records("money").count, before.records("money").count + 1)
+        XCTAssertEqual(m.records("money").last?.text("projectName"), restored.text("name"))
+    }
 }

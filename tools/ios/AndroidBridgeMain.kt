@@ -40,7 +40,7 @@ fun main(args:Array<String>) {
             println("Exported synthetic fixtures using Android BackupManager, SQLite and AttachmentStore")
         } else {
             val input=File(args[1]).inputStream().use { BackupImportReader.read(it,context.cacheDir,"en") }
-            BackupManager.restore(input,db,"en")
+            check(settings.applyRestoredPreferences(BackupManager.restore(input,db,"en"))) { "Preferences were not saved" }
             val restored=JSONObject(BackupManager.createBackup(db,settings))
             val expected=JSONObject(File(args[2]).readText())
             for(key in listOf("notes","tasks","projects","projectStages","projectJournal","projectNoteLinks","money","reminders","attachments")) {
@@ -49,7 +49,8 @@ fun main(args:Array<String>) {
                 fun normalized(array:org.json.JSONArray)= (0 until array.length()).map { i->array.getJSONObject(i) }.sortedBy { it.optLong("id",it.optLong("projectId")) }
                 normalized(a).zip(normalized(b)).forEach { (x,y)->check(x.similar(y)){"Record changed: $key\n$x\n$y"} }
             }
-            println("PASS: iOS → Android restore preserves every record, amount, link and attachment byte")
+            check(expected.getJSONObject("settings").similar(restored.getJSONObject("settings"))) { "Preferences changed" }
+            println("PASS: iOS → Android restore preserves records, amounts, links, preferences and attachment bytes")
         }
         db.close()
     } finally { sandbox.deleteRecursively() }
