@@ -27,6 +27,7 @@ public final class OrganizerStore {
                 if try scalarInt("SELECT count(*) FROM organizer_state") == 0 {
                     guard !existed else { throw OrganizerError.storage("missing state; database retained") }
                     try saveMetadata(Snapshot.empty(language: language))
+                    try saveDraft(name: "installation", record: OrganizerRecord(["scope": .string(UUID().uuidString)]))
                 }
                 try exec("PRAGMA user_version=1")
             }
@@ -122,7 +123,7 @@ public final class OrganizerStore {
         lock.lock(); defer { lock.unlock() }
         try transaction {
             var state = try load()
-            guard let owner = state.record(targetType == "note" ? "notes" : "projects", id: targetID), expectedOwnerCreatedAt == nil || owner.int("createdAt") == expectedOwnerCreatedAt else { throw OrganizerError.invalid("attachment owner") }
+            guard let owner = state.record(targetType == "note" ? "notes" : "projects", id: targetID), expectedOwnerCreatedAt == nil || owner.int("createdAt") == expectedOwnerCreatedAt else { throw OrganizerError.ownerChanged }
             let name = UUID().uuidString.lowercased()
             let row = OrganizerRecord(["id": .integer(try state.nextID("attachments")), "targetType": .string(targetType), "targetId": .integer(targetID), "displayName": .string(displayName), "storedName": .string(name), "mimeType": .string(mimeType), "size": .integer(Int64(data.count)), "createdAt": .integer(Snapshot.now), "durationMs": .integer(duration)])
             state.upsert("attachments", record: row)
@@ -172,6 +173,11 @@ public final class OrganizerStore {
         let s = try statement("SELECT document FROM organizer_safety WHERE id=?"); defer { sqlite3_finalize(s) }
         sqlite3_bind_int64(s, 1, id); guard sqlite3_step(s) == SQLITE_ROW else { throw OrganizerError.storage("missing safety copy") }
         return try BackupCodec.decode(blob(s, 0))
+    }
+    public func deleteSafetyCopy(id: Int64) throws {
+        lock.lock(); defer { lock.unlock() }
+        let s = try statement("DELETE FROM organizer_safety WHERE id=?"); defer { sqlite3_finalize(s) }
+        sqlite3_bind_int64(s, 1, id); try done(s)
     }
     public func saveDraft(name: String, record: OrganizerRecord?) throws {
         lock.lock(); defer { lock.unlock() }

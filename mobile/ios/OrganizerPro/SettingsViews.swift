@@ -60,7 +60,9 @@ struct PINSettingsView: View {
         }.navigationTitle(model.t("PIN-код", "PIN code"))
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(model.t("Закрыть", "Close")) { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button(model.t("Сохранить", "Save")) { change(pin) }.disabled(!valid).accessibilityIdentifier("savePIN") } }
             .confirmationDialog(model.t("Отключить защиту PIN-кодом?", "Disable PIN protection?"), isPresented: $disabling, titleVisibility: .visible) { Button(model.t("Отключить", "Disable"), role: .destructive) { change(nil) } }
+            .onChange(of: old) { _, value in old = digits(value) }.onChange(of: pin) { _, value in pin = digits(value) }.onChange(of: repeatPIN) { _, value in repeatPIN = digits(value) }
     }
+    func digits(_ value: String) -> String { String(value.filter { $0.isASCII && $0.isNumber }.prefix(12)) }
     func change(_ pin: String?) {
         do { try model.configurePIN(pin, old: old); old = ""; self.pin = ""; repeatPIN = ""; dismiss() }
         catch { message = model.t("Не удалось изменить PIN-код. Проверьте текущий PIN и повторите попытку. После пяти ошибок действует пауза 30 секунд.", "Could not change the PIN. Check your current PIN and try again. Five failed attempts trigger a 30-second pause.") }
@@ -102,13 +104,19 @@ struct BackupConfirmation: View {
 struct SafetyView: View {
     @EnvironmentObject private var model: AppModel
     @State private var copies: [SafetyCopy] = []
+    @State private var deleting: SafetyCopy?
     var body: some View {
         List {
             Section { Text(model.t("Эти копии сохраняются автоматически перед восстановлением. Просмотрите содержимое перед заменой текущих данных.", "These copies are saved automatically before a restore. Review the contents before replacing your current data.")) }
-            ForEach(copies) { copy in Button(model.date(copy.createdAt, time: true)) { do { if let snapshot = try model.store?.safetyCopy(id: copy.id) { model.show(.backup(BackupPreview(snapshot: snapshot, name: model.t("Данные до восстановления", "Pre-restore data")))) } } catch { model.report(error) } } }
+            ForEach(copies) { copy in
+                Button(model.date(copy.createdAt, time: true)) { do { if let snapshot = try model.store?.safetyCopy(id: copy.id) { model.show(.backup(BackupPreview(snapshot: snapshot, name: model.t("Данные до восстановления", "Pre-restore data")))) } } catch { model.report(error) } }
+                    .swipeActions(allowsFullSwipe: false) { Button(model.t("Удалить копию", "Delete copy")) { deleting = copy }.tint(.red) }
+            }
             if copies.isEmpty { Text(model.t("Восстановлений ещё не было", "No previous restores")) }
-        }.navigationTitle(model.t("Данные до восстановления", "Pre-restore data")).onAppear { do { copies = try model.store?.safetyCopies() ?? [] } catch { model.report(error) } }
+        }.navigationTitle(model.t("Данные до восстановления", "Pre-restore data")).onAppear { reload() }
+            .confirmationDialog(model.t("Удалить только эту страховочную копию? Текущие записи сохранятся.", "Delete only this safety copy? Your current records will be kept."), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) { Button(model.t("Удалить копию", "Delete copy"), role: .destructive) { if let deleting, model.perform({ try model.store?.deleteSafetyCopy(id: deleting.id) }) { reload() }; deleting = nil } }
     }
+    func reload() { do { copies = try model.store?.safetyCopies() ?? [] } catch { model.report(error) } }
 }
 struct PrivacyView: View {
     @EnvironmentObject private var model: AppModel
@@ -116,6 +124,7 @@ struct PrivacyView: View {
         List {
             Section(model.t("Ваши записи", "Your records")) { Text(model.t("Заметки, финансы, проекты и вложения хранятся в защищённом контейнере приложения на iPhone. Аккаунт не требуется. Приложение не отправляет записи на сервер разработчика.", "Notes, finances, projects and attachments stay in the protected app container on your iPhone. No account is needed. The app does not send your records to the developer's server.")) }
             Section(model.t("Резервные копии и e-mail", "Backups and e-mail")) { Text(model.t("Вы выбираете место сохранения и почтовое приложение. Отправку письма подтверждаете самостоятельно. Приложение не читает почтовый ящик и не запрашивает пароль от e-mail. Файл копии не зашифрован PIN-кодом.", "You choose where to save and which e-mail app to use. You confirm sending the message yourself. Organizer Pro does not read your mailbox or ask for your e-mail password. The backup file is not encrypted by your PIN.")) }
+            Section(model.t("Хранение копий", "Retained copies")) { Text(model.t("Перед восстановлением сохраняется страховочная копия прежних данных. Удаление записи не удаляет её из старой копии. Копии до восстановления доступны и удаляются по вашему выбору через меню восстановления; файлы в почте и Файлах вы контролируете самостоятельно.", "A safety copy of the previous data is saved before a restore. Deleting a record does not remove it from an older backup. You can review or delete pre-restore copies from the restore menu. Files in Mail and Files remain under your control.")) }
             Section(model.t("Разрешения", "Permissions")) { Text(model.t("Камера и микрофон используются для выбранных вами вложений. Доступ к календарям нужен только для показа событий и дней рождения. Выбор фотографий работает через системное окно без доступа ко всей медиатеке. Распознавание речи использует службы Apple и может обрабатывать звук через интернет, если распознавание на устройстве недоступно.", "Camera and microphone access is used for attachments you choose. Calendar access displays events and birthdays. Photo selection uses the system picker without access to your entire library. Speech recognition uses Apple services and may process audio online when on-device recognition is unavailable.")) }
             Section(model.t("Защита", "Protection")) { Text(model.t("PIN-код защищает вход в приложение. База данных защищается средствами iOS. PIN-код не восстанавливается из файла. Удаление приложения удаляет его локальные данные: заранее сохраните полную копию.", "The PIN protects app access. iOS Data Protection protects the database. A file backup does not restore the PIN. Removing the app removes its local data, so save a full backup first.")) }
             Section { Text("Kairat Kaliyev · Organizer Pro"); Link("kairat.pv@gmail.com", destination: URL(string: "mailto:kairat.pv@gmail.com")!) }

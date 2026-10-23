@@ -439,6 +439,12 @@
 			"path" = "OrganizerProTests/IntegrationTests.swift";
 			"sourceTree" = "<group>";
 		};
+		"B13C76AF664F8D815A2E933D" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "OrganizerProTests/NotificationTests.swift";
+			"sourceTree" = "<group>";
+		};
 		"E7B96D95BFF52E58B385ACFA" = {
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "folder";
@@ -450,6 +456,7 @@
 			"name" = "OrganizerProTests";
 			"children" = (
 				"37529D40FF248A9A9F6E0EBC",
+				"B13C76AF664F8D815A2E933D",
 				"E7B96D95BFF52E58B385ACFA",
 			);
 			"sourceTree" = "<group>";
@@ -458,11 +465,16 @@
 			"isa" = "PBXBuildFile";
 			"fileRef" = "37529D40FF248A9A9F6E0EBC";
 		};
+		"CA78A94839760A2FB3E96A4F" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "B13C76AF664F8D815A2E933D";
+		};
 		"DA50084B7AD9D234311D03ED" = {
 			"isa" = "PBXSourcesBuildPhase";
 			"buildActionMask" = 2147483647;
 			"files" = (
 				"E8CCF0B50134484504C66825",
+				"CA78A94839760A2FB3E96A4F",
 			);
 			"runOnlyForDeploymentPostprocessing" = 0;
 		};

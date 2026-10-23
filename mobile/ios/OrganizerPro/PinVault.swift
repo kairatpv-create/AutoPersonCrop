@@ -7,8 +7,9 @@ final class PinVault {
     enum Failure: Error { case unavailable, rejected, invalid }
     private struct State: Codable { var enabled: Bool; var salt: Data; var hash: Data; var attempts: Int; var until: Double }
     private let service: String
-    init(service: String = "com.organizerpro.mobile.pin.v1") { self.service = service }
-    private let account = "device-pin"
+    private let account: String
+    init(service: String = "com.organizerpro.mobile.pin.v1", account: String = "device-pin") { self.service = service; self.account = account }
+    func scoped(installation: String) -> PinVault { PinVault(service: service, account: "device-pin." + installation) }
     private var query: [String: Any] { [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account, kSecAttrSynchronizable as String: false] }
     private func read() throws -> State? {
         var q = query; q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne

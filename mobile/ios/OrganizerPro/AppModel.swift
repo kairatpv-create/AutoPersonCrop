@@ -42,7 +42,7 @@ struct BackupDocument: FileDocument {
     @Published var importRevision = UUID()
     private var queuedBackup: BackupPreview?
     private(set) var store: OrganizerStore?
-    let vault: PinVault
+    private(set) var vault: PinVault
     let reminders = ReminderService.shared
     let files: URL
     private let automaticScheduling: Bool
@@ -73,6 +73,7 @@ struct BackupDocument: FileDocument {
             try FileManager.default.createDirectory(at: files, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
             var excluded = files; var values = URLResourceValues(); values.isExcludedFromBackup = true; try excluded.setResourceValues(values)
             let db = try OrganizerStore(url: files.appendingPathComponent("organizer-ios.sqlite"), language: Locale.preferredLanguages.first?.hasPrefix("ru") == true ? "ru" : "en")
+            if let scope = try db.draft(name: "installation")?.text("scope"), UUID(uuidString: scope) != nil { vault = vault.scoped(installation: scope) }
             store = db; snapshot = try db.load(); try protectFiles()
             refreshPIN(); ready = true; fatal = nil
             #if DEBUG
@@ -113,6 +114,7 @@ struct BackupDocument: FileDocument {
         let message: String
         if case OrganizerError.invalid = error { message = t("Копия повреждена, неполна или имеет неподдерживаемый формат. Существующие данные и вложения не изменены.", "The backup is damaged, incomplete or unsupported. Your existing data and attachments have not been changed.") }
         else if case OrganizerError.tooLarge = error { message = t("Файл слишком большой. Максимум: копия — 64 МБ, одно вложение — 25 МБ, все вложения — 48 МБ.", "The file is too large. Limits: backup 64 MB, one attachment 25 MB, all attachments 48 MB.") }
+        else if case OrganizerError.ownerChanged = error { message = t("Объект изменился, пока загружалось вложение. Выберите его повторно. Несохранённая аудиозапись осталась на устройстве.", "The item changed while the attachment was loading. Please select it again. An unsaved recording has been kept on this device.") }
         else { message = t("Не удалось завершить действие. Данные сохранены. Повторите попытку.", "The action could not be completed. Your data has been kept. Please try again.") }
         notice = AppNotice(message: message)
     }
@@ -225,8 +227,8 @@ struct BackupDocument: FileDocument {
         let args = ProcessInfo.processInfo.arguments
         if let encoded = ProcessInfo.processInfo.environment["ORGANIZER_UI_FIXTURE"], let data = Data(base64Encoded: encoded), data.count < 128 * 1024 { _ = perform { try store?.restore(BackupCodec.decode(data)) } }
         if let i = args.firstIndex(of: "-test-language"), args.indices.contains(i + 1) { setting("language", value: .string(args[i + 1])) }
-        if args.contains("-test-dark") { setting("darkTheme", value: .bool(true)) }
-        if args.contains("-test-large") { setting("contentFontScale", value: .number(1.45)); setting("buttonFontScale", value: .number(1.45)); setting("boldText", value: .bool(true)) }
+        setting("darkTheme", value: .bool(args.contains("-test-dark")))
+        setting("contentFontScale", value: .number(args.contains("-test-large") ? 1.45 : 1)); setting("buttonFontScale", value: .number(args.contains("-test-large") ? 1.45 : 1)); setting("boldText", value: .bool(args.contains("-test-large")))
         if args.contains("-test-pin"), !pinEnabled { try? configurePIN("2468", old: ""); locked = true }
     }
     #endif

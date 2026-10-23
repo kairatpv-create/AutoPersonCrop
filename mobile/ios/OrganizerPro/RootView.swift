@@ -72,7 +72,9 @@ struct RootView: View {
             .onChange(of: model.snapshot.settings.flag("projectsEnabled", true)) { _, enabled in if !enabled && tab == .projects { tab = .notes; path = [] } }
             .onReceive(NotificationCenter.default.publisher(for: .organizerOpenReminder)) { message in
                 guard let type = message.userInfo?["targetType"] as? String, let id = message.userInfo?["targetId"] as? Int64 else { return }
-                path = type == "note" ? [.note(id)] : [.project(id)]
+                if type == "calendar" { path = [.calendar] }
+                else if type == "note" { path = [.note(id)] }
+                else if type == "project" { path = [.project(id)] }
             }
     }
     var header: some View {

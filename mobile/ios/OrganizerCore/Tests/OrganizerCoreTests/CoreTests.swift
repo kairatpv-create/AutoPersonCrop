@@ -138,4 +138,10 @@ final class CoreTests: XCTestCase {
         XCTAssertThrowsError(try db.addAttachment(data: Data([9]), displayName: "late.bin", mimeType: "application/octet-stream", targetType: "note", targetID: owner.id, expectedOwnerCreatedAt: owner.int("createdAt")))
         XCTAssertEqual(try db.fullSnapshot(), before)
     }
+    func testDeletingOneSafetyCopyNeverChangesLiveDataOrAnotherCopy() throws {
+        let db = try store(); try db.restore(sample()); try db.restore(.empty())
+        let copies = try db.safetyCopies(), live = try db.fullSnapshot()
+        XCTAssertEqual(copies.count, 2); try db.deleteSafetyCopy(id: copies[0].id)
+        XCTAssertEqual(try db.safetyCopies().map(\.id), [copies[1].id]); XCTAssertEqual(try db.fullSnapshot(), live)
+    }
 }

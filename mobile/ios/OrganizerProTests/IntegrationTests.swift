@@ -76,4 +76,13 @@ final class IntegrationTests: XCTestCase {
         XCTAssertEqual(m.records("projects").first?.int("progress"), 100)
         m.remove("projectStages", id: stage.id); XCTAssertEqual(m.records("projects").first?.int("progress"), 0)
     }
+    @MainActor func testFreshInstallDoesNotReuseAnOldDevicePIN() throws {
+        let service = "com.organizerpro.tests." + UUID().uuidString
+        let first = AppModel(files: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), vault: PinVault(service: service), automaticScheduling: false)
+        try first.configurePIN("2468", old: "")
+        let fresh = AppModel(files: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), vault: PinVault(service: service), automaticScheduling: false)
+        XCTAssertTrue(fresh.ready); XCTAssertFalse(fresh.pinEnabled); XCTAssertFalse(fresh.locked)
+        let reopened = AppModel(files: first.files, vault: PinVault(service: service), automaticScheduling: false)
+        XCTAssertTrue(reopened.pinEnabled); XCTAssertTrue(reopened.locked); XCTAssertTrue(reopened.unlock("2468"))
+    }
 }

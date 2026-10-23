@@ -103,7 +103,7 @@ public struct Snapshot: Equatable, Sendable {
 }
 
 public enum OrganizerError: Error, LocalizedError {
-    case invalid(String), tooLarge, storage(String), missingAttachment, interrupted
+    case invalid(String), tooLarge, storage(String), missingAttachment, interrupted, ownerChanged
     public var errorDescription: String? {
         switch self {
         case .invalid(let field): return "Копия повреждена, неполна или имеет неподдерживаемый формат. Данные не изменены. / The backup is damaged, incomplete or unsupported. Your data has not been changed. (\(field))"
@@ -111,6 +111,7 @@ public enum OrganizerError: Error, LocalizedError {
         case .storage: return "Не удалось сохранить данные. Повторите попытку. / Could not save your data. Please try again."
         case .missingAttachment: return "Вложение недоступно. Данные сохранены. / The attachment is unavailable. Your data has been kept."
         case .interrupted: return "Операция прервана. / The operation was interrupted."
+        case .ownerChanged: return "Объект изменился. Выберите вложение повторно. / The item has changed. Please select the attachment again."
         }
     }
 }
