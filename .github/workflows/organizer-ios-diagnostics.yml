@@ -31,6 +31,15 @@ jobs:
                   p=folder/a["exportedFileName"]
                   print("ATTACHMENT",json.dumps(a))
                   data=p.read_bytes()
+                  if "UI Snapshot" in a.get("suggestedHumanReadableName",""):
+                      print("SNAPSHOT_HEADER",data[:80].hex())
+                      print(subprocess.run(["strings",str(p)],capture_output=True,text=True).stdout[:16000])
+                  if p.suffix.lower()==".mp4":
+                      swift=pathlib.Path("/tmp/restore-frames.swift")
+                      swift.write_text('import Foundation\\nimport AVFoundation\\nimport AppKit\\nlet asset=AVURLAsset(url:URL(fileURLWithPath:CommandLine.arguments[1]))\\nlet gen=AVAssetImageGenerator(asset:asset)\\ngen.appliesPreferredTrackTransform=true\\ngen.requestedTimeToleranceBefore = .zero\\ngen.requestedTimeToleranceAfter = .zero\\nlet end=max(0,asset.duration.seconds-0.5)\\nfor (i,t) in [min(24,end),min(27,end),end].enumerated(){ let cg=try gen.copyCGImage(at:CMTime(seconds:t,preferredTimescale:600),actualTime:nil);let rep=NSBitmapImageRep(cgImage:cg);try rep.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:"/tmp/restore-frame-\\\\(i).png")) }\\n'.replace('\\\\n','\\n'))
+                      subprocess.run(["swift",str(swift),str(p)],check=True)
+                      for frame in sorted(pathlib.Path("/tmp").glob("restore-frame-*.png")):
+                          print("ORGANIZER_QA_IMAGE "+json.dumps({"name":frame.name,"data":base64.b64encode(frame.read_bytes()).decode()}),flush=True)
                   if p.suffix.lower() in [".txt",".json"] and len(data)<250000:
                       print("TEXT_ATTACHMENT_BEGIN",p.name);print(data.decode("utf-8",errors="replace"));print("TEXT_ATTACHMENT_END")
                   elif p.suffix.lower() in [".png",".jpg",".jpeg",".heic"] and "launch-" not in a.get("suggestedHumanReadableName","") and "en-empty-backup-preview" not in a.get("suggestedHumanReadableName",""):
