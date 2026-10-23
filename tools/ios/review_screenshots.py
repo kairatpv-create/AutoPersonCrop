@@ -8,7 +8,7 @@ index = folder / "index.json"
 if not index.exists():
     raise SystemExit(0)
 rows = json.loads(index.read_text())
-wanted = ["ru-light-normal-notes", "ru-dark-large-notes", "en-dark-large-settings", "ru-dark-large-money", "en-empty-backup-preview"]
+wanted = ["ru-light-normal-notes", "ru-dark-large-notes", "en-dark-large-settings", "ru-dark-large-money", "en-empty-backup-preview", "en-empty-backup-confirmation", "ru-empty-backup-restored"]
 for label in wanted:
     row = next((r for r in rows if r["name"].startswith(label + "_")), None)
     if row is None:

@@ -83,8 +83,15 @@ final class OrganizerUITests: OrganizerUITestCase {
         app.buttons["Cancel"].tap(); tap("tab-money"); XCTAssertTrue(app.staticTexts["Synthetic expense"].waitForExistence(timeout: 5))
         app.terminate(); try launch(seed: false, importData: data)
         XCTAssertTrue(app.navigationBars["Restore"].waitForExistence(timeout: 10)); reveal(app.buttons["confirmRestore"])
-        tap("confirmRestore"); tap("dialogRestore")
-        XCTAssertTrue(app.staticTexts["No notes yet"].waitForExistence(timeout: 8)); tap("tab-money"); XCTAssertTrue(app.staticTexts["No entries yet"].waitForExistence(timeout: 5))
+        tap("confirmRestore")
+        let restore = app.buttons["Restore"].firstMatch
+        XCTAssertTrue(restore.waitForExistence(timeout: 10)); screenshot("en-empty-backup-confirmation")
+        // The native iOS popover action resolves its own hit point; a SwiftUI identifier
+        // can refer to an inaccessible proxy on iOS 26.
+        restore.tap()
+        // This backup restores its Russian language setting as well as its empty collections.
+        XCTAssertTrue(app.staticTexts["Пока нет заметок"].waitForExistence(timeout: 8)); tap("tab-money"); XCTAssertTrue(app.staticTexts["Записей пока нет"].waitForExistence(timeout: 5))
+        screenshot("ru-empty-backup-restored")
     }
 }
 final class LayoutTests: OrganizerUITestCase {

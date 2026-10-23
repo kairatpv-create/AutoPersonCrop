@@ -98,7 +98,7 @@ struct BackupConfirmation: View {
             }
         }.navigationTitle(model.t("Восстановление", "Restore"))
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(model.t("Отмена", "Cancel")) { dismiss() } } }
-            .confirmationDialog(model.t("Заменить текущие данные этой копией?", "Replace your current data with this backup?"), isPresented: $confirm, titleVisibility: .visible) { Button(model.t("Восстановить", "Restore"), role: .destructive) { _ = model.restore(preview) }.accessibilityIdentifier("dialogRestore") }
+            .confirmationDialog(model.t("Заменить текущие данные этой копией?", "Replace your current data with this backup?"), isPresented: $confirm, titleVisibility: .visible) { Button(model.t("Восстановить", "Restore"), role: .destructive) { _ = model.restore(preview) } }
     }
 }
 struct SafetyView: View {
