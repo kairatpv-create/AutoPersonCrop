@@ -1,0 +1,226 @@
+import Foundation
+import SwiftUI
+import Combine
+import UniformTypeIdentifiers
+import OrganizerCore
+
+struct AppNotice: Identifiable { let id = UUID(); let message: String }
+struct BackupPreview { let snapshot: Snapshot; let name: String }
+struct Presentation: Identifiable {
+    let id = UUID()
+    enum Kind {
+        case note(Record?), project(Record?), money(String, Int64?), task(Record?)
+        case stage(Int64), journal(Int64), link(Int64)
+        case reminder(String, Int64, Record?), pin, backup(BackupPreview), share(URL), preview(URL)
+    }
+    let kind: Kind
+}
+struct BackupDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.zip, .json] }
+    var data: Data
+    init(data: Data = Data()) { self.data = data }
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents else { throw OrganizerError.invalid("file") }; self.data = data
+    }
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
+}
+
+@MainActor final class AppModel: ObservableObject {
+    @Published var snapshot = Snapshot.empty()
+    @Published var ready = false
+    @Published var fatal: String?
+    @Published var notice: AppNotice?
+    @Published var busy = false
+    @Published var locked = true
+    @Published var pinUnavailable = false
+    @Published var pinEnabled = false
+    @Published var presentation: Presentation?
+    @Published var importer = false
+    @Published var exporter = false
+    @Published var saveOptions = false
+    @Published var exportDocument = BackupDocument()
+    @Published var importRevision = UUID()
+    private var queuedBackup: BackupPreview?
+    private(set) var store: OrganizerStore?
+    let vault: PinVault
+    let reminders = ReminderService.shared
+    let files: URL
+    private let automaticScheduling: Bool
+    private let isUITest: Bool
+    var lang: String { snapshot.settings.text("language", "ru").hasPrefix("ru") ? "ru" : "en" }
+    var locale: Locale { Locale(identifier: lang == "ru" ? "ru_RU" : "en_US") }
+    var dark: Bool { snapshot.settings.flag("darkTheme") }
+    var contentScale: Double { min(1.45, max(0.85, snapshot.settings.number("contentFontScale", snapshot.settings.number("fontScale", 1)))) }
+    var buttonScale: Double { min(1.45, max(0.85, snapshot.settings.number("buttonFontScale", 1))) }
+    var bold: Bool { snapshot.settings.flag("boldText") }
+    var filename: String { "Organizer-Pro-\(ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-" )).zip" }
+    init(files: URL? = nil, vault: PinVault? = nil, automaticScheduling: Bool = true) {
+        var testSession: String?
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-ui-testing"), let i = args.firstIndex(of: "-test-session"), args.indices.contains(i + 1), UUID(uuidString: args[i + 1]) != nil { testSession = args[i + 1] }
+        #endif
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("OrganizerPro", isDirectory: true)
+        self.files = files ?? testSession.map { base.appendingPathComponent("UITests/" + $0, isDirectory: true) } ?? base
+        self.vault = vault ?? PinVault(service: testSession.map { "com.organizerpro.mobile.uitest." + $0 } ?? "com.organizerpro.mobile.pin.v1")
+        self.automaticScheduling = automaticScheduling && testSession == nil
+        self.isUITest = testSession != nil
+        open()
+    }
+    func t(_ ru: String, _ en: String) -> String { lang == "ru" ? ru : en }
+    func open() {
+        do {
+            try FileManager.default.createDirectory(at: files, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+            var excluded = files; var values = URLResourceValues(); values.isExcludedFromBackup = true; try excluded.setResourceValues(values)
+            let db = try OrganizerStore(url: files.appendingPathComponent("organizer-ios.sqlite"), language: Locale.preferredLanguages.first?.hasPrefix("ru") == true ? "ru" : "en")
+            store = db; snapshot = try db.load(); try protectFiles()
+            refreshPIN(); ready = true; fatal = nil
+            #if DEBUG
+            if isUITest { configureUITest() }
+            #endif
+            reschedule()
+        } catch { fatal = t("Не удалось открыть сохранённые данные. Они сохранены на устройстве. Закройте приложение и повторите попытку.", "Your saved data could not be opened. It remains on this device. Close the app and try again."); ready = false }
+    }
+    func protectFiles() throws {
+        for url in try FileManager.default.contentsOfDirectory(at: files, includingPropertiesForKeys: nil) {
+            try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: url.path)
+        }
+    }
+    func refreshPIN() {
+        do {
+            let enabled = try vault.isEnabled()
+            if !vault.exists, try store?.draft(name: "device-security")?.flag("installed") == true { throw PinVault.Failure.unavailable }
+            pinUnavailable = false; pinEnabled = enabled; locked = enabled
+        } catch { pinUnavailable = true; pinEnabled = true; locked = true }
+    }
+    func lock() { if pinEnabled || pinUnavailable { locked = true }; clearTemporaryFiles() }
+    func unlock(_ pin: String) -> Bool {
+        do { if try vault.verify(pin) { locked = false; return true } }
+        catch { pinUnavailable = true }
+        return false
+    }
+    func configurePIN(_ pin: String?, old: String) throws {
+        if try vault.isEnabled(), !(try vault.verify(old)) { throw PinVault.Failure.rejected }
+        if let pin { try vault.set(pin: pin) } else { try vault.disable() }
+        try store?.saveDraft(name: "device-security", record: Record(["installed": .bool(pin != nil)]))
+        pinEnabled = pin != nil; pinUnavailable = false; reschedule()
+    }
+    @discardableResult func perform(_ action: () throws -> Void) -> Bool {
+        do { try action(); if let store { snapshot = try store.load() }; return true }
+        catch { report(error); return false }
+    }
+    func report(_ error: Error) {
+        let message: String
+        if case OrganizerError.invalid = error { message = t("Копия повреждена, неполна или имеет неподдерживаемый формат. Существующие данные и вложения не изменены.", "The backup is damaged, incomplete or unsupported. Your existing data and attachments have not been changed.") }
+        else if case OrganizerError.tooLarge = error { message = t("Файл слишком большой. Максимум: копия — 64 МБ, одно вложение — 25 МБ, все вложения — 48 МБ.", "The file is too large. Limits: backup 64 MB, one attachment 25 MB, all attachments 48 MB.") }
+        else { message = t("Не удалось завершить действие. Данные сохранены. Повторите попытку.", "The action could not be completed. Your data has been kept. Please try again.") }
+        notice = AppNotice(message: message)
+    }
+    @discardableResult func mutate(_ change: (inout Snapshot) throws -> Void) -> Bool {
+        let saved = perform { guard let store else { throw OrganizerError.storage("unavailable") }; try store.mutate(change) }
+        if saved { reschedule() }; return saved
+    }
+    func setting(_ key: String, value: JSONValue) { mutate { var s = $0.settings; s.fields[key] = value; $0.settings = s } }
+    @discardableResult func save(_ collection: String, record: Record) -> Int64? {
+        var saved = record
+        let success = mutate { state in
+            if saved.fields["id"] == nil { saved.set("id", try state.nextID(collection)); saved.set("createdAt", Snapshot.now) }
+            if ["notes", "tasks", "projects"].contains(collection) { saved.set("updatedAt", Snapshot.now) }
+            state.upsert(collection, record: saved)
+            if collection == "projects" {
+                state.setRecords("money", state.records("money").map { row in var r = row; if r.int("projectId", -1) == saved.id { r.set("projectName", saved.text("name")) }; return r })
+            }
+        }
+        return success ? saved.id : nil
+    }
+    func remove(_ collection: String, id: Int64) { mutate { $0.remove(collection, id: id) } }
+    func records(_ name: String) -> [Record] { snapshot.records(name) }
+    func draft(_ name: String) -> Record? { do { return try store?.draft(name: name) } catch { report(error); return nil } }
+    func draft(_ name: String, record: Record?) { do { guard let store else { throw OrganizerError.storage("unavailable") }; try store.saveDraft(name: name, record: record) } catch { report(error) } }
+    func amount(_ value: Decimal) -> String {
+        let f = NumberFormatter(); f.locale = locale; f.numberStyle = .decimal; f.minimumFractionDigits = 2; f.maximumFractionDigits = 2
+        return f.string(from: value as NSDecimalNumber) ?? "—"
+    }
+    func amount(_ value: Double) -> String { amount(Decimal(string: String(value), locale: Locale(identifier: "en_US_POSIX")) ?? 0) }
+    func date(_ ms: Int64, time: Bool = false) -> String {
+        guard ms > 0 else { return "—" }
+        let f = DateFormatter(); f.locale = locale; f.dateStyle = .medium; f.timeStyle = time ? .short : .none
+        return f.string(from: Date(timeIntervalSince1970: Double(ms) / 1000))
+    }
+    func show(_ kind: Presentation.Kind) { presentation = Presentation(kind: kind) }
+    func nextPresentation() { if let queuedBackup { self.queuedBackup = nil; show(.backup(queuedBackup)) } }
+    func importBackup(_ url: URL) {
+        guard !busy else { return }; busy = true
+        Task {
+            do {
+                let snapshot = try await Task.detached(priority: .userInitiated) { try BackupCodec.decode(Self.readFile(url, limit: BackupCodec.maxJSON)) }.value
+                let preview = BackupPreview(snapshot: snapshot, name: url.lastPathComponent)
+                if presentation == nil { show(.backup(preview)) } else { queuedBackup = preview; presentation = nil }
+            } catch { report(error) }
+            busy = false
+        }
+    }
+    nonisolated static func readFile(_ url: URL, limit: Int) throws -> Data {
+        let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
+        var output: Data?, failure: Error?
+        NSFileCoordinator().coordinate(readingItemAt: url, options: .withoutChanges, error: nil) { readable in
+            do {
+                let handle = try FileHandle(forReadingFrom: readable); defer { try? handle.close() }
+                var data = Data()
+                while let part = try handle.read(upToCount: min(256 * 1024, limit + 1 - data.count)), !part.isEmpty {
+                    data.append(part); if data.count > limit { throw OrganizerError.tooLarge }
+                }
+                output = data
+            } catch { failure = error }
+        }
+        if let failure { throw failure }; guard let output else { throw OrganizerError.invalid("file") }; return output
+    }
+    func restore(_ preview: BackupPreview) -> Bool {
+        let result = perform { guard let store else { throw OrganizerError.storage("unavailable") }; try store.restore(preview.snapshot) }
+        if result { reschedule(); presentation = nil }; return result
+    }
+    func prepareExport(toFile: Bool) {
+        guard let store, !locked else { return }
+        do {
+            exportDocument = BackupDocument(data: try store.export())
+            if toFile { exporter = true }
+            else { let url = try temporary(data: exportDocument.data, name: filename); show(.share(url)) }
+        } catch { report(error) }
+    }
+    func temporary(data: Data, name: String) throws -> URL {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("organizer-private", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.complete])
+        let safeName = URL(fileURLWithPath: name).lastPathComponent
+        let url = folder.appendingPathComponent(UUID().uuidString + "-" + (safeName.isEmpty ? "attachment" : safeName))
+        try data.write(to: url, options: [.atomic, .completeFileProtection]); return url
+    }
+    func clearTemporaryFiles() {
+        // UIKit viewers / share extensions may still be reading the current file. Remove old files on launch / next export.
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("organizer-private")
+        let old = Date().addingTimeInterval(-86400)
+        for url in (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey])) ?? [] {
+            if ((try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantFuture) < old { try? FileManager.default.removeItem(at: url) }
+        }
+    }
+    func addFile(_ url: URL, type: String, id: Int64) {
+        do { try attach(Self.readFile(url, limit: BackupCodec.maxAttachment), name: url.lastPathComponent, mime: UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream", type: type, id: id) }
+        catch { report(error) }
+    }
+    func attach(_ data: Data, name: String, mime: String, type: String, id: Int64, duration: Int64 = 0) throws {
+        guard let store else { throw OrganizerError.storage("unavailable") }
+        try store.addAttachment(data: data, displayName: name, mimeType: mime, targetType: type, targetID: id, duration: duration)
+        snapshot = try store.load()
+    }
+    func reschedule() { if automaticScheduling { reminders.update(snapshot, protected: pinEnabled || pinUnavailable, language: lang) } }
+    #if DEBUG
+    private func configureUITest() {
+        // Compiled out of Release. Data lives in the test app's disposable simulator container.
+        let args = ProcessInfo.processInfo.arguments
+        if let encoded = ProcessInfo.processInfo.environment["ORGANIZER_UI_FIXTURE"], let data = Data(base64Encoded: encoded), data.count < 128 * 1024 { _ = perform { try store?.restore(BackupCodec.decode(data)) } }
+        if let i = args.firstIndex(of: "-test-language"), args.indices.contains(i + 1) { setting("language", value: .string(args[i + 1])) }
+        if args.contains("-test-dark") { setting("darkTheme", value: .bool(true)) }
+        if args.contains("-test-large") { setting("contentFontScale", value: .number(1.45)); setting("buttonFontScale", value: .number(1.45)); setting("boldText", value: .bool(true)) }
+        if args.contains("-test-pin"), !pinEnabled { try? configurePIN("2468", old: ""); locked = true }
+    }
+    #endif
+}

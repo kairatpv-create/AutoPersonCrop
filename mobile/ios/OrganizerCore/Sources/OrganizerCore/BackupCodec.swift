@@ -8,7 +8,9 @@ public enum BackupCodec {
         guard input.count <= maxJSON else { throw OrganizerError.tooLarge }
         let data = input.starts(with: [0x50, 0x4b]) ? try BackupZIP.read(input) : input
         try preflight(data)
-        guard let root = try JSONDecoder().decode(JSONValue.self, from: data).object else { throw OrganizerError.invalid("JSON") }
+        let root: [String: JSONValue]
+        do { guard let object = try JSONDecoder().decode(JSONValue.self, from: data).object else { throw OrganizerError.invalid("JSON") }; root = object }
+        catch { throw OrganizerError.invalid("JSON") }
         let snapshot = Snapshot(root: root)
         try validate(snapshot)
         return snapshot

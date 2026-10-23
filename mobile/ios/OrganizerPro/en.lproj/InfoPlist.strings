@@ -1,0 +1,5 @@
+"CFBundleDisplayName" = "Organizer Pro";
+"NSCameraUsageDescription" = "Take photos to attach to a note or project you choose.";
+"NSMicrophoneUsageDescription" = "Record voice attachments and dictate note text when you choose.";
+"NSSpeechRecognitionUsageDescription" = "Turn your speech into note text. Apple services may process audio online when on-device recognition is unavailable.";
+"NSCalendarsFullAccessUsageDescription" = "Display iPhone calendar events and birthdays alongside project due dates. The app does not change your calendars.";
