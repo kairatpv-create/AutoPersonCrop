@@ -3,7 +3,7 @@ import OrganizerCore
 
 struct RemindersView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var deleting: Record?
+    @State private var deleting: OrganizerRecord?
     @StateObject private var service = ReminderService.shared
     var body: some View {
         Page {
@@ -33,7 +33,7 @@ struct RemindersView: View {
 struct ReminderEditor: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    let targetType: String; let targetID: Int64; let original: Record?
+    let targetType: String; let targetID: Int64; let original: OrganizerRecord?
     @State private var date = Date().addingTimeInterval(3600)
     @State private var weekly = false
     @State private var mask = 0
@@ -61,7 +61,7 @@ struct ReminderEditor: View {
     func save() {
         guard model.snapshot.record(targetType == "note" ? "notes" : "projects", id: targetID) != nil else { model.report(OrganizerError.storage("missing reminder owner")); return }
         let c = Calendar.current, minutes = c.component(.hour, from: date) * 60 + c.component(.minute, from: date)
-        var r = original ?? Record(); r.set("targetType", targetType); r.set("targetId", targetID); r.set("triggerAt", date.milliseconds); r.set("sound", sound); r.set("vibrate", original?.flag("vibrate", true) ?? true); r.set("soundKey", original?.text("soundKey", "system") ?? "system"); r.set("scheduleType", weekly ? "weekly" : "once"); r.set("daysMask", Int64(mask)); r.set("dayMode", hourly ? "all_day" : "single"); r.set("baseMinutes", Int64(minutes))
+        var r = original ?? OrganizerRecord(); r.set("targetType", targetType); r.set("targetId", targetID); r.set("triggerAt", date.milliseconds); r.set("sound", sound); r.set("vibrate", original?.flag("vibrate", true) ?? true); r.set("soundKey", original?.text("soundKey", "system") ?? "system"); r.set("scheduleType", weekly ? "weekly" : "once"); r.set("daysMask", Int64(mask)); r.set("dayMode", hourly ? "all_day" : "single"); r.set("baseMinutes", Int64(minutes))
         if weekly, let next = ReminderPlan.make([r]).requests.first?.next { r.set("triggerAt", next.milliseconds) }
         if model.save("reminders", record: r) != nil { Task { _ = await model.reminders.requestPermission(); model.reschedule() }; dismiss() }
     }

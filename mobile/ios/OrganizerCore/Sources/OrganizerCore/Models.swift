@@ -35,7 +35,7 @@ public enum JSONValue: Codable, Equatable, Sendable {
     public var boolean: Bool? { if case .bool(let v) = self { return v }; return nil }
 }
 
-public struct Record: Equatable, Identifiable, Sendable {
+public struct OrganizerRecord: Equatable, Identifiable, Sendable {
     public var fields: [String: JSONValue]
     public init(_ fields: [String: JSONValue] = [:]) { self.fields = fields }
     public var id: Int64 { int("id") }
@@ -60,14 +60,14 @@ public struct Snapshot: Equatable, Sendable {
         return Snapshot(root: root)
     }
     public static var now: Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
-    public func records(_ key: String) -> [Record] { (root[key]?.array ?? []).compactMap { $0.object.map(Record.init) } }
-    public mutating func setRecords(_ key: String, _ records: [Record]) { root[key] = .array(records.map { .object($0.fields) }) }
-    public var settings: Record {
-        get { Record(root["settings"]?.object ?? [:]) }
+    public func records(_ key: String) -> [OrganizerRecord] { (root[key]?.array ?? []).compactMap { $0.object.map(OrganizerRecord.init) } }
+    public mutating func setRecords(_ key: String, _ records: [OrganizerRecord]) { root[key] = .array(records.map { .object($0.fields) }) }
+    public var settings: OrganizerRecord {
+        get { OrganizerRecord(root["settings"]?.object ?? [:]) }
         set { root["settings"] = .object(newValue.fields) }
     }
-    public func record(_ key: String, id: Int64) -> Record? { records(key).first { $0.id == id } }
-    public mutating func upsert(_ key: String, record: Record) {
+    public func record(_ key: String, id: Int64) -> OrganizerRecord? { records(key).first { $0.id == id } }
+    public mutating func upsert(_ key: String, record: OrganizerRecord) {
         var list = records(key)
         if let i = list.firstIndex(where: { $0.id == record.id }) { list[i] = record } else { list.append(record) }
         setRecords(key, list)
@@ -76,6 +76,12 @@ public struct Snapshot: Equatable, Sendable {
         let last = records(key).map(\.id).max() ?? 0
         guard last < Int64.max else { throw OrganizerError.invalid("id") }
         return max(1, last + 1)
+    }
+    public mutating func updateStageProgress(projectID: Int64) {
+        guard var project = record("projects", id: projectID) else { return }
+        let stages = records("projectStages").filter { $0.int("projectId") == projectID }
+        project.set("progress", stages.isEmpty ? Int64(0) : Int64(stages.filter { $0.flag("done") }.count * 100 / stages.count))
+        project.set("updatedAt", Self.now); upsert("projects", record: project)
     }
     public mutating func remove(_ key: String, id: Int64) {
         setRecords(key, records(key).filter { $0.id != id })
@@ -116,7 +122,7 @@ public enum Money {
               let value = Double(text), value.isFinite, allowZero ? value >= 0 : value > 0 else { return nil }
         return value
     }
-    public static func total(_ records: [Record], type: String? = nil) -> Decimal {
+    public static func total(_ records: [OrganizerRecord], type: String? = nil) -> Decimal {
         records.filter { type == nil || $0.text("type") == type }.reduce(Decimal.zero) { result, row in
             let amount = Decimal(string: String(row.number("amount")), locale: Locale(identifier: "en_US_POSIX")) ?? 0
             return result + (type == nil && row.text("type") == "expense" ? -amount : amount)

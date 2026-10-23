@@ -15,7 +15,7 @@ final class CoreTests: XCTestCase {
     func store() throws -> OrganizerStore { try OrganizerStore(url: directory.appendingPathComponent("test.sqlite")) }
     func encoded(_ snapshot: Snapshot) throws -> Data { try JSONEncoder().encode(JSONValue.object(snapshot.root)) }
     func checkRejected(_ data: Data, file: StaticString = #filePath, line: UInt = #line) throws {
-        let db = try store(); try db.restore(sample()); try db.saveDraft(name: "note:new", record: Record(["body": .string("unsaved draft")]))
+        let db = try store(); try db.restore(sample()); try db.saveDraft(name: "note:new", record: OrganizerRecord(["body": .string("unsaved draft")]))
         let before = try db.fullSnapshot(), safety = try db.safetyCopies().map(\.id)
         XCTAssertThrowsError(try db.restore(BackupCodec.decode(data)), file: file, line: line)
         XCTAssertEqual(try db.fullSnapshot(), before, file: file, line: line)
@@ -103,7 +103,7 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(try db.fullSnapshot(), before); XCTAssertEqual(try db.safetyCopies().map(\.id), safety)
     }
     func testDraftIsDurableAndNotExported() throws {
-        let db = try store(); try db.saveDraft(name: "new-note", record: Record(["body": .string("private draft")]))
+        let db = try store(); try db.saveDraft(name: "new-note", record: OrganizerRecord(["body": .string("private draft")]))
         XCTAssertEqual(try db.draft(name: "new-note")?.text("body"), "private draft")
         XCTAssertFalse(String(decoding: try db.export(zip: false), as: UTF8.self).contains("private draft"))
     }
@@ -124,10 +124,18 @@ final class CoreTests: XCTestCase {
     }
     func testDecimalMoneyAndInput() throws {
         XCTAssertEqual(Money.parse("19,95"), 19.95); XCTAssertNil(Money.parse("NaN")); XCTAssertNil(Money.parse("1e20")); XCTAssertNil(Money.parse("-5")); XCTAssertNil(Money.parse("0"))
-        XCTAssertEqual(Money.total([Record(["type": .string("income"), "amount": .number(0.1)]), Record(["type": .string("income"), "amount": .number(0.2)])]), Decimal(string: "0.3"))
+        XCTAssertEqual(Money.total([OrganizerRecord(["type": .string("income"), "amount": .number(0.1)]), OrganizerRecord(["type": .string("income"), "amount": .number(0.2)])]), Decimal(string: "0.3"))
     }
     func testExistingUnrecognizedDatabaseNeverResets() throws {
         try Data("not a database".utf8).write(to: directory.appendingPathComponent("test.sqlite"))
         XCTAssertThrowsError(try store()); XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("test.sqlite")), Data("not a database".utf8))
+    }
+    func testLateAttachmentCannotMoveToRestoredOwnerWithReusedID() throws {
+        let db = try store(); try db.restore(sample())
+        let owner = try XCTUnwrap(db.load().records("notes").first)
+        var incoming = try sample(), notes = incoming.records("notes"); notes[0].set("createdAt", owner.int("createdAt") + 1); incoming.setRecords("notes", notes)
+        try db.restore(incoming); let before = try db.fullSnapshot()
+        XCTAssertThrowsError(try db.addAttachment(data: Data([9]), displayName: "late.bin", mimeType: "application/octet-stream", targetType: "note", targetID: owner.id, expectedOwnerCreatedAt: owner.int("createdAt")))
+        XCTAssertEqual(try db.fullSnapshot(), before)
     }
 }

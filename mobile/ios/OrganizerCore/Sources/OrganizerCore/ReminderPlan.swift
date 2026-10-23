@@ -2,7 +2,7 @@ import Foundation
 
 public struct PlannedReminder: Identifiable, Sendable {
     public let id: String
-    public let record: Record
+    public let record: OrganizerRecord
     public let components: DateComponents
     public let repeats: Bool
     public let next: Date
@@ -11,7 +11,7 @@ public struct ReminderPlan: Sendable {
     public let requests: [PlannedReminder]
     public let deferred: Int
     public let invalid: Int
-    public static func make(_ records: [Record], now: Date = Date(), calendar: Calendar = .current, limit: Int = 64) -> ReminderPlan {
+    public static func make(_ records: [OrganizerRecord], now: Date = Date(), calendar: Calendar = .current, limit: Int = 64) -> ReminderPlan {
         let budget = min(1024, max(0, limit))
         var requests: [PlannedReminder] = [], invalid = 0, total = 0
         func ordered(_ a: PlannedReminder, _ b: PlannedReminder) -> Bool { a.next == b.next ? a.id < b.id : a.next < b.next }

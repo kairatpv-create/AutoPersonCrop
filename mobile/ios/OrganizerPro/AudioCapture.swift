@@ -14,6 +14,7 @@ import Combine
     private var observer: NSObjectProtocol?
     private var background: NSObjectProtocol?
     private var completion: ((URL, Int64) -> Void)?
+    private var generation = UUID()
     var currentURL: URL? { recorder?.url }
     static var directory: URL { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("OrganizerPro/Recordings", isDirectory: true) }
     override init() {
@@ -22,10 +23,11 @@ import Combine
         background = NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in Task { @MainActor in self?.stop(); self?.stopPlayback() } }
     }
     deinit { if let observer { NotificationCenter.default.removeObserver(observer) }; if let background { NotificationCenter.default.removeObserver(background) }; timer?.invalidate() }
-    func start(completion: @escaping (URL, Int64) -> Void) async throws {
+    func start(canStart: @escaping () -> Bool = { true }, completion: @escaping (URL, Int64) -> Void) async throws {
         guard !preparing, !recording else { return }; preparing = true; defer { preparing = false }
+        let token = UUID(); generation = token
         let permitted = await withCheckedContinuation { c in AVAudioApplication.requestRecordPermission { c.resume(returning: $0) } }
-        guard permitted else { throw NSError(domain: "OrganizerAudio", code: 1) }
+        guard permitted, generation == token, canStart() else { throw NSError(domain: "OrganizerAudio", code: 1) }
         stopPlayback()
         try FileManager.default.createDirectory(at: Self.directory, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
         let url = Self.directory.appendingPathComponent("\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString.prefix(6)).m4a")
@@ -38,6 +40,7 @@ import Combine
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in Task { @MainActor in guard let self, let url = self.recorder?.url else { return }; let size = ((try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? NSNumber)?.intValue ?? 0; if size >= 24 * 1024 * 1024 { self.stop() } } }
     }
     func stop() {
+        generation = UUID()
         guard let recorder else { return }; let url = recorder.url, duration = Int64(recorder.currentTime * 1000)
         self.recorder = nil; recorder.stop(); recording = false; timer?.invalidate(); timer = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)

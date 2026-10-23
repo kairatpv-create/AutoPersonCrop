@@ -4,9 +4,9 @@ import XCTest
 final class ReminderTests: XCTestCase {
     func calendar(_ zone: String = "UTC") -> Calendar { var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: zone)!; return c }
     func date(_ string: String) -> Date { ISO8601DateFormatter().date(from: string)! }
-    func row(_ fields: [String: JSONValue] = [:]) -> Record {
+    func row(_ fields: [String: JSONValue] = [:]) -> OrganizerRecord {
         var values: [String: JSONValue] = ["id": .integer(1), "scheduleType": .string("weekly"), "daysMask": .integer(1), "baseMinutes": .integer(570)]
-        values.merge(fields) { _, new in new }; return Record(values)
+        values.merge(fields) { _, new in new }; return OrganizerRecord(values)
     }
     func testMondayBitAndNextWeek() {
         let c = calendar(), now = date("2026-10-26T10:00:00Z")

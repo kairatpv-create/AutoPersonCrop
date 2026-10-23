@@ -31,7 +31,7 @@ struct ProjectDetail: View {
     @State private var selected = 0
     @State private var deleting = false
     @State private var deleteEntry: (String, Int64)?
-    var project: Record? { model.snapshot.record("projects", id: id) }
+    var project: OrganizerRecord? { model.snapshot.record("projects", id: id) }
     var titles: [String] { [model.t("Обзор", "Overview"), model.t("Этапы", "Stages"), model.t("Финансы", "Finances"), model.t("Файлы", "Files"), model.t("Записи", "Journal")] }
     var body: some View {
         Group {
@@ -52,9 +52,9 @@ struct ProjectDetail: View {
         }.background(Brand.background(model.dark)).navigationTitle(model.t("Проект", "Project"))
             .toolbar { if let project { ToolbarItem(placement: .topBarTrailing) { Button(model.t("Изменить", "Edit")) { model.show(.project(project)) } } } }
             .confirmationDialog(model.t("Удалить проект? Финансовые записи сохранятся.", "Delete this project? Financial records will be kept."), isPresented: $deleting, titleVisibility: .visible) { Button(model.t("Удалить", "Delete"), role: .destructive) { model.remove("projects", id: id); if model.snapshot.record("projects", id: id) == nil { dismiss() } } }
-            .confirmationDialog(model.t("Удалить запись?", "Delete this entry?"), isPresented: Binding(get: { deleteEntry != nil }, set: { if !$0 { deleteEntry = nil } }), titleVisibility: .visible) { Button(model.t("Удалить", "Delete"), role: .destructive) { if let (table, id) = deleteEntry { model.remove(table, id: id); recalculate() }; deleteEntry = nil } }
+            .confirmationDialog(model.t("Удалить запись?", "Delete this entry?"), isPresented: Binding(get: { deleteEntry != nil }, set: { if !$0 { deleteEntry = nil } }), titleVisibility: .visible) { Button(model.t("Удалить", "Delete"), role: .destructive) { if let (table, id) = deleteEntry { model.remove(table, id: id) }; deleteEntry = nil } }
     }
-    @ViewBuilder func overview(_ p: Record) -> some View {
+    @ViewBuilder func overview(_ p: OrganizerRecord) -> some View {
         Card(color: p.text("colorKey", "blue")) {
             UserText(p.text("name"), strong: true); UserText(p.text("description")).textSelection(.enabled)
             LabeledContent(model.t("Статус", "Status"), value: statusTitle(p.text("status"), model))
@@ -75,7 +75,7 @@ struct ProjectDetail: View {
             ForEach(model.records("projectStages").filter { $0.int("projectId") == id }) { stage in
                 Card {
                     HStack(alignment: .top) {
-                        Button { var r = stage; r.set("done", !stage.flag("done")); if model.save("projectStages", record: r) != nil { recalculate() } } label: { Image(systemName: stage.flag("done") ? "checkmark.circle.fill" : "circle").font(.title2).frame(minWidth: 44, minHeight: 44) }.accessibilityLabel(model.t("Этап завершён", "Stage completed"))
+                        Button { var r = stage; r.set("done", !stage.flag("done")); _ = model.save("projectStages", record: r) } label: { Image(systemName: stage.flag("done") ? "checkmark.circle.fill" : "circle").font(.title2).frame(minWidth: 44, minHeight: 44) }.accessibilityLabel(model.t("Этап завершён", "Stage completed"))
                         VStack(alignment: .leading) { UserText(stage.text("title"), strong: true); Text(model.date(stage.int("dueAt"))).font(.caption) }
                         Spacer(); Button(role: .destructive) { deleteEntry = ("projectStages", stage.id) } label: { Image(systemName: "trash").frame(minWidth: 44, minHeight: 44) }.accessibilityLabel(model.t("Удалить этап", "Delete stage"))
                     }
@@ -96,16 +96,12 @@ struct ProjectDetail: View {
             }
         }
     }
-    func recalculate() {
-        let stages = model.records("projectStages").filter { $0.int("projectId") == id }
-        guard var p = project else { return }; p.set("progress", stages.isEmpty ? Int64(0) : Int64(stages.filter { $0.flag("done") }.count * 100 / stages.count)); _ = model.save("projects", record: p)
-    }
 }
 struct ProjectEditor: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    let original: Record?
-    @State private var record = Record()
+    let original: OrganizerRecord?
+    @State private var record = OrganizerRecord()
     @State private var budget = "0"
     @State private var due = false
     @State private var loaded = false
@@ -136,7 +132,7 @@ struct ProjectEditor: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(model.t("Закрыть", "Close")) { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button(model.t("Сохранить", "Save")) { save() }.disabled(record.text("name").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || Money.parse(budget, allowZero: true) == nil).accessibilityIdentifier("saveProject") } }
             .onAppear {
                 guard !loaded else { return }
-                record = model.draft(key) ?? original ?? Record(["name": .string(""), "description": .string(""), "status": .string("planned"), "progress": .integer(0), "startAt": .integer(Snapshot.now), "dueAt": .integer(0), "budget": .number(0), "client": .string(""), "address": .string(""), "contact": .string(""), "colorKey": .string("blue")])
+                record = model.draft(key) ?? original ?? OrganizerRecord(["name": .string(""), "description": .string(""), "status": .string("planned"), "progress": .integer(0), "startAt": .integer(Snapshot.now), "dueAt": .integer(0), "budget": .number(0), "client": .string(""), "address": .string(""), "contact": .string(""), "colorKey": .string("blue")])
                 budget = record.fields["_budgetText"]?.text ?? String(record.number("budget")); due = record.flag("_due", record.int("dueAt") > 0); loaded = true
             }
             .onChange(of: record) { _, _ in persist() }.onChange(of: budget) { _, _ in persist() }.onChange(of: due) { _, _ in persist() }
@@ -163,14 +159,14 @@ struct ProjectEntryEditor: View {
         }.navigationTitle(model.t(kind == "projectStages" ? "Новый этап" : "Журнал проекта", kind == "projectStages" ? "New stage" : "Project journal"))
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(model.t("Закрыть", "Close")) { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button(model.t("Сохранить", "Save")) {
                 guard model.snapshot.record("projects", id: projectID) != nil else { model.report(OrganizerError.storage("missing project")); return }
-                var r = Record(["projectId": .integer(projectID)])
+                var r = OrganizerRecord(["projectId": .integer(projectID)])
                 if kind == "projectStages" { r.set("title", text); r.set("done", false); r.set("dueAt", due ? date.milliseconds : 0) } else { r.set("text", text) }
                 if model.save(kind, record: r) != nil { model.draft(key, record: nil); loaded = false; dismiss() }
             }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) } }
             .onAppear { guard !loaded else { return }; if let draft = model.draft(key) { text = draft.text("text"); due = draft.flag("due"); date = Date(milliseconds: draft.int("date", Snapshot.now)) }; loaded = true }
             .onChange(of: text) { _, _ in persist() }.onChange(of: due) { _, _ in persist() }.onChange(of: date) { _, _ in persist() }
     }
-    func persist() { if loaded { model.draft(key, record: Record(["text": .string(text), "due": .bool(due), "date": .integer(date.milliseconds)])) } }
+    func persist() { if loaded { model.draft(key, record: OrganizerRecord(["text": .string(text), "due": .bool(due), "date": .integer(date.milliseconds)])) } }
 }
 struct LinkNotesView: View {
     @EnvironmentObject private var model: AppModel
@@ -183,7 +179,7 @@ struct LinkNotesView: View {
                 Button {
                     model.mutate { state in
                         var links = state.records("projectNoteLinks").filter { !($0.int("projectId") == projectID && $0.int("noteId") == note.id) }
-                        if !linked { links.append(Record(["projectId": .integer(projectID), "noteId": .integer(note.id)])) }; state.setRecords("projectNoteLinks", links)
+                        if !linked { links.append(OrganizerRecord(["projectId": .integer(projectID), "noteId": .integer(note.id)])) }; state.setRecords("projectNoteLinks", links)
                     }
                 } label: { HStack { UserText(note.text("title")); Spacer(); if linked { Image(systemName: "checkmark") } } }
             }

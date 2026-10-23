@@ -21,9 +21,12 @@ struct FilesSection: View {
     @State private var picking = false
     @State private var camera = false
     @State private var photo: PhotosPickerItem?
-    @State private var deleting: Record?
+    @State private var deleting: OrganizerRecord?
     @State private var recovery: [URL] = []
-    var attachments: [Record] { model.records("attachments").filter { $0.text("targetType") == targetType && $0.int("targetId") == targetID } }
+    @State private var cameraOwner: Int64?
+    @State private var fileOwner: Int64?
+    var attachments: [OrganizerRecord] { model.records("attachments").filter { $0.text("targetType") == targetType && $0.int("targetId") == targetID } }
+    var ownerCreatedAt: Int64? { model.snapshot.record(targetType == "note" ? "notes" : "projects", id: targetID)?.int("createdAt") }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(model.t("Вложения", "Attachments")).font(.headline)
@@ -34,10 +37,11 @@ struct FilesSection: View {
             Button {
                 if audio.recording { audio.stop() }
                 else {
+                    let owner = ownerCreatedAt
                     Task {
                         do {
-                            try await audio.start { url, duration in
-                                do { try model.attach(AppModel.readFile(url, limit: BackupCodec.maxAttachment), name: "Voice-\(url.lastPathComponent)", mime: "audio/mp4", type: targetType, id: targetID, duration: duration); try? FileManager.default.removeItem(at: url) }
+                            try await audio.start(canStart: { !model.locked }) { url, duration in
+                                do { try model.attach(AppModel.readFile(url, limit: BackupCodec.maxAttachment), name: "Voice-\(url.lastPathComponent)", mime: "audio/mp4", type: targetType, id: targetID, duration: duration, expectedOwnerCreatedAt: owner); try? FileManager.default.removeItem(at: url) }
                                 catch { model.report(error) }
                                 refreshRecovery()
                             }
@@ -56,7 +60,7 @@ struct FilesSection: View {
                     }
                     Text(ByteCountFormatter.string(fromByteCount: row.int("size"), countStyle: .file)).font(.caption).foregroundStyle(.secondary)
                     if row.text("mimeType").hasPrefix("audio/") {
-                        Button { do { let url = try model.temporary(data: model.store!.attachment(row.text("storedName")), name: row.text("displayName")); try audio.play(url) } catch { model.report(error) } } label: { Label(model.t("Воспроизвести", "Play"), systemImage: "play.circle") }.buttonStyle(.bordered)
+                        Button { do { guard let store = model.store else { throw OrganizerError.missingAttachment }; let url = try model.temporary(data: store.attachment(row.text("storedName")), name: row.text("displayName")); try audio.play(url) } catch { model.report(error) } } label: { Label(model.t("Воспроизвести", "Play"), systemImage: "play.circle") }.buttonStyle(.bordered)
                     }
                 }
             }
@@ -69,25 +73,26 @@ struct FilesSection: View {
                 }
             }
         }.fileImporter(isPresented: $picking, allowedContentTypes: [.data], allowsMultipleSelection: false) { result in
-            if case .success(let urls) = result, let url = urls.first { model.addFile(url, type: targetType, id: targetID) }
+            if case .success(let urls) = result, let url = urls.first { model.addFile(url, type: targetType, id: targetID, expectedOwnerCreatedAt: fileOwner) }
             else if case .failure(let error) = result, (error as NSError).code != NSUserCancelledError { model.report(error) }
         }
-        .sheet(isPresented: $camera) { CameraCapture { image in camera = false; guard let data = image?.jpegData(compressionQuality: 0.85) else { return }; do { try model.attach(data, name: "Photo-\(Snapshot.now).jpg", mime: "image/jpeg", type: targetType, id: targetID) } catch { model.report(error) } }.ignoresSafeArea() }
+        .sheet(isPresented: $camera) { CameraCapture { image in camera = false; guard let data = image?.jpegData(compressionQuality: 0.85) else { return }; do { try model.attach(data, name: "Photo-\(Snapshot.now).jpg", mime: "image/jpeg", type: targetType, id: targetID, expectedOwnerCreatedAt: cameraOwner) } catch { model.report(error) } }.ignoresSafeArea() }
         .onChange(of: photo) { _, item in
             guard let item else { return }
-            Task { do { if let value = try await item.loadTransferable(type: ImportedImage.self) { try model.attach(value.data, name: value.name, mime: value.mime, type: targetType, id: targetID) } } catch { model.report(error) }; photo = nil }
+            let owner = ownerCreatedAt
+            Task { do { if let value = try await item.loadTransferable(type: ImportedImage.self) { try model.attach(value.data, name: value.name, mime: value.mime, type: targetType, id: targetID, expectedOwnerCreatedAt: owner) } } catch { model.report(error) }; photo = nil }
         }
         .confirmationDialog(model.t("Удалить вложение?", "Delete this attachment?"), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) { Button(model.t("Удалить", "Delete"), role: .destructive) { if let deleting { model.remove("attachments", id: deleting.id) }; deleting = nil } }
         .onAppear { refreshRecovery() }.onDisappear { audio.stop(); audio.stopPlayback() }
     }
     @ViewBuilder var fileButtons: some View {
-        Button { picking = true } label: { Label(model.t("Файл", "File"), systemImage: "paperclip") }.buttonStyle(.bordered)
+        Button { fileOwner = ownerCreatedAt; picking = true } label: { Label(model.t("Файл", "File"), systemImage: "paperclip") }.buttonStyle(.bordered)
         PhotosPicker(selection: $photo, matching: .images, preferredItemEncoding: .current) { Label(model.t("Фото", "Photo"), systemImage: "photo") }.buttonStyle(.bordered)
         if UIImagePickerController.isSourceTypeAvailable(.camera) {
-            Button { Task { if await AVCaptureDevice.requestAccess(for: .video) { camera = true } else { model.notice = AppNotice(message: model.t("Разрешите доступ к камере в Настройках iPhone.", "Allow camera access in iPhone Settings.")) } } } label: { Label(model.t("Камера", "Camera"), systemImage: "camera") }.buttonStyle(.bordered)
+            Button { cameraOwner = ownerCreatedAt; Task { if await AVCaptureDevice.requestAccess(for: .video) { camera = true } else { model.notice = AppNotice(message: model.t("Разрешите доступ к камере в Настройках iPhone.", "Allow camera access in iPhone Settings.")) } } } label: { Label(model.t("Камера", "Camera"), systemImage: "camera") }.buttonStyle(.bordered)
         }
     }
-    func open(_ row: Record) {
+    func open(_ row: OrganizerRecord) {
         do { guard let store = model.store else { throw OrganizerError.missingAttachment }; let url = try model.temporary(data: store.attachment(row.text("storedName")), name: row.text("displayName")); model.show(.preview(url)) }
         catch { model.report(error) }
     }

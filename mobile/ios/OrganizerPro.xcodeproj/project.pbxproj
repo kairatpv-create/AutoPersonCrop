@@ -439,7 +439,7 @@
 			"path" = "OrganizerProTests/IntegrationTests.swift";
 			"sourceTree" = "<group>";
 		};
-		"D8543D09F0C6A1ABAA610867" = {
+		"E7B96D95BFF52E58B385ACFA" = {
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "folder";
 			"path" = "OrganizerCore/Tests/OrganizerCoreTests/Fixtures";
@@ -450,7 +450,7 @@
 			"name" = "OrganizerProTests";
 			"children" = (
 				"37529D40FF248A9A9F6E0EBC",
-				"D8543D09F0C6A1ABAA610867",
+				"E7B96D95BFF52E58B385ACFA",
 			);
 			"sourceTree" = "<group>";
 		};
@@ -466,15 +466,15 @@
 			);
 			"runOnlyForDeploymentPostprocessing" = 0;
 		};
-		"7C55019EF6ADC7B77696586E" = {
+		"257EAE20A11861AA2146E3F4" = {
 			"isa" = "PBXBuildFile";
-			"fileRef" = "D8543D09F0C6A1ABAA610867";
+			"fileRef" = "E7B96D95BFF52E58B385ACFA";
 		};
 		"5BD51F7B069A162B93759AB5" = {
 			"isa" = "PBXResourcesBuildPhase";
 			"buildActionMask" = 2147483647;
 			"files" = (
-				"7C55019EF6ADC7B77696586E",
+				"257EAE20A11861AA2146E3F4",
 			);
 			"runOnlyForDeploymentPostprocessing" = 0;
 		};
@@ -595,12 +595,18 @@
 			"path" = "OrganizerProUITests/OrganizerUITests.swift";
 			"sourceTree" = "<group>";
 		};
+		"058927793EFEDD7E4520925B" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "folder";
+			"path" = "OrganizerCore/Tests/OrganizerCoreTests/Fixtures";
+			"sourceTree" = "<group>";
+		};
 		"48992CA9C9B37245C2C20115" = {
 			"isa" = "PBXGroup";
 			"name" = "OrganizerProUITests";
 			"children" = (
 				"1C092CCC6D22146539EBCA99",
-				"D8543D09F0C6A1ABAA610867",
+				"058927793EFEDD7E4520925B",
 			);
 			"sourceTree" = "<group>";
 		};
@@ -616,15 +622,15 @@
 			);
 			"runOnlyForDeploymentPostprocessing" = 0;
 		};
-		"22F4B62E7376941D6BB6A9D1" = {
+		"DAB2A17DCC8CE3E9CD5C1E38" = {
 			"isa" = "PBXBuildFile";
-			"fileRef" = "D8543D09F0C6A1ABAA610867";
+			"fileRef" = "058927793EFEDD7E4520925B";
 		};
 		"6D552F30C4D59C3FE9ABDF42" = {
 			"isa" = "PBXResourcesBuildPhase";
 			"buildActionMask" = 2147483647;
 			"files" = (
-				"22F4B62E7376941D6BB6A9D1",
+				"DAB2A17DCC8CE3E9CD5C1E38",
 			);
 			"runOnlyForDeploymentPostprocessing" = 0;
 		};

@@ -4,7 +4,7 @@ import OrganizerCore
 struct NotesView: View {
     @EnvironmentObject private var model: AppModel
     @State private var search = ""
-    var notes: [Record] { model.records("notes").filter { search.isEmpty || ($0.text("title") + " " + $0.text("body")).localizedCaseInsensitiveContains(search) }.sorted { $0.int("updatedAt") > $1.int("updatedAt") } }
+    var notes: [OrganizerRecord] { model.records("notes").filter { search.isEmpty || ($0.text("title") + " " + $0.text("body")).localizedCaseInsensitiveContains(search) }.sorted { $0.int("updatedAt") > $1.int("updatedAt") } }
     var body: some View {
         Page {
             TextField(model.t("Поиск по заметкам", "Search notes"), text: $search).textFieldStyle(.roundedBorder).accessibilityIdentifier("noteSearch")
@@ -26,7 +26,7 @@ struct NoteDetail: View {
     @Environment(\.dismiss) private var dismiss
     let id: Int64
     @State private var deleting = false
-    var note: Record? { model.snapshot.record("notes", id: id) }
+    var note: OrganizerRecord? { model.snapshot.record("notes", id: id) }
     var body: some View {
         Group {
             if let note {
@@ -48,7 +48,7 @@ struct NoteEditor: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @StateObject private var speech = SpeechInput()
-    let original: Record?
+    let original: OrganizerRecord?
     @State private var title = ""
     @State private var text = ""
     @State private var color = "blue"
@@ -64,7 +64,7 @@ struct NoteEditor: View {
                 ColorPickerRow(selected: $color)
             }
             Section {
-                Button { if speech.listening { speech.stop() } else { speechBase = text; speech.start(language: model.lang) } } label: { Label(speech.listening ? model.t("Остановить диктовку", "Stop dictation") : model.t("Диктовать", "Dictate"), systemImage: speech.listening ? "stop.circle" : "mic") }
+                Button { if speech.listening { speech.stop() } else { speechBase = text; speech.start(language: model.lang, canStart: { !model.locked }) } } label: { Label(speech.listening ? model.t("Остановить диктовку", "Stop dictation") : model.t("Диктовать", "Dictate"), systemImage: speech.listening ? "stop.circle" : "mic") }
                 Text(model.t("Распознавание речи использует службы Apple и может требовать интернет. Текст сохраняется только после вашего подтверждения.", "Speech recognition uses Apple services and may need an internet connection. Save the text when you are ready.")).font(.caption).foregroundStyle(.secondary)
                 if let error = speech.error { Text(model.t("Диктовка недоступна. Проверьте разрешения на микрофон и распознавание речи в Настройках iPhone.", "Dictation is unavailable. Check microphone and speech permissions in iPhone Settings.") + " " + error).font(.caption) }
             }
@@ -82,15 +82,15 @@ struct NoteEditor: View {
             .onChange(of: speech.transcript) { _, value in text = speechBase + (speechBase.isEmpty ? "" : "\n") + value }
             .onDisappear { speech.stop() }
     }
-    func persist() { if loaded { model.draft(key, record: Record(["title": .string(title), "body": .string(text), "colorKey": .string(color)])) } }
+    func persist() { if loaded { model.draft(key, record: OrganizerRecord(["title": .string(title), "body": .string(text), "colorKey": .string(color)])) } }
     func save() {
-        speech.stop(); var record = original ?? Record(); record.set("title", title.trimmingCharacters(in: .whitespacesAndNewlines)); record.set("body", text); record.set("colorKey", color)
+        speech.stop(); var record = original ?? OrganizerRecord(); record.set("title", title.trimmingCharacters(in: .whitespacesAndNewlines)); record.set("body", text); record.set("colorKey", color)
         if model.save("notes", record: record) != nil { loaded = false; model.draft(key, record: nil); dismiss() }
     }
 }
 struct TasksView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var deleting: Record?
+    @State private var deleting: OrganizerRecord?
     var body: some View {
         Page {
             Button(model.t("Новая задача", "New task")) { model.show(.task(nil)) }.buttonStyle(Pill())
@@ -112,7 +112,7 @@ struct TasksView: View {
 struct TaskEditor: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    let original: Record?
+    let original: OrganizerRecord?
     @State private var title = ""
     @State private var details = ""
     @State private var loaded = false
@@ -120,9 +120,9 @@ struct TaskEditor: View {
     var body: some View {
         Form { TextField(model.t("Заголовок", "Title"), text: $title, axis: .vertical); TextField(model.t("Описание", "Details"), text: $details, axis: .vertical).lineLimit(4...12) }
             .navigationTitle(model.t("Задача", "Task"))
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(model.t("Закрыть", "Close")) { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button(model.t("Сохранить", "Save")) { var r = original ?? Record(["done": .bool(false)]); r.set("title", title); r.set("details", details); if model.save("tasks", record: r) != nil { loaded = false; model.draft(key, record: nil); dismiss() } }.disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(model.t("Закрыть", "Close")) { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button(model.t("Сохранить", "Save")) { var r = original ?? OrganizerRecord(["done": .bool(false)]); r.set("title", title); r.set("details", details); if model.save("tasks", record: r) != nil { loaded = false; model.draft(key, record: nil); dismiss() } }.disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) } }
             .onAppear { guard !loaded else { return }; let r = model.draft(key) ?? original; title = r?.text("title") ?? ""; details = r?.text("details") ?? ""; loaded = true }
             .onChange(of: title) { _, _ in persist() }.onChange(of: details) { _, _ in persist() }
     }
-    func persist() { if loaded { model.draft(key, record: Record(["title": .string(title), "details": .string(details)])) } }
+    func persist() { if loaded { model.draft(key, record: OrganizerRecord(["title": .string(title), "details": .string(details)])) } }
 }

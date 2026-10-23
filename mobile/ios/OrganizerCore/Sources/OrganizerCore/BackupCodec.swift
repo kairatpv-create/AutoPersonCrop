@@ -74,7 +74,7 @@ public enum BackupCodec {
             try records("attachments") { object in
                 try fields(object, "targetType displayName storedName mimeType" + (attachmentData ? " data" : ""), "id targetId size createdAt durationMs", optional: "durationMs")
                 let name = object["storedName"]!.text!
-                guard !name.isEmpty, ![".", ".."].contains(name), !name.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 || "/\\:".unicodeScalars.contains($0) }), names.insert(name).inserted,
+                guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, ![".", ".."].contains(name), !name.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 || "/\\:".unicodeScalars.contains($0) }), names.insert(name).inserted,
                       let size = object["size"]?.integer, size >= 0, size <= Int64(maxAttachment) else { throw OrganizerError.invalid("attachment path/size") }
                 if attachmentData {
                     let text = object["data"]!.text!

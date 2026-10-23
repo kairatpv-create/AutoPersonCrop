@@ -9,9 +9,9 @@ struct BackupPreview { let snapshot: Snapshot; let name: String }
 struct Presentation: Identifiable {
     let id = UUID()
     enum Kind {
-        case note(Record?), project(Record?), money(String, Int64?), task(Record?)
+        case note(OrganizerRecord?), project(OrganizerRecord?), money(String, Int64?), task(OrganizerRecord?)
         case stage(Int64), journal(Int64), link(Int64)
-        case reminder(String, Int64, Record?), pin, backup(BackupPreview), share(URL), preview(URL)
+        case reminder(String, Int64, OrganizerRecord?), pin, backup(BackupPreview), share(URL), preview(URL)
     }
     let kind: Kind
 }
@@ -102,7 +102,7 @@ struct BackupDocument: FileDocument {
     func configurePIN(_ pin: String?, old: String) throws {
         if try vault.isEnabled(), !(try vault.verify(old)) { throw PinVault.Failure.rejected }
         if let pin { try vault.set(pin: pin) } else { try vault.disable() }
-        try store?.saveDraft(name: "device-security", record: Record(["installed": .bool(pin != nil)]))
+        try store?.saveDraft(name: "device-security", record: OrganizerRecord(["installed": .bool(pin != nil)]))
         pinEnabled = pin != nil; pinUnavailable = false; reschedule()
     }
     @discardableResult func perform(_ action: () throws -> Void) -> Bool {
@@ -121,22 +121,29 @@ struct BackupDocument: FileDocument {
         if saved { reschedule() }; return saved
     }
     func setting(_ key: String, value: JSONValue) { mutate { var s = $0.settings; s.fields[key] = value; $0.settings = s } }
-    @discardableResult func save(_ collection: String, record: Record) -> Int64? {
+    @discardableResult func save(_ collection: String, record: OrganizerRecord) -> Int64? {
         var saved = record
         let success = mutate { state in
             if saved.fields["id"] == nil { saved.set("id", try state.nextID(collection)); saved.set("createdAt", Snapshot.now) }
             if ["notes", "tasks", "projects"].contains(collection) { saved.set("updatedAt", Snapshot.now) }
             state.upsert(collection, record: saved)
+            if collection == "projectStages" { state.updateStageProgress(projectID: saved.int("projectId")) }
             if collection == "projects" {
                 state.setRecords("money", state.records("money").map { row in var r = row; if r.int("projectId", -1) == saved.id { r.set("projectName", saved.text("name")) }; return r })
             }
         }
         return success ? saved.id : nil
     }
-    func remove(_ collection: String, id: Int64) { mutate { $0.remove(collection, id: id) } }
-    func records(_ name: String) -> [Record] { snapshot.records(name) }
-    func draft(_ name: String) -> Record? { do { return try store?.draft(name: name) } catch { report(error); return nil } }
-    func draft(_ name: String, record: Record?) { do { guard let store else { throw OrganizerError.storage("unavailable") }; try store.saveDraft(name: name, record: record) } catch { report(error) } }
+    func remove(_ collection: String, id: Int64) {
+        mutate { state in
+            let owner = state.record(collection, id: id)?.int("projectId")
+            state.remove(collection, id: id)
+            if collection == "projectStages", let owner { state.updateStageProgress(projectID: owner) }
+        }
+    }
+    func records(_ name: String) -> [OrganizerRecord] { snapshot.records(name) }
+    func draft(_ name: String) -> OrganizerRecord? { do { return try store?.draft(name: name) } catch { report(error); return nil } }
+    func draft(_ name: String, record: OrganizerRecord?) { do { guard let store else { throw OrganizerError.storage("unavailable") }; try store.saveDraft(name: name, record: record) } catch { report(error) } }
     func amount(_ value: Decimal) -> String {
         let f = NumberFormatter(); f.locale = locale; f.numberStyle = .decimal; f.minimumFractionDigits = 2; f.maximumFractionDigits = 2
         return f.string(from: value as NSDecimalNumber) ?? "—"
@@ -202,13 +209,13 @@ struct BackupDocument: FileDocument {
             if ((try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantFuture) < old { try? FileManager.default.removeItem(at: url) }
         }
     }
-    func addFile(_ url: URL, type: String, id: Int64) {
-        do { try attach(Self.readFile(url, limit: BackupCodec.maxAttachment), name: url.lastPathComponent, mime: UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream", type: type, id: id) }
+    func addFile(_ url: URL, type: String, id: Int64, expectedOwnerCreatedAt: Int64? = nil) {
+        do { try attach(Self.readFile(url, limit: BackupCodec.maxAttachment), name: url.lastPathComponent, mime: UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream", type: type, id: id, expectedOwnerCreatedAt: expectedOwnerCreatedAt) }
         catch { report(error) }
     }
-    func attach(_ data: Data, name: String, mime: String, type: String, id: Int64, duration: Int64 = 0) throws {
+    func attach(_ data: Data, name: String, mime: String, type: String, id: Int64, duration: Int64 = 0, expectedOwnerCreatedAt: Int64? = nil) throws {
         guard let store else { throw OrganizerError.storage("unavailable") }
-        try store.addAttachment(data: data, displayName: name, mimeType: mime, targetType: type, targetID: id, duration: duration)
+        try store.addAttachment(data: data, displayName: name, mimeType: mime, targetType: type, targetID: id, duration: duration, expectedOwnerCreatedAt: expectedOwnerCreatedAt)
         snapshot = try store.load()
     }
     func reschedule() { if automaticScheduling { reminders.update(snapshot, protected: pinEnabled || pinUnavailable, language: lang) } }

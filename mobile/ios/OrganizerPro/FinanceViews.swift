@@ -7,8 +7,8 @@ struct FinanceView: View {
     var projectID: Int64? = nil
     @State private var selected = 0
     @State private var search = ""
-    @State private var deleting: Record?
-    var entries: [Record] { model.records("money").filter { row in (projectID == nil || row.int("projectId", -1) == projectID) && (search.isEmpty || (row.text("category") + " " + row.text("note") + " " + row.text("projectName")).localizedCaseInsensitiveContains(search)) }.sorted { $0.int("createdAt") > $1.int("createdAt") } }
+    @State private var deleting: OrganizerRecord?
+    var entries: [OrganizerRecord] { model.records("money").filter { row in (projectID == nil || row.int("projectId", -1) == projectID) && (search.isEmpty || (row.text("category") + " " + row.text("note") + " " + row.text("projectName")).localizedCaseInsensitiveContains(search)) }.sorted { $0.int("createdAt") > $1.int("createdAt") } }
     var titles: [String] { [model.t("Обзор", "Overview"), model.t("Доходы", "Income"), model.t("Расходы", "Expenses"), model.t("Аналитика", "Analytics")] }
     var body: some View {
         Page {
@@ -104,11 +104,11 @@ struct MoneyEditor: View {
             .onAppear { guard !loaded else { return }; if let draft = model.draft(key) { amount = draft.text("amount"); category = draft.text("category"); note = draft.text("note"); color = draft.text("color", "blue"); project = draft.int("project") } else { color = type == "income" ? "blue" : "yellow"; project = projectID ?? 0 }; loaded = true }
             .onChange(of: amount) { _, _ in persist() }.onChange(of: category) { _, _ in persist() }.onChange(of: note) { _, _ in persist() }.onChange(of: color) { _, _ in persist() }.onChange(of: project) { _, _ in persist() }
     }
-    func persist() { if loaded { model.draft(key, record: Record(["amount": .string(amount), "category": .string(category), "note": .string(note), "color": .string(color), "project": .integer(project)])) } }
+    func persist() { if loaded { model.draft(key, record: OrganizerRecord(["amount": .string(amount), "category": .string(category), "note": .string(note), "color": .string(color), "project": .integer(project)])) } }
     func save() {
         guard let value = Money.parse(amount) else { return }
         if project != 0 && model.snapshot.record("projects", id: project) == nil { model.report(OrganizerError.storage("missing project")); return }
-        var r = Record(["type": .string(type), "amount": .number(value), "category": .string(category), "note": .string(note), "colorKey": .string(color), "projectName": .string(model.snapshot.record("projects", id: project)?.text("name") ?? "")])
+        var r = OrganizerRecord(["type": .string(type), "amount": .number(value), "category": .string(category), "note": .string(note), "colorKey": .string(color), "projectName": .string(model.snapshot.record("projects", id: project)?.text("name") ?? "")])
         if project != 0 { r.set("projectId", project) }
         if model.save("money", record: r) != nil { loaded = false; model.draft(key, record: nil); dismiss() }
     }

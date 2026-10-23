@@ -117,14 +117,14 @@ public final class OrganizerStore {
         let s = try statement("INSERT INTO organizer_attachments(name,body) VALUES(?,?)"); defer { sqlite3_finalize(s) }
         sqlite3_bind_text(s, 1, name, -1, transient); try bind(data, to: s, index: 2); try done(s)
     }
-    public func addAttachment(data: Data, displayName: String, mimeType: String, targetType: String, targetID: Int64, duration: Int64 = 0) throws {
+    public func addAttachment(data: Data, displayName: String, mimeType: String, targetType: String, targetID: Int64, duration: Int64 = 0, expectedOwnerCreatedAt: Int64? = nil) throws {
         guard data.count <= BackupCodec.maxAttachment, ["note", "project"].contains(targetType) else { throw OrganizerError.tooLarge }
         lock.lock(); defer { lock.unlock() }
         try transaction {
             var state = try load()
-            guard state.record(targetType == "note" ? "notes" : "projects", id: targetID) != nil else { throw OrganizerError.invalid("attachment owner") }
+            guard let owner = state.record(targetType == "note" ? "notes" : "projects", id: targetID), expectedOwnerCreatedAt == nil || owner.int("createdAt") == expectedOwnerCreatedAt else { throw OrganizerError.invalid("attachment owner") }
             let name = UUID().uuidString.lowercased()
-            let row = Record(["id": .integer(try state.nextID("attachments")), "targetType": .string(targetType), "targetId": .integer(targetID), "displayName": .string(displayName), "storedName": .string(name), "mimeType": .string(mimeType), "size": .integer(Int64(data.count)), "createdAt": .integer(Snapshot.now), "durationMs": .integer(duration)])
+            let row = OrganizerRecord(["id": .integer(try state.nextID("attachments")), "targetType": .string(targetType), "targetId": .integer(targetID), "displayName": .string(displayName), "storedName": .string(name), "mimeType": .string(mimeType), "size": .integer(Int64(data.count)), "createdAt": .integer(Snapshot.now), "durationMs": .integer(duration)])
             state.upsert("attachments", record: row)
             guard state.records("attachments").reduce(Int64(0), { $0 + $1.int("size") }) <= BackupCodec.maxDecoded else { throw OrganizerError.tooLarge }
             try insertBody(name, data); try saveMetadata(state)
@@ -150,7 +150,7 @@ public final class OrganizerStore {
             let s = try statement("INSERT INTO organizer_safety(created_at, document) VALUES(?,?)"); defer { sqlite3_finalize(s) }
             sqlite3_bind_int64(s, 1, Snapshot.now); try bind(safety, to: s, index: 2); try done(s)
             try exec("DELETE FROM organizer_attachments")
-            var metadata: [Record] = []
+            var metadata: [OrganizerRecord] = []
             for var row in next.records("attachments") {
                 guard let data = Data(base64Encoded: row.text("data")) else { throw OrganizerError.invalid("attachment") }
                 try insertBody(row.text("storedName"), data)
@@ -173,18 +173,18 @@ public final class OrganizerStore {
         sqlite3_bind_int64(s, 1, id); guard sqlite3_step(s) == SQLITE_ROW else { throw OrganizerError.storage("missing safety copy") }
         return try BackupCodec.decode(blob(s, 0))
     }
-    public func saveDraft(name: String, record: Record?) throws {
+    public func saveDraft(name: String, record: OrganizerRecord?) throws {
         lock.lock(); defer { lock.unlock() }
         let s = try statement(record == nil ? "DELETE FROM organizer_drafts WHERE name=?" : "INSERT OR REPLACE INTO organizer_drafts(name, document) VALUES(?,?)"); defer { sqlite3_finalize(s) }
         sqlite3_bind_text(s, 1, name, -1, transient)
         if let record { try bind(try JSONEncoder().encode(JSONValue.object(record.fields)), to: s, index: 2) }
         try done(s)
     }
-    public func draft(name: String) throws -> Record? {
+    public func draft(name: String) throws -> OrganizerRecord? {
         lock.lock(); defer { lock.unlock() }
         let s = try statement("SELECT document FROM organizer_drafts WHERE name=?"); defer { sqlite3_finalize(s) }
         sqlite3_bind_text(s, 1, name, -1, transient)
         guard sqlite3_step(s) == SQLITE_ROW else { return nil }
-        return try JSONDecoder().decode(JSONValue.self, from: blob(s, 0)).object.map(Record.init)
+        return try JSONDecoder().decode(JSONValue.self, from: blob(s, 0)).object.map(OrganizerRecord.init)
     }
 }

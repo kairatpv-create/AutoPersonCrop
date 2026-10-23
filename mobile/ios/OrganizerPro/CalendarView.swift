@@ -30,8 +30,8 @@ struct CalendarView: View {
     @State private var granted = CalendarAccess.allowed
     @State private var denied = false
     var calendar: Calendar { Calendar.current }
-    var projects: [Record] { model.records("projects").filter { $0.int("dueAt") > 0 && calendar.isDate(Date(milliseconds: $0.int("dueAt")), inSameDayAs: date) } }
-    var stages: [Record] { model.records("projectStages").filter { $0.int("dueAt") > 0 && calendar.isDate(Date(milliseconds: $0.int("dueAt")), inSameDayAs: date) } }
+    var projects: [OrganizerRecord] { model.records("projects").filter { $0.int("dueAt") > 0 && calendar.isDate(Date(milliseconds: $0.int("dueAt")), inSameDayAs: date) } }
+    var stages: [OrganizerRecord] { model.records("projectStages").filter { $0.int("dueAt") > 0 && calendar.isDate(Date(milliseconds: $0.int("dueAt")), inSameDayAs: date) } }
     var body: some View {
         Page {
             DatePicker(model.t("Дата", "Date"), selection: $date, displayedComponents: .date).datePickerStyle(.graphical).padding(8).background(Brand.card(model.dark), in: RoundedRectangle(cornerRadius: 16))

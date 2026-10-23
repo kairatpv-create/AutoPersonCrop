@@ -16,8 +16,8 @@ def config_list(name,values):
         if configuration=='Debug': settings.update({'SWIFT_ACTIVE_COMPILATION_CONDITIONS':'DEBUG $(inherited)','ENABLE_TESTABILITY':'YES','ONLY_ACTIVE_ARCH':'YES'})
         configs.append(obj(name+configuration,'XCBuildConfiguration',name=configuration,buildSettings=settings))
     return obj(name+'configs','XCConfigurationList',buildConfigurations=configs,defaultConfigurationIsVisible=0,defaultConfigurationName='Release')
-def file(path,kind,tree='<group>'):
-    return obj('file:'+path,'PBXFileReference',lastKnownFileType=kind,path=path,sourceTree=tree)
+def file(path,kind,tree='<group>',label=''):
+    return obj('file:'+path+(':'+label if label else ''),'PBXFileReference',lastKnownFileType=kind,path=path,sourceTree=tree)
 
 product_group=obj('products','PBXGroup',name='Products',sourceTree='<group>',children=[])
 groups=[]; targets=[]
@@ -32,7 +32,7 @@ for name,kind in [('OrganizerPro','application'),('OrganizerProTests','bundle.un
         localized=[file(name+'/'+lang+'.lproj/InfoPlist.strings','text.plist.strings') for lang in ['ru','en']]
         for key,lang in zip(localized,['ru','en']): objects[key]['name']=lang
         resources.append(obj('info localization','PBXVariantGroup',name='InfoPlist.strings',sourceTree='<group>',children=localized))
-    else: resources=[file('OrganizerCore/Tests/OrganizerCoreTests/Fixtures','folder')]
+    else: resources=[file('OrganizerCore/Tests/OrganizerCoreTests/Fixtures','folder',label=name)]
     groups.append(obj('group:'+name,'PBXGroup',name=name,children=source_files+resources,sourceTree='<group>'))
     sources=obj(name+'sources','PBXSourcesBuildPhase',buildActionMask=2147483647,files=[obj(name+'build:'+f,'PBXBuildFile',fileRef=f) for f in source_files],runOnlyForDeploymentPostprocessing=0)
     resource_phase=obj(name+'resources','PBXResourcesBuildPhase',buildActionMask=2147483647,files=[obj(name+'resource:'+f,'PBXBuildFile',fileRef=f) for f in resources],runOnlyForDeploymentPostprocessing=0)

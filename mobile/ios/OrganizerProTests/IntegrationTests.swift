@@ -34,7 +34,7 @@ final class IntegrationTests: XCTestCase {
         XCTAssertThrowsError(try vault.isEnabled()); XCTAssertThrowsError(try vault.verify("2468"))
     }
     @MainActor func testMissingPINRecordWithMarkerNeverUnlocks() throws {
-        let m = model(); try XCTUnwrap(m.store).saveDraft(name: "device-security", record: Record(["installed": .bool(true)])); m.refreshPIN()
+        let m = model(); try XCTUnwrap(m.store).saveDraft(name: "device-security", record: OrganizerRecord(["installed": .bool(true)])); m.refreshPIN()
         XCTAssertTrue(m.pinUnavailable); XCTAssertTrue(m.locked); XCTAssertFalse(m.unlock("2468"))
     }
     @MainActor func testFileImportOnlyPreviewsUntilExplicitRestore() async throws {
@@ -55,8 +55,8 @@ final class IntegrationTests: XCTestCase {
         XCTAssertNil(m.presentation); XCTAssertNotNil(m.notice); XCTAssertEqual(try m.store?.fullSnapshot(), before)
     }
     @MainActor func testDraftAndMoneyPersistAcrossReopen() throws {
-        let m = model(); m.draft("note:new", record: Record(["body": .string("Draft after interruption")]))
-        let id = m.save("money", record: Record(["type": .string("expense"), "amount": .number(19.95), "category": .string("Test"), "projectName": .string(""), "note": .string(""), "colorKey": .string("yellow")]))
+        let m = model(); m.draft("note:new", record: OrganizerRecord(["body": .string("Draft after interruption")]))
+        let id = m.save("money", record: OrganizerRecord(["type": .string("expense"), "amount": .number(19.95), "category": .string("Test"), "projectName": .string(""), "note": .string(""), "colorKey": .string("yellow")]))
         XCTAssertNotNil(id)
         let reopened = AppModel(files: m.files, vault: m.vault, automaticScheduling: false)
         XCTAssertEqual(reopened.draft("note:new")?.text("body"), "Draft after interruption")
@@ -66,5 +66,13 @@ final class IntegrationTests: XCTestCase {
         let m = model(); try m.configurePIN("2468", old: "")
         XCTAssertTrue(m.restore(BackupPreview(snapshot: BackupCodec.decode(fixture()), name: "Synthetic")))
         XCTAssertTrue(m.pinEnabled); m.lock(); XCTAssertTrue(m.unlock("2468"))
+    }
+    @MainActor func testStageProgressIsAtomicAndJournalDeleteDoesNotChangeIt() throws {
+        let m = model(); try XCTUnwrap(m.store).restore(BackupCodec.decode(fixture())); m.snapshot = try XCTUnwrap(m.store).load()
+        var stage = try XCTUnwrap(m.records("projectStages").first); stage.set("done", true)
+        XCTAssertNotNil(m.save("projectStages", record: stage)); XCTAssertEqual(m.records("projects").first?.int("progress"), 100)
+        m.remove("projectJournal", id: try XCTUnwrap(m.records("projectJournal").first).id)
+        XCTAssertEqual(m.records("projects").first?.int("progress"), 100)
+        m.remove("projectStages", id: stage.id); XCTAssertEqual(m.records("projects").first?.int("progress"), 0)
     }
 }
