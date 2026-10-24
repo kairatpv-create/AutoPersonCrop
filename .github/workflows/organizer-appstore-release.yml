@@ -43,9 +43,9 @@ jobs:
           set -euo pipefail
           umask 077
           mkdir -p "$RUNNER_TEMP/apple-signing" "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/.appstoreconnect/private_keys"
-          printf '%s' "$P12_B64" | base64 --decode > "$RUNNER_TEMP/apple-signing/distribution.p12"
-          printf '%s' "$PROFILE_B64" | base64 --decode > "$RUNNER_TEMP/apple-signing/profile.mobileprovision"
-          printf '%s' "$API_KEY_B64" | base64 --decode > "$HOME/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8"
+          printf '%s' "$P12_B64" | base64 -D > "$RUNNER_TEMP/apple-signing/distribution.p12"
+          printf '%s' "$PROFILE_B64" | base64 -D > "$RUNNER_TEMP/apple-signing/profile.mobileprovision"
+          printf '%s' "$API_KEY_B64" | base64 -D > "$HOME/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8"
           security create-keychain -p "${RUNNER_TEMP##*/}" "$RUNNER_TEMP/release.keychain-db"
           security set-keychain-settings -lut 21600 "$RUNNER_TEMP/release.keychain-db"
           security unlock-keychain -p "${RUNNER_TEMP##*/}" "$RUNNER_TEMP/release.keychain-db"
