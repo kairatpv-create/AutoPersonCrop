@@ -54,7 +54,15 @@ jobs:
             exit 1
           fi
           echo "P12/password match verified by OpenSSL"
-          security import "$RUNNER_TEMP/apple-signing/distribution.p12" -k "$RUNNER_TEMP/release.keychain-db" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          # OpenSSL 4 PKCS#12 encryption may be unsupported by Apple's Security framework.
+          # Re-wrap locally using legacy-compatible 3DES and SHA-1, preserving the same key/cert.
+          brew install openssl@3
+          OPENSSL3="$(brew --prefix openssl@3)/bin/openssl"
+          "$OPENSSL3" pkcs12 -in "$RUNNER_TEMP/apple-signing/distribution.p12" -passin env:P12_PASSWORD -nodes -out "$RUNNER_TEMP/apple-signing/unwrapped.pem"
+          "$OPENSSL3" pkcs12 -export -in "$RUNNER_TEMP/apple-signing/unwrapped.pem" -passout env:P12_PASSWORD -out "$RUNNER_TEMP/apple-signing/compatible.p12" -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1
+          rm -f "$RUNNER_TEMP/apple-signing/unwrapped.pem"
+          "$OPENSSL3" pkcs12 -in "$RUNNER_TEMP/apple-signing/compatible.p12" -noout -passin env:P12_PASSWORD
+          security import "$RUNNER_TEMP/apple-signing/compatible.p12" -k "$RUNNER_TEMP/release.keychain-db" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple: -s -k "${RUNNER_TEMP##*/}" "$RUNNER_TEMP/release.keychain-db"
           security list-keychains -d user -s "$RUNNER_TEMP/release.keychain-db"
           security cms -D -i "$RUNNER_TEMP/apple-signing/profile.mobileprovision" > "$RUNNER_TEMP/apple-signing/profile.plist"
