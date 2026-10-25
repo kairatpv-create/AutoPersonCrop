@@ -1,5 +1,8 @@
 name: Organizer Pro — App Store release
 on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/organizer-appstore-release.yml']
   workflow_dispatch:
     inputs:
       upload_to_app_store_connect:
