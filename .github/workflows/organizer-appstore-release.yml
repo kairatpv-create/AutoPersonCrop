@@ -114,11 +114,20 @@ jobs:
           API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           API_ISSUER: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          xcrun altool --upload-app --type ios --file "$RUNNER_TEMP/ipa/OrganizerPro.ipa" --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER"
+          set -euo pipefail
+          # Use Xcode's direct App Store Connect delivery instead of altool (format error 259).
+          plutil -replace destination -string upload "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/OrganizerPro.xcarchive" \
+            -exportPath "$RUNNER_TEMP/apple-upload" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8" \
+            -authenticationKeyID "$API_KEY_ID" \
+            -authenticationKeyIssuerID "$API_ISSUER"
       - uses: actions/upload-artifact@v4
-        if: success()
+        if: always()
         with:
           name: organizer-pro-signed-ipa
           path: ${{ runner.temp }}/ipa/*.ipa
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
