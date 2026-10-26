@@ -49,6 +49,12 @@ jobs:
           printf '%s' "$P12_B64" | base64 -D > "$RUNNER_TEMP/apple-signing/distribution.p12"
           printf '%s' "$PROFILE_B64" | base64 -D > "$RUNNER_TEMP/apple-signing/profile.mobileprovision"
           printf '%s' "$API_KEY_B64" | base64 -D > "$HOME/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8"
+          if ! grep -q '^-----BEGIN PRIVATE KEY-----' "$HOME/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8" ||
+             ! grep -q '^-----END PRIVATE KEY-----' "$HOME/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8" ||
+             ! openssl pkey -in "$HOME/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8" -noout >/dev/null 2>&1; then
+            echo "::error::APP_STORE_CONNECT_API_KEY_BASE64 does not decode to a valid Apple .p8 private key. Re-encode the original AuthKey_*.p8 file."
+            exit 1
+          fi
           security create-keychain -p "${RUNNER_TEMP##*/}" "$RUNNER_TEMP/release.keychain-db"
           security set-keychain-settings -lut 21600 "$RUNNER_TEMP/release.keychain-db"
           security unlock-keychain -p "${RUNNER_TEMP##*/}" "$RUNNER_TEMP/release.keychain-db"
