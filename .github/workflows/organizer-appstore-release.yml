@@ -109,7 +109,7 @@ jobs:
           xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/OrganizerPro.xcarchive" -exportPath "$RUNNER_TEMP/ipa" -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
           test -f "$RUNNER_TEMP/ipa/OrganizerPro.ipa"
       - name: Upload to App Store Connect
-        if: inputs.upload_to_app_store_connect
+        if: github.event_name == 'push' || inputs.upload_to_app_store_connect
         env:
           API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           API_ISSUER: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
