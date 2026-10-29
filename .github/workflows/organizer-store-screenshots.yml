@@ -1,0 +1,71 @@
+name: Organizer Pro - App Store screenshots
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/organizer-store-screenshots.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  screenshots:
+    runs-on: macos-26
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: ops
+      - uses: actions/checkout@v4
+        with:
+          ref: organizer-ios-20261022
+          path: source
+      - name: Prepare isolated screenshot test
+        run: |
+          set -euo pipefail
+          cp ops/.github/store-screenshots/StoreScreenshots.swift source/mobile/ios/OrganizerProUITests/StoreScreenshots.swift
+          cd source
+          mkdir -p ios-evidence/storefront
+          python3 tools/ios/generate_project.py
+          python3 tools/ios/select_simulators.py
+      - name: Take actual app screenshots on iPhone simulator
+        run: |
+          set -euo pipefail
+          cd source
+          xcrun simctl boot "$IOS_LARGE_UDID"
+          xcrun simctl bootstatus "$IOS_LARGE_UDID" -b
+          xcrun simctl status_bar "$IOS_LARGE_UDID" override --time '9:41' --batteryState charged --batteryLevel 100 || true
+          xcodebuild -project mobile/ios/OrganizerPro.xcodeproj -scheme OrganizerPro -configuration Debug -sdk iphonesimulator -destination "platform=iOS Simulator,id=$IOS_LARGE_UDID" -derivedDataPath "$RUNNER_TEMP/organizer-store-derived" build-for-testing CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-
+          xcodebuild -project mobile/ios/OrganizerPro.xcodeproj -scheme OrganizerPro -sdk iphonesimulator -destination "platform=iOS Simulator,id=$IOS_LARGE_UDID" -derivedDataPath "$RUNNER_TEMP/organizer-store-derived" -resultBundlePath "$RUNNER_TEMP/store-screens.xcresult" -only-testing:OrganizerProUITests/StoreScreenshots -parallel-testing-enabled NO test-without-building CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-
+      - name: Export PNG screenshots sized for iPhone Dynamic Island medium
+        if: always()
+        run: |
+          set -euo pipefail
+          cd source
+          if [ -d "$RUNNER_TEMP/store-screens.xcresult" ]; then
+            xcrun xcresulttool export attachments --path "$RUNNER_TEMP/store-screens.xcresult" --output-path "$RUNNER_TEMP/raw-screen"
+            python3 tools/ios/normalize_screenshots.py "$RUNNER_TEMP/raw-screen"
+            python3 - <<'PY'
+          import json,subprocess
+          from pathlib import Path
+          root=Path('ios-evidence/storefront')
+          root.mkdir(parents=True,exist_ok=True)
+          base=Path(__import__('os').environ['RUNNER_TEMP'])/'raw-screen'/'named'
+          rows=json.loads((base/'index.json').read_text())
+          count=0
+          for row in rows:
+              n=row['name'].split('_0_')[0]
+              if not n.startswith('ru-store-'):continue
+              target=root/(n+'.png')
+              subprocess.run(['sips','-z','2622','1206',str(base/row['file']),'--out',str(target)],check=True)
+              count+=1
+          print('Exported',count,'real UI screenshots')
+          if count<4:raise SystemExit('Insufficient screenshots; check simulator test results')
+          PY
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: organizer-pro-appstore-screenshots-ru
+          path: source/ios-evidence/storefront/*.png
+          if-no-files-found: warn
+          retention-days: 30
