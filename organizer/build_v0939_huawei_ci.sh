@@ -36,9 +36,10 @@ g=gradle.read_text()
 assert 'versionCode = 71' in g and 'versionName = "0.9.38"' in g
 g=g.replace('versionCode = 71','versionCode = 72',1).replace('versionName = "0.9.38"','versionName = "0.9.39"',1)
 gradle.write_text(g)
-assert 'organizer-pro.onrender.com' not in u or 'https://organizer-pro.onrender.com' in u, "Unexpected source state"
+assert '"Веб-страница" else "Web page"' not in u, "Web-page settings card still present"
 PY
 
 # Diagnostic build only; this APK is NOT a signed AppGallery release.
-gradle --no-daemon --build-cache -p "$ROOT" assembleDebug
+gradle --no-daemon --build-cache -p "$ROOT" assembleDebug assembleRelease
 test -f "$ROOT/app/build/outputs/apk/debug/app-debug.apk"
+test -f "$ROOT/app/build/outputs/apk/release/app-release-unsigned.apk"
