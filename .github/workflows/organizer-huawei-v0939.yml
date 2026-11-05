@@ -1,10 +1,10 @@
-name: Organizer Pro Huawei 0.9.39 validation
+name: Organizer Pro Huawei 0.9.40 release
 on:
   push:
     branches:
-      - work/organizer-huawei-appgallery-20261105
+      - work/organizer-huawei-appgallery-0940-20261106
     paths:
-      - 'organizer/build_v0939_huawei_ci.sh'
+      - 'organizer/build_v0940_huawei_ci.sh'
       - '.github/workflows/organizer-huawei-v0939.yml'
   workflow_dispatch:
 permissions:
@@ -30,18 +30,11 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
       - name: Reconstruct and validate Huawei Android build
-        run: bash organizer/build_v0939_huawei_ci.sh
-      - name: Upload diagnostic APK (not for store publication)
-        uses: actions/upload-artifact@v4
-        with:
-          name: Organizer-Pro-v0.9.39-72-debug-TEST-ONLY
-          path: organizer/buildsrc0106/Organizer-Pro-v0.9.38-source/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 3
-          if-no-files-found: error
+        run: bash organizer/build_v0940_huawei_ci.sh
       - name: Upload unsigned release APK (sign locally before AppGallery)
         uses: actions/upload-artifact@v4
         with:
-          name: Organizer-Pro-v0.9.39-72-UNSIGNED-RELEASE
+          name: Organizer-Pro-v0.9.40-73-UNSIGNED-RELEASE
           path: organizer/buildsrc0106/Organizer-Pro-v0.9.38-source/app/build/outputs/apk/release/app-release-unsigned.apk
           retention-days: 7
           if-no-files-found: error
