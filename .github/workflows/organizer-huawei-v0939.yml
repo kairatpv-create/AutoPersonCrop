@@ -38,3 +38,10 @@ jobs:
           path: organizer/buildsrc0106/Organizer-Pro-v0.9.38-source/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 3
           if-no-files-found: error
+      - name: Upload unsigned release APK (sign locally before AppGallery)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Organizer-Pro-v0.9.39-72-UNSIGNED-RELEASE
+          path: organizer/buildsrc0106/Organizer-Pro-v0.9.38-source/app/build/outputs/apk/release/app-release-unsigned.apk
+          retention-days: 7
+          if-no-files-found: error
