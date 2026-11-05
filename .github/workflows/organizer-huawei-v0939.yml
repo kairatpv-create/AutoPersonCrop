@@ -1,0 +1,40 @@
+name: Organizer Pro Huawei 0.9.39 validation
+on:
+  push:
+    branches:
+      - work/organizer-huawei-appgallery-20261105
+    paths:
+      - 'organizer/build_v0939_huawei_ci.sh'
+      - '.github/workflows/organizer-huawei-v0939.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Android SDK 35
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+      - name: Reconstruct and validate Huawei Android build
+        run: bash organizer/build_v0939_huawei_ci.sh
+      - name: Upload diagnostic APK (not for store publication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Organizer-Pro-v0.9.39-72-debug-TEST-ONLY
+          path: organizer/buildsrc0106/Organizer-Pro-v0.9.38-source/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 3
+          if-no-files-found: error
